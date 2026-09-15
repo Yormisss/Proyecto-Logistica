@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!-- RNF1 - Interfaz responsiva mobile-first -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block titulo %}{{ nombre_sistema }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  {% block cabecera %}{% endblock %}
+</head>
+<body class="{% block clase_body %}{% endblock %}">
+
+{% if current_user.is_authenticated %}
+<header class="barra-superior">
+  <div class="barra-contenido">
+    <a class="marca" href="{{ url_for('principal.inicio') }}">
+      <span class="marca-icono">SG</span>
+      <span class="marca-texto">SGDS</span>
+    </a>
+
+    <nav class="navegacion">
+      {% if current_user.es_despachador %}
+        <a href="{{ url_for('admin.dashboard') }}"
+           class="{{ 'activo' if request.endpoint == 'admin.dashboard' }}">Tablero</a>
+        <a href="{{ url_for('pedidos.lista') }}"
+           class="{{ 'activo' if request.blueprint == 'pedidos' }}">Pedidos</a>
+        <a href="{{ url_for('rutas.lista') }}"
+           class="{{ 'activo' if request.blueprint == 'rutas' }}">Rutas</a>
+        <a href="{{ url_for('inventario.lista') }}"
+           class="{{ 'activo' if request.blueprint == 'inventario' }}">Inventario</a>
+        <a href="{{ url_for('clientes_admin.lista') }}"
+           class="{{ 'activo' if request.blueprint == 'clientes_admin' }}">Clientes</a>
+        <a href="{{ url_for('admin.analitica_operacion') }}"
+           class="{{ 'activo' if request.endpoint == 'admin.analitica_operacion' }}">Analitica</a>
+        {% if current_user.es_admin %}
+        <a href="{{ url_for('usuarios.lista') }}"
+           class="{{ 'activo' if request.blueprint == 'usuarios' }}">Usuarios</a>
+        <a href="{{ url_for('admin.rendimiento') }}"
+           class="{{ 'activo' if request.endpoint == 'admin.rendimiento' }}">Rendimiento</a>
+        {% endif %}
+      {% elif current_user.es_cliente %}
+        <a href="{{ url_for('cliente.mis_pedidos') }}"
+           class="{{ 'activo' if request.endpoint in ('cliente.mis_pedidos', 'cliente.seguimiento') }}">Mis pedidos</a>
+        <a href="{{ url_for('cliente.direcciones') }}"
+           class="{{ 'activo' if request.endpoint == 'cliente.direcciones' }}">Mis sedes</a>
+      {% else %}
+        <a href="{{ url_for('conductor.mi_ruta') }}"
+           class="{{ 'activo' if request.endpoint in ('conductor.mi_ruta', 'conductor.parada') }}">Mi ruta</a>
+        <a href="{{ url_for('conductor.historial') }}"
+           class="{{ 'activo' if request.endpoint == 'conductor.historial' }}">Historial</a>
+      {% endif %}
+    </nav>
+
+    <div class="usuario-caja">
+      <div class="usuario-info">
+        <span class="usuario-nombre">{{ current_user.nombre }}</span>
+        <span class="usuario-rol">{{ current_user.rol_etiqueta }}</span>
+      </div>
+      <a class="boton-salir" href="{{ url_for('auth.logout') }}">Salir</a>
+    </div>
+  </div>
+</header>
+{% endif %}
+
+<main class="contenedor">
+  {% with mensajes = get_flashed_messages(with_categories=true) %}
+    {% if mensajes %}
+      <div class="alertas">
+        {% for categoria, mensaje in mensajes %}
+          <div class="alerta alerta-{{ categoria }}">{{ mensaje }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block contenido %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

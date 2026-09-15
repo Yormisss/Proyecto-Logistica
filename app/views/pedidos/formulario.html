@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block titulo %}Nuevo pedido | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Nuevo pedido</h1>
+  <p class="subtitulo-pagina">Registro manual de una orden de despacho (RF2)</p>
+</div>
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Datos del cliente</h2>
+    <div class="rejilla-campos">
+      <div class="campo">
+        {{ formulario.cliente_nombre.label }}
+        {{ formulario.cliente_nombre(placeholder="Supermercado La 80") }}
+        {% for e in formulario.cliente_nombre.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.cliente_documento.label }}
+        {{ formulario.cliente_documento(placeholder="900123456-1") }}
+        {% for e in formulario.cliente_documento.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.cliente_telefono.label }}
+        {{ formulario.cliente_telefono(placeholder="3115550101") }}
+      </div>
+      <div class="campo campo-ancho">
+        {{ formulario.direccion.label }}
+        {{ formulario.direccion(placeholder="Cra 80 #45-12") }}
+        {% for e in formulario.direccion.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.ciudad.label }}
+        {{ formulario.ciudad() }}
+      </div>
+      <div class="campo">
+        {{ formulario.codigo.label }}
+        {{ formulario.codigo(placeholder="Se genera automaticamente") }}
+        {% for e in formulario.codigo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.latitud.label }}
+        {{ formulario.latitud(placeholder="4.67120", step="any") }}
+        {% for e in formulario.latitud.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.longitud.label }}
+        {{ formulario.longitud(placeholder="-74.09120", step="any") }}
+        {% for e in formulario.longitud.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+    </div>
+    <p class="nota-pie">Las coordenadas son opcionales; se requieren para incluir el pedido en el trazado automatico de rutas.</p>
+    <p class="nota-pie">
+      Si el cliente y la direccion ya existen, el pedido se asocia al registro
+      actual en lugar de crear uno nuevo. El NIT es la forma mas confiable de
+      identificarlo.
+    </p>
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Programacion del despacho</h2>
+    <div class="rejilla-campos">
+      <div class="campo">
+        {{ formulario.fecha_despacho.label }}
+        {{ formulario.fecha_despacho() }}
+        {% for e in formulario.fecha_despacho.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.prioridad.label }}
+        {{ formulario.prioridad() }}
+      </div>
+      <div class="campo">
+        {{ formulario.ventana_inicio.label }}
+        {{ formulario.ventana_inicio() }}
+      </div>
+      <div class="campo">
+        {{ formulario.ventana_fin.label }}
+        {{ formulario.ventana_fin() }}
+        {% for e in formulario.ventana_fin.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo campo-ancho">
+        {{ formulario.observaciones.label }}
+        {{ formulario.observaciones(rows=2, placeholder="Instrucciones para el conductor") }}
+      </div>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Productos</h2>
+    {% if productos %}
+      <table class="tabla tabla-items">
+        <thead><tr><th>Producto</th><th style="width:130px">Cantidad</th><th style="width:60px"></th></tr></thead>
+        <tbody id="cuerpo-items"></tbody>
+      </table>
+      <button type="button" class="boton boton-secundario" id="agregar-item">+ Agregar producto</button>
+    {% else %}
+      <p class="vacio">
+        No hay productos activos en el inventario.
+        <a href="{{ url_for('inventario.nuevo') }}">Cree uno primero</a>.
+      </p>
+    {% endif %}
+  </section>
+
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('pedidos.lista') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">Registrar pedido</button>
+  </div>
+</form>
+
+<template id="plantilla-item">
+  <tr>
+    <td>
+      <select name="producto_id" required>
+        <option value="">Seleccione un producto</option>
+        {% for producto in productos %}
+          <option value="{{ producto.id }}">{{ producto.sku }} — {{ producto.nombre }} (stock: {{ producto.stock_actual }})</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td><input type="number" name="cantidad" min="1" value="1" required></td>
+    <td><button type="button" class="boton-quitar" title="Quitar">&times;</button></td>
+  </tr>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const cuerpo = document.getElementById("cuerpo-items");
+  const plantilla = document.getElementById("plantilla-item");
+  const boton = document.getElementById("agregar-item");
+  if (!cuerpo || !plantilla) return;
+
+  function agregarFila(productoId, cantidad) {
+    const fila = plantilla.content.cloneNode(true);
+    if (productoId) fila.querySelector("select").value = productoId;
+    if (cantidad) fila.querySelector("input").value = cantidad;
+    fila.querySelector(".boton-quitar").addEventListener("click", function (evento) {
+      const tr = evento.target.closest("tr");
+      if (cuerpo.rows.length > 1) tr.remove();
+    });
+    cuerpo.appendChild(fila);
+  }
+
+  boton.addEventListener("click", function () { agregarFila(); });
+
+  // Restaura las lineas enviadas si el formulario vuelve con errores.
+  const previos = {{ items_enviados|tojson }};
+  if (previos.length) {
+    previos.forEach(function (par) { agregarFila(par[0], par[1]); });
+  } else {
+    agregarFila();
+  }
+})();
+</script>
+{% endblock %}

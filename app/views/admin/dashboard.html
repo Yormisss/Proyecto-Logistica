@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block titulo %}Tablero de control | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <div>
+    <h1 class="titulo-pagina">Tablero de control</h1>
+    <p class="subtitulo-pagina">{{ cd_nombre }} &middot; Operacion del {{ kpis.fecha.strftime('%d/%m/%Y') }}</p>
+  </div>
+</div>
+
+<!-- RF6 - Tres KPIs fundamentales del prototipo -->
+<section class="rejilla-kpis">
+  <article class="kpi">
+    <span class="kpi-etiqueta">Total de entregas del dia</span>
+    <span class="kpi-valor">{{ kpis.total_dia }}</span>
+    <span class="kpi-detalle">{{ kpis.entregados }} entregadas &middot; {{ kpis.fallidos }} fallidas</span>
+  </article>
+
+  <article class="kpi kpi-alerta">
+    <span class="kpi-etiqueta">Entregas pendientes</span>
+    <span class="kpi-valor">{{ kpis.pendientes }}</span>
+    <span class="kpi-detalle">{{ kpis.sin_asignar }} sin asignar &middot; {{ kpis.en_ruta }} en ruta</span>
+  </article>
+
+  <article class="kpi kpi-exito">
+    <span class="kpi-etiqueta">Porcentaje de exito</span>
+    <span class="kpi-valor">{{ kpis.porcentaje_exito }}%</span>
+    <span class="kpi-detalle">Sobre {{ kpis.entregados + kpis.fallidos }} entregas cerradas</span>
+  </article>
+</section>
+
+<div class="rejilla-dos">
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo fila-encabezado">
+      <span>Rutas del dia</span>
+      <a class="enlace-tabla" href="{{ url_for('rutas.nueva') }}">Planificar ruta</a>
+    </h2>
+    {% if rutas_hoy %}
+      <table class="tabla">
+        <thead>
+          <tr><th>Ruta</th><th>Conductor</th><th>Paradas</th><th>Avance</th><th>Estado</th></tr>
+        </thead>
+        <tbody>
+        {% for ruta in rutas_hoy %}
+          <tr class="fila-clicable" onclick="window.location='{{ url_for('rutas.detalle', ruta_id=ruta.id) }}'">
+            <td class="mono">{{ ruta.codigo }}</td>
+            <td>{{ ruta.conductor.nombre }}</td>
+            <td>{{ ruta.total_paradas }}</td>
+            <td>
+              <div class="barra-avance"><span style="width: {{ ruta.avance_porcentaje }}%"></span></div>
+              <small>{{ ruta.avance_porcentaje }}%</small>
+            </td>
+            <td><span class="etiqueta etiqueta-{{ ruta.estado|lower }}">{{ ruta.estado_etiqueta }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="vacio">No hay rutas planificadas para hoy.</p>
+    {% endif %}
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Alertas de inventario</h2>
+    {% if productos_criticos %}
+      <ul class="lista-alertas">
+      {% for producto in productos_criticos %}
+        <li>
+          <span class="mono">{{ producto.sku }}</span>
+          <span class="alerta-nombre">{{ producto.nombre }}</span>
+          <span class="alerta-stock">{{ producto.stock_actual }} / min {{ producto.stock_minimo }}</span>
+        </li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <p class="vacio">Ningun producto por debajo del stock minimo.</p>
+    {% endif %}
+    <p class="nota-pie">Conductores activos en la flota: <strong>{{ conductores_activos }}</strong></p>
+  </section>
+</div>
+{% endblock %}

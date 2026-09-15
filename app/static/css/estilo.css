@@ -1,0 +1,541 @@
+/* SGDS - Hoja de estilos base
+   RNF1: enfoque mobile-first; los ajustes para escritorio se aplican en media queries. */
+
+:root {
+  --azul-900: #0f2540;
+  --azul-700: #14406e;
+  --azul-500: #1f6feb;
+  --azul-100: #e8f0fb;
+  --naranja: #e07b39;
+  --verde: #1f9d55;
+  --verde-claro: #e6f6ec;
+  --rojo: #d64545;
+  --rojo-claro: #fdecec;
+  --ambar: #c9931a;
+  --ambar-claro: #fdf5e2;
+  --gris-900: #1c2430;
+  --gris-600: #5b6675;
+  --gris-400: #98a2b3;
+  --gris-200: #e3e8ef;
+  --gris-100: #f2f5f9;
+  --blanco: #ffffff;
+  --radio: 10px;
+  --sombra: 0 1px 3px rgba(16, 24, 40, .08), 0 1px 2px rgba(16, 24, 40, .06);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--gris-900);
+  background: var(--gris-100);
+}
+
+/* ---------- Barra superior ---------- */
+.barra-superior { background: var(--azul-900); color: var(--blanco); }
+.barra-contenido {
+  max-width: 1200px; margin: 0 auto; padding: .7rem 1rem;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.marca { display: flex; align-items: center; gap: .5rem; color: var(--blanco); text-decoration: none; font-weight: 700; }
+.marca-icono {
+  display: grid; place-items: center; width: 32px; height: 32px;
+  background: var(--naranja); border-radius: 8px; font-size: .8rem; letter-spacing: .5px;
+}
+.marca-icono.grande { width: 52px; height: 52px; font-size: 1.1rem; margin: 0 auto .8rem; }
+.marca-texto { letter-spacing: 1px; }
+
+.navegacion { display: flex; gap: .3rem; margin-left: auto; }
+.navegacion a {
+  color: #c6d4e4; text-decoration: none; padding: .4rem .8rem;
+  border-radius: 6px; font-size: .9rem;
+}
+.navegacion a:hover { background: rgba(255,255,255,.1); color: var(--blanco); }
+.navegacion a.activo { background: var(--azul-700); color: var(--blanco); }
+
+.usuario-caja { display: flex; align-items: center; gap: .8rem; }
+.usuario-info { display: flex; flex-direction: column; line-height: 1.2; text-align: right; }
+.usuario-nombre { font-size: .85rem; font-weight: 600; }
+.usuario-rol { font-size: .72rem; color: var(--gris-400); }
+.boton-salir {
+  color: #c6d4e4; text-decoration: none; font-size: .82rem;
+  border: 1px solid rgba(255,255,255,.25); padding: .3rem .7rem; border-radius: 6px;
+}
+.boton-salir:hover { background: rgba(255,255,255,.12); color: var(--blanco); }
+
+/* ---------- Contenedor ---------- */
+.contenedor { max-width: 1200px; margin: 0 auto; padding: 1.2rem 1rem 3rem; }
+
+.encabezado-pagina { margin-bottom: 1.2rem; }
+.titulo-pagina { font-size: 1.4rem; margin: 0; }
+.subtitulo-pagina { margin: .2rem 0 0; color: var(--gris-600); font-size: .9rem; }
+
+/* ---------- Alertas ---------- */
+.alertas { margin-bottom: 1rem; display: grid; gap: .5rem; }
+.alerta { padding: .7rem .9rem; border-radius: var(--radio); font-size: .9rem; border: 1px solid; }
+.alerta-exito { background: var(--verde-claro); border-color: #bfe3cd; color: #15603a; }
+.alerta-error { background: var(--rojo-claro); border-color: #f5c6c6; color: #932c2c; }
+.alerta-advertencia { background: var(--ambar-claro); border-color: #f0dfb0; color: #8a6410; }
+.alerta-message { background: var(--azul-100); border-color: #c9dcf7; color: var(--azul-700); }
+
+/* ---------- Tarjetas ---------- */
+.tarjeta {
+  background: var(--blanco); border: 1px solid var(--gris-200);
+  border-radius: var(--radio); padding: 1.1rem; box-shadow: var(--sombra); margin-bottom: 1rem;
+}
+.tarjeta-titulo { font-size: 1rem; margin: 0 0 .9rem; padding-bottom: .6rem; border-bottom: 1px solid var(--gris-200); }
+
+/* ---------- KPIs (RF6) ---------- */
+.rejilla-kpis { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1.2rem; }
+.kpi {
+  background: var(--blanco); border: 1px solid var(--gris-200); border-left: 4px solid var(--azul-500);
+  border-radius: var(--radio); padding: 1rem 1.1rem; box-shadow: var(--sombra);
+  display: flex; flex-direction: column; gap: .15rem;
+}
+.kpi-alerta { border-left-color: var(--ambar); }
+.kpi-exito { border-left-color: var(--verde); }
+.kpi-etiqueta { font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; color: var(--gris-600); }
+.kpi-valor { font-size: 2.1rem; font-weight: 700; line-height: 1.1; }
+.kpi-detalle { font-size: .82rem; color: var(--gris-600); }
+
+.rejilla-dos { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+
+/* ---------- Tablas ---------- */
+.tabla { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.tabla th {
+  text-align: left; padding: .5rem .6rem; color: var(--gris-600);
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid var(--gris-200);
+}
+.tabla td { padding: .6rem; border-bottom: 1px solid var(--gris-100); vertical-align: middle; }
+.tabla tbody tr:hover { background: var(--gris-100); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+
+/* ---------- Etiquetas de estado ---------- */
+.etiqueta {
+  display: inline-block; padding: .18rem .55rem; border-radius: 999px;
+  font-size: .72rem; font-weight: 600; white-space: nowrap;
+}
+.etiqueta-pendiente, .etiqueta-planificada { background: var(--gris-200); color: var(--gris-900); }
+.etiqueta-asignado { background: var(--azul-100); color: var(--azul-700); }
+.etiqueta-en_ruta, .etiqueta-en_curso { background: var(--ambar-claro); color: var(--ambar); }
+.etiqueta-entregado, .etiqueta-finalizada { background: var(--verde-claro); color: var(--verde); }
+.etiqueta-fallido, .etiqueta-cancelada { background: var(--rojo-claro); color: var(--rojo); }
+
+/* ---------- Barra de avance ---------- */
+.barra-avance { background: var(--gris-200); border-radius: 999px; height: 6px; overflow: hidden; min-width: 70px; }
+.barra-avance.grande { height: 9px; margin: .6rem 0 .3rem; }
+.barra-avance span { display: block; height: 100%; background: var(--verde); border-radius: 999px; }
+
+/* ---------- Listas ---------- */
+.lista-alertas { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.lista-alertas li {
+  display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem;
+  background: var(--rojo-claro); border-radius: 6px; font-size: .85rem;
+}
+.alerta-nombre { flex: 1; }
+.alerta-stock { font-weight: 600; color: var(--rojo); }
+.nota-pie { margin: .9rem 0 0; font-size: .84rem; color: var(--gris-600); }
+
+.lista-datos { display: grid; grid-template-columns: 130px 1fr; gap: .5rem 1rem; margin: 0; font-size: .9rem; }
+.lista-datos dt { color: var(--gris-600); }
+.lista-datos dd { margin: 0; font-weight: 500; }
+
+.vacio { color: var(--gris-600); font-size: .9rem; padding: .8rem 0; margin: 0; }
+.vacio-centrado { text-align: center; padding: 2.5rem 1rem; }
+.codigo-error { font-size: 3rem; margin: 0; color: var(--gris-400); }
+
+/* ---------- Formularios ---------- */
+.formulario { display: grid; gap: .9rem; }
+.campo { display: grid; gap: .3rem; }
+.campo label { font-size: .85rem; font-weight: 600; color: var(--gris-900); }
+.campo input[type=text], .campo input[type=email], .campo input[type=password],
+.campo input[type=number], .campo input[type=date], .campo input[type=time],
+.campo select, .campo textarea {
+  width: 100%; padding: .6rem .7rem; border: 1px solid var(--gris-200);
+  border-radius: 8px; font-size: 1rem; font-family: inherit; background: var(--blanco);
+}
+.campo input:focus, .campo select:focus, .campo textarea:focus {
+  outline: none; border-color: var(--azul-500); box-shadow: 0 0 0 3px rgba(31, 111, 235, .15);
+}
+.campo-error { color: var(--rojo); font-size: .8rem; }
+.campo-inline { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
+
+.boton {
+  display: inline-block; padding: .65rem 1.1rem; border: none; border-radius: 8px;
+  font-size: .95rem; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center;
+}
+.boton-primario { background: var(--azul-500); color: var(--blanco); }
+.boton-primario:hover { background: var(--azul-700); }
+.boton-bloque { width: 100%; }
+
+/* ---------- Pantalla de acceso ---------- */
+.pagina-acceso { background: linear-gradient(160deg, var(--azul-900), var(--azul-700)); min-height: 100vh; }
+.pagina-acceso .contenedor { max-width: 420px; padding-top: 3rem; }
+.acceso-panel { background: var(--blanco); border-radius: 14px; padding: 1.8rem 1.5rem; box-shadow: 0 12px 30px rgba(8, 20, 38, .25); }
+.acceso-encabezado { text-align: center; margin-bottom: 1.4rem; }
+.acceso-encabezado h1 { font-size: 1.15rem; margin: 0 0 .3rem; }
+.acceso-encabezado p { font-size: .84rem; color: var(--gris-600); margin: 0; }
+.acceso-pie { text-align: center; font-size: .75rem; color: var(--gris-400); margin: 1.2rem 0 0; }
+
+/* ---------- Vista movil del conductor (RNF1) ---------- */
+.resumen-ruta .resumen-fila { display: flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }
+.resumen-metricas { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; gap: .5rem; }
+.resumen-metricas div { display: flex; flex-direction: column; }
+.resumen-metricas strong { font-size: 1.3rem; }
+.resumen-metricas span { font-size: .75rem; color: var(--gris-600); }
+
+.lista-paradas { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; counter-reset: parada; }
+.parada {
+  display: flex; align-items: center; gap: .8rem; background: var(--blanco);
+  border: 1px solid var(--gris-200); border-left: 4px solid var(--gris-400);
+  border-radius: var(--radio); padding: .8rem; box-shadow: var(--sombra);
+}
+.parada-entregado { border-left-color: var(--verde); }
+.parada-fallido { border-left-color: var(--rojo); }
+.parada-en_ruta { border-left-color: var(--ambar); }
+.parada-asignado { border-left-color: var(--azul-500); }
+.parada-orden {
+  flex: 0 0 34px; height: 34px; display: grid; place-items: center;
+  background: var(--azul-900); color: var(--blanco); border-radius: 50%; font-weight: 700; font-size: .9rem;
+}
+.parada-datos { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.parada-direccion { font-size: .85rem; color: var(--gris-600); }
+.parada-meta { font-size: .75rem; color: var(--gris-400); }
+
+/* ---------- Escritorio ---------- */
+@media (min-width: 720px) {
+  .rejilla-kpis { grid-template-columns: repeat(3, 1fr); }
+  .rejilla-dos { grid-template-columns: 3fr 2fr; }
+  .contenedor { padding: 1.8rem 1.5rem 3rem; }
+  .titulo-pagina { font-size: 1.7rem; }
+}
+
+/* ==========================================================================
+   Paso 2 — Pedidos e inventario
+   ========================================================================== */
+
+.fila-encabezado { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.acciones-encabezado { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.acciones-encabezado form { margin: 0; }
+
+.boton-secundario { background: var(--blanco); color: var(--azul-700); border: 1px solid var(--azul-500); }
+.boton-secundario:hover { background: var(--azul-100); }
+.boton-plano { background: var(--gris-200); color: var(--gris-900); }
+.boton-plano:hover { background: #d5dbe5; }
+.boton-peligro { background: var(--rojo-claro); color: var(--rojo); border: 1px solid #f0b8b8; }
+.boton-peligro:hover { background: #f9d9d9; }
+
+/* Filtros */
+.barra-filtros {
+  display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
+  background: var(--blanco); border: 1px solid var(--gris-200);
+  border-radius: var(--radio); padding: .7rem; margin-bottom: 1rem; box-shadow: var(--sombra);
+}
+.barra-filtros input[type=search], .barra-filtros select, .barra-filtros input[type=date] {
+  padding: .5rem .6rem; border: 1px solid var(--gris-200); border-radius: 8px;
+  font-size: .9rem; font-family: inherit; background: var(--blanco);
+}
+.barra-filtros input[type=search] { flex: 1; min-width: 180px; }
+.barra-filtros .boton { padding: .5rem .9rem; font-size: .88rem; }
+
+/* Tablas */
+.tabla-scroll { overflow-x: auto; }
+.tabla .derecha { text-align: right; }
+.fila-clicable { cursor: pointer; }
+.celda-direccion { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.enlace-tabla { color: var(--azul-500); text-decoration: none; font-size: .85rem; font-weight: 600; }
+.enlace-tabla:hover { text-decoration: underline; }
+.texto-alerta { color: var(--rojo); font-weight: 700; }
+
+.marca-prioridad {
+  display: inline-block; margin-left: .4rem; padding: .05rem .4rem;
+  background: var(--rojo-claro); color: var(--rojo); border-radius: 4px;
+  font-size: .68rem; font-weight: 700; text-transform: uppercase;
+}
+.marca-inactivo {
+  display: inline-block; margin-left: .4rem; padding: .05rem .4rem;
+  background: var(--gris-200); color: var(--gris-600); border-radius: 4px; font-size: .68rem;
+}
+
+.paginacion { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-top: 1rem; font-size: .88rem; }
+.paginacion a { color: var(--azul-500); text-decoration: none; font-weight: 600; }
+
+/* Formularios extensos */
+.rejilla-campos { display: grid; grid-template-columns: 1fr; gap: .9rem; }
+.campo-ancho { grid-column: 1 / -1; }
+.acciones-formulario { display: flex; gap: .6rem; justify-content: flex-end; align-items: center; margin-bottom: 1rem; }
+.ayuda-campo { color: var(--gris-600); font-size: .78rem; }
+
+.tabla-items select, .tabla-items input[type=number] {
+  width: 100%; padding: .45rem .5rem; border: 1px solid var(--gris-200);
+  border-radius: 6px; font-family: inherit; font-size: .9rem; background: var(--blanco);
+}
+.boton-quitar {
+  background: var(--rojo-claro); color: var(--rojo); border: none; border-radius: 6px;
+  width: 30px; height: 30px; font-size: 1.1rem; cursor: pointer; line-height: 1;
+}
+.boton-quitar:hover { background: #f9d9d9; }
+
+/* Importacion CSV */
+.formulario-importar input[type=file] {
+  padding: .6rem; border: 1px dashed var(--gris-400); border-radius: 8px;
+  width: 100%; background: var(--gris-100); font-size: .9rem;
+}
+.ayuda-formato { margin-top: 1rem; border-top: 1px solid var(--gris-200); padding-top: .8rem; }
+.ayuda-formato summary { cursor: pointer; font-weight: 600; font-size: .9rem; color: var(--azul-700); }
+.ayuda-formato p { font-size: .86rem; color: var(--gris-600); }
+.ayuda-formato code { background: var(--gris-100); padding: .1rem .3rem; border-radius: 4px; font-size: .82rem; }
+.tarjeta-error { border-left: 4px solid var(--rojo); }
+.nota-superior { font-size: .86rem; color: var(--gris-600); margin: 0 0 .8rem; }
+.chip {
+  display: inline-block; background: var(--azul-100); color: var(--azul-700);
+  padding: .1rem .45rem; border-radius: 4px; font-size: .75rem;
+  margin: .1rem .15rem .1rem 0; font-family: ui-monospace, Menlo, monospace;
+}
+.aviso-inline { color: var(--ambar); font-size: .85rem; }
+
+/* Linea de tiempo */
+.linea-tiempo { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem; }
+.linea-tiempo li {
+  display: flex; flex-direction: column; gap: .15rem;
+  padding-left: .8rem; border-left: 2px solid var(--gris-200);
+}
+.linea-tiempo li > .etiqueta { align-self: flex-start; }
+.linea-tiempo-fecha { font-size: .78rem; color: var(--gris-600); }
+.linea-tiempo-nota { font-size: .85rem; }
+.linea-tiempo-autor { font-size: .75rem; color: var(--gris-400); }
+
+/* Etiquetas de movimiento de inventario */
+.etiqueta-mov-entrada { background: var(--verde-claro); color: var(--verde); }
+.etiqueta-mov-salida { background: var(--rojo-claro); color: var(--rojo); }
+.etiqueta-mov-ajuste { background: var(--ambar-claro); color: var(--ambar); }
+.etiqueta-mov-reversion { background: var(--azul-100); color: var(--azul-700); }
+
+@media (min-width: 720px) {
+  .rejilla-campos { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ==========================================================================
+   Paso 3 — Rutas y mapa (RF3)
+   ========================================================================== */
+
+.mapa {
+  height: 340px; width: 100%; border-radius: var(--radio);
+  border: 1px solid var(--gris-200); margin-bottom: 1rem; background: var(--gris-100);
+}
+
+/* Marcadores personalizados sobre Leaflet */
+.marcador-mapa { background: none; border: none; }
+.pin {
+  display: grid; place-items: center; width: 100%; height: 100%;
+  border-radius: 50%; color: var(--blanco); font-weight: 700; font-size: .78rem;
+  border: 2px solid var(--blanco); box-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
+.pin-cd { background: var(--naranja); font-size: .7rem; }
+.pin-pendiente { background: var(--gris-600); }
+.pin-asignado { background: var(--azul-500); }
+.pin-en_ruta { background: var(--ambar); }
+.pin-entregado { background: var(--verde); }
+.pin-fallido { background: var(--rojo); }
+
+.kpi-unidad { font-size: .95rem; font-weight: 600; color: var(--gris-600); margin-left: .2rem; }
+
+.etiqueta-filtro { font-size: .85rem; font-weight: 600; color: var(--gris-600); }
+
+.tarjeta-titulo.fila-encabezado { align-items: center; }
+
+/* Secuencia de paradas en la vista de administracion */
+.lista-paradas-admin .parada { align-items: flex-start; }
+.parada-origen { border-left-color: var(--naranja); background: var(--gris-100); }
+.parada-orden.origen { background: var(--naranja); font-size: .72rem; }
+.parada-acciones { display: flex; align-items: center; gap: .5rem; }
+.parada-acciones form { margin: 0; }
+.parada-meta a { color: var(--azul-500); text-decoration: none; }
+.parada-meta a:hover { text-decoration: underline; }
+
+/* Leaflet dentro de tarjetas */
+.leaflet-container { font: inherit; }
+.leaflet-popup-content { font-size: .85rem; line-height: 1.4; }
+
+/* ==========================================================================
+   Paso 4 — Operacion en terreno (RF4 / RF5)
+   ========================================================================== */
+
+.titulo-seccion {
+  font-size: .8rem; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--gris-600); margin: 1.2rem 0 .6rem;
+}
+
+.enlace-volver {
+  display: inline-block; color: var(--azul-500); text-decoration: none;
+  font-size: .88rem; font-weight: 600; margin-bottom: .4rem;
+}
+.enlace-volver:hover { text-decoration: underline; }
+
+/* Botones de accion en terreno: area tactil amplia (RNF1) */
+.boton-grande { padding: .9rem 1.1rem; font-size: 1rem; }
+.boton-exito { background: var(--verde); color: var(--blanco); }
+.boton-exito:hover { background: #187a42; }
+.accion-bloque { margin-top: 1rem; }
+
+/* Parada como enlace completo, para acertar con el pulgar */
+.parada-enlace {
+  display: flex; align-items: center; gap: .8rem;
+  text-decoration: none; color: inherit; width: 100%;
+}
+.parada-derecha { display: flex; align-items: center; gap: .5rem; margin-left: auto; }
+.flecha { color: var(--gris-400); font-size: 1.4rem; line-height: 1; }
+.lista-paradas .parada:active { background: var(--gris-100); }
+
+/* Mercancia del pedido */
+.lista-mercancia { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.lista-mercancia li {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .6rem; background: var(--gris-100); border-radius: 8px;
+}
+.cantidad-item {
+  flex: 0 0 auto; min-width: 34px; height: 34px; display: grid; place-items: center;
+  background: var(--azul-900); color: var(--blanco); border-radius: 8px;
+  font-weight: 700; font-size: .9rem; padding: 0 .4rem;
+}
+.nombre-item { flex: 1; font-size: .9rem; }
+.sku-item { color: var(--gris-600); font-size: .75rem; }
+
+.tarjeta-entregada { border-left: 4px solid var(--verde); }
+.formulario-geo .campo select {
+  width: 100%; padding: .6rem .7rem; border: 1px solid var(--gris-200);
+  border-radius: 8px; font-size: 1rem; font-family: inherit; background: var(--blanco);
+}
+
+/* Historial */
+.lista-historial { list-style: none; margin: 0; padding: 0; }
+.tarjeta-historial { margin-bottom: .7rem; }
+.fecha-historial { margin: .3rem 0 .6rem; font-size: .85rem; color: var(--gris-600); }
+
+/* En pantallas pequenas los formularios de accion ocupan todo el ancho */
+@media (max-width: 719px) {
+  .vista-movil .contenedor { padding-left: .8rem; padding-right: .8rem; }
+  .vista-movil .tarjeta { padding: .9rem; }
+}
+
+/* ==========================================================================
+   Paso 5 — Analitica y rendimiento
+   Paleta de datos validada con el verificador de la guia de visualizacion
+   (superficie #ffffff): CVD deltaE 24.7 protan, normal 33.6, contraste >= 3:1.
+   No se usa verde/rojo para distinguir series: ese par falla la separacion
+   para daltonismo (deltaE 4.1). El estado se lee por leyenda y etiqueta, no por color.
+   ========================================================================== */
+
+:root {
+  --serie-1: #2a78d6;   /* Entregadas / magnitud */
+  --serie-2: #eb6834;   /* Fallidas */
+  --grilla: #e3e8ef;
+  --umbral: #d03b3b;
+}
+
+/* Selector de rango temporal */
+.selector-rango { display: flex; gap: .25rem; background: var(--gris-200); padding: .2rem; border-radius: 8px; }
+.selector-rango a {
+  padding: .35rem .7rem; border-radius: 6px; text-decoration: none;
+  color: var(--gris-600); font-size: .82rem; font-weight: 600;
+}
+.selector-rango a.activo { background: var(--blanco); color: var(--azul-700); box-shadow: var(--sombra); }
+
+.grafica-encabezado {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem;
+  padding-bottom: .6rem; border-bottom: 1px solid var(--gris-200);
+}
+.tarjeta-titulo.sin-borde { margin: 0; padding: 0; border: none; }
+
+/* Leyenda: canal de identidad siempre presente con dos o mas series */
+.leyenda { display: flex; gap: 1rem; list-style: none; margin: 0; padding: 0; font-size: .82rem; color: var(--gris-600); }
+.leyenda li { display: flex; align-items: center; gap: .4rem; }
+.leyenda .muestra { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+/* --- Columnas apiladas (entregas por dia) --- */
+.grafica-columnas {
+  display: flex; align-items: flex-end; gap: 6px;
+  height: 190px; padding-top: .5rem;
+  border-bottom: 1px solid var(--grilla);   /* linea base, hairline y recesiva */
+}
+.columna-dia { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+.columna-pila {
+  flex: 1; width: 100%; max-width: 24px;    /* la marca nunca llena la banda */
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-self: center;
+}
+.segmento { width: 100%; }
+/* Extremo de dato redondeado 4px; base cuadrada sobre la linea de referencia */
+.segmento-fallidas { background: var(--serie-2); border-radius: 4px 4px 0 0; margin-bottom: 2px; }
+.segmento-entregadas { background: var(--serie-1); border-radius: 4px 4px 0 0; }
+.segmento-entregadas.sin-tope { border-radius: 0; }  /* deja de ser el extremo del dato */
+.etiqueta-dia {
+  font-size: .68rem; color: var(--gris-600); margin-top: .4rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.columna-dia:hover .segmento, .columna-dia:focus .segmento { filter: brightness(1.08); }
+.columna-dia:focus { outline: 2px solid var(--azul-500); outline-offset: 2px; border-radius: 4px; }
+
+/* --- Barras horizontales (rankings, una sola serie) --- */
+.grafica-barras { display: grid; gap: .55rem; }
+.fila-barra { display: grid; grid-template-columns: 130px 1fr 52px; align-items: center; gap: .6rem; }
+.fila-barra:focus { outline: 2px solid var(--azul-500); outline-offset: 3px; border-radius: 6px; }
+.etiqueta-barra {
+  font-size: .82rem; color: var(--gris-900);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.etiqueta-barra.ancha { font-size: .8rem; }
+.pista-barra { position: relative; background: var(--gris-100); border-radius: 4px; height: 20px; }
+.barra { height: 100%; background: var(--serie-1); border-radius: 0 4px 4px 0; min-width: 3px; }
+.fila-barra:hover .barra { filter: brightness(1.08); }
+.valor-barra { font-size: .8rem; font-weight: 600; color: var(--gris-900); text-align: right; }
+
+/* Marca del umbral del RNF2 */
+.marca-umbral { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--umbral); }
+.nota-umbral { font-size: .78rem; color: var(--umbral); font-weight: 600; }
+.grafica-latencia .fila-barra { grid-template-columns: 170px 1fr 68px; }
+
+/* Tabla alterna: la vista accesible de los mismos datos */
+.tabla-alterna { margin-top: 1rem; border-top: 1px solid var(--gris-200); padding-top: .7rem; }
+.tabla-alterna summary { cursor: pointer; font-size: .84rem; font-weight: 600; color: var(--azul-700); }
+.tabla-alterna table { margin-top: .7rem; }
+
+.kpi-sin-dato { color: var(--gris-400); }
+
+/* Tooltip compartido por todas las graficas */
+.tooltip-grafica {
+  position: fixed; z-index: 999; pointer-events: none;
+  background: var(--gris-900); color: var(--blanco);
+  padding: .4rem .6rem; border-radius: 6px; font-size: .78rem;
+  max-width: 260px; box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+
+@media (max-width: 719px) {
+  .fila-barra, .grafica-latencia .fila-barra { grid-template-columns: 100px 1fr 46px; }
+  .grafica-columnas { height: 150px; gap: 3px; }
+}
+
+/* Portal del cliente: filtros de estado sobre el listado de pedidos */
+.filtros-estado { display: flex; gap: .3rem; flex-wrap: wrap; }
+.filtros-estado .chip {
+  font-family: inherit; font-size: .8rem; font-weight: 600;
+  padding: .25rem .7rem; text-decoration: none;
+  background: var(--gris-100); color: var(--gris-600);
+}
+.filtros-estado .chip:hover { background: var(--gris-200); }
+.filtros-estado .chip-activo { background: var(--azul-100); color: var(--azul-700); }
+.chip-nuevo { background: var(--ambar-claro); color: var(--ambar); }
+
+/* Administracion de cuentas y directorio de clientes */
+.fila-inactiva { opacity: .55; }
+.acciones-fila { display: flex; gap: .7rem; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.acciones-fila form { display: inline; }
+.boton-enlace {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--azul-500); font-size: inherit; font-family: inherit; font-weight: 600;
+}
+.boton-enlace:hover { text-decoration: underline; }

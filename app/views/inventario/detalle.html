@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block titulo %}{{ producto.sku }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">{{ producto.nombre }}</h1>
+    <p class="subtitulo-pagina mono">{{ producto.sku }}</p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-plano" href="{{ url_for('inventario.lista') }}">Volver</a>
+    <a class="boton boton-secundario" href="{{ url_for('inventario.editar', producto_id=producto.id) }}">Editar</a>
+  </div>
+</div>
+
+<section class="rejilla-kpis">
+  <article class="kpi {{ 'kpi-alerta' if producto.bajo_minimo }}">
+    <span class="kpi-etiqueta">Stock actual</span>
+    <span class="kpi-valor">{{ producto.stock_actual }}</span>
+    <span class="kpi-detalle">{{ producto.unidad }}</span>
+  </article>
+  <article class="kpi">
+    <span class="kpi-etiqueta">Stock minimo</span>
+    <span class="kpi-valor">{{ producto.stock_minimo }}</span>
+    <span class="kpi-detalle">{{ 'Por debajo del minimo' if producto.bajo_minimo else 'Nivel adecuado' }}</span>
+  </article>
+  <article class="kpi kpi-exito">
+    <span class="kpi-etiqueta">Estado</span>
+    <span class="kpi-valor" style="font-size:1.3rem">{{ 'Activo' if producto.activo else 'Inactivo' }}</span>
+    <span class="kpi-detalle">{{ movimientos|length }} movimiento(s) recientes</span>
+  </article>
+</section>
+
+<div class="rejilla-dos">
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Movimientos de inventario</h2>
+    {% if movimientos %}
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead><tr><th>Fecha</th><th>Tipo</th><th class="derecha">Cantidad</th><th class="derecha">Stock</th><th>Motivo</th></tr></thead>
+        <tbody>
+        {% for movimiento in movimientos %}
+          <tr>
+            <td>{{ movimiento.registrado_en.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td><span class="etiqueta etiqueta-mov-{{ movimiento.tipo|lower }}">{{ movimiento.tipo|capitalize }}</span></td>
+            <td class="derecha">{{ movimiento.cantidad }}</td>
+            <td class="derecha"><strong>{{ movimiento.stock_resultante }}</strong></td>
+            <td>
+              {{ movimiento.motivo or '—' }}
+              {% if movimiento.pedido %}<span class="mono">({{ movimiento.pedido.codigo }})</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="vacio">Sin movimientos registrados.</p>
+    {% endif %}
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Registrar movimiento</h2>
+    <form method="post" class="formulario" novalidate>
+      {{ formulario.hidden_tag() }}
+      <div class="campo">
+        {{ formulario.tipo.label }}
+        {{ formulario.tipo() }}
+      </div>
+      <div class="campo">
+        {{ formulario.cantidad.label }}
+        {{ formulario.cantidad() }}
+        {% for e in formulario.cantidad.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">En un ajuste, la cantidad reemplaza el stock actual.</small>
+      </div>
+      <div class="campo">
+        {{ formulario.motivo.label }}
+        {{ formulario.motivo(placeholder="Recepcion de proveedor") }}
+      </div>
+      <button type="submit" class="boton boton-primario">Registrar</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

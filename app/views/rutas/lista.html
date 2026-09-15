@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titulo %}Rutas | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Rutas de distribucion</h1>
+    <p class="subtitulo-pagina">{{ rutas|length }} ruta(s) registradas</p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-primario" href="{{ url_for('rutas.nueva') }}">Planificar ruta</a>
+  </div>
+</div>
+
+<form method="get" class="barra-filtros">
+  <input type="date" name="fecha" value="{{ filtros.fecha }}">
+  <select name="estado">
+    <option value="">Todos los estados</option>
+    {% for clave, etiqueta in EstadoRuta.ETIQUETAS.items() %}
+      <option value="{{ clave }}" {{ 'selected' if filtros.estado == clave }}>{{ etiqueta }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="boton boton-primario">Filtrar</button>
+  <a class="boton boton-plano" href="{{ url_for('rutas.lista') }}">Limpiar</a>
+</form>
+
+<div class="tarjeta">
+  {% if rutas %}
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr>
+          <th>Ruta</th><th>Fecha</th><th>Conductor</th><th>Vehiculo</th>
+          <th class="derecha">Paradas</th><th class="derecha">Distancia</th>
+          <th>Avance</th><th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for ruta in rutas %}
+        <tr class="fila-clicable" onclick="window.location='{{ url_for('rutas.detalle', ruta_id=ruta.id) }}'">
+          <td class="mono">{{ ruta.codigo }}</td>
+          <td>{{ ruta.fecha.strftime('%d/%m/%Y') }}</td>
+          <td>{{ ruta.conductor.nombre }}</td>
+          <td class="mono">{{ ruta.vehiculo.placa if ruta.vehiculo else '—' }}</td>
+          <td class="derecha">{{ ruta.total_paradas }}</td>
+          <td class="derecha">{{ ruta.distancia_km|round(1) }} km</td>
+          <td>
+            <div class="barra-avance"><span style="width: {{ ruta.avance_porcentaje }}%"></span></div>
+            <small>{{ ruta.avance_porcentaje }}%</small>
+          </td>
+          <td><span class="etiqueta etiqueta-{{ ruta.estado|lower }}">{{ ruta.estado_etiqueta }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="vacio">No hay rutas que coincidan con los filtros.</p>
+  {% endif %}
+</div>
+{% endblock %}

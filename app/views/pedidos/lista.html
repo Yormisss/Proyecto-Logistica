@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block titulo %}Pedidos | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Ordenes de despacho</h1>
+    <p class="subtitulo-pagina">{{ paginacion.total }} pedido(s) registrados</p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-secundario" href="{{ url_for('pedidos.importar') }}">Importar CSV</a>
+    <a class="boton boton-primario" href="{{ url_for('pedidos.nuevo') }}">Nuevo pedido</a>
+  </div>
+</div>
+
+<form method="get" class="barra-filtros">
+  <input type="search" name="q" placeholder="Codigo, cliente o direccion" value="{{ filtros.q }}">
+  <select name="estado">
+    <option value="">Todos los estados</option>
+    {% for clave, etiqueta in EstadoPedido.ETIQUETAS.items() %}
+      <option value="{{ clave }}" {{ 'selected' if filtros.estado == clave }}>{{ etiqueta }}</option>
+    {% endfor %}
+  </select>
+  <input type="date" name="fecha" value="{{ filtros.fecha }}">
+  <button type="submit" class="boton boton-primario">Filtrar</button>
+  <a class="boton boton-plano" href="{{ url_for('pedidos.lista') }}">Limpiar</a>
+</form>
+
+<div class="tarjeta">
+  {% if pedidos %}
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr>
+          <th>Codigo</th><th>Cliente</th><th>Direccion</th>
+          <th>Fecha</th><th>Ventana</th><th>Ruta</th><th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for pedido in pedidos %}
+        <tr class="fila-clicable" onclick="window.location='{{ url_for('pedidos.detalle', pedido_id=pedido.id) }}'">
+          <td class="mono">{{ pedido.codigo }}</td>
+          <td>
+            {{ pedido.cliente_nombre }}
+            {% if pedido.prioridad == 1 %}<span class="marca-prioridad">Alta</span>{% endif %}
+          </td>
+          <td class="celda-direccion">{{ pedido.direccion }}</td>
+          <td>{{ pedido.fecha_despacho.strftime('%d/%m/%Y') }}</td>
+          <td class="mono">{{ pedido.ventana_texto }}</td>
+          <td class="mono">{{ pedido.ruta.codigo if pedido.ruta else '—' }}</td>
+          <td><span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if paginacion.pages > 1 %}
+  <nav class="paginacion">
+    {% if paginacion.has_prev %}
+      <a href="{{ url_for('pedidos.lista', pagina=paginacion.prev_num, **filtros) }}">Anterior</a>
+    {% endif %}
+    <span>Pagina {{ paginacion.page }} de {{ paginacion.pages }}</span>
+    {% if paginacion.has_next %}
+      <a href="{{ url_for('pedidos.lista', pagina=paginacion.next_num, **filtros) }}">Siguiente</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+
+  {% else %}
+    <p class="vacio">No se encontraron pedidos con los criterios seleccionados.</p>
+  {% endif %}
+</div>
+{% endblock %}

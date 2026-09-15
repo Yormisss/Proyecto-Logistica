@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block titulo %}Analitica | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Analitica de la operacion</h1>
+    <p class="subtitulo-pagina">Indicadores de apoyo a la toma de decisiones estrategicas</p>
+  </div>
+  <nav class="selector-rango">
+    {% for opcion in [7, 14, 30] %}
+      <a href="{{ url_for('admin.analitica_operacion', dias=opcion) }}"
+         class="{{ 'activo' if dias == opcion }}">{{ opcion }} dias</a>
+    {% endfor %}
+  </nav>
+</div>
+
+{# --- Cifras cabecera: un solo numero cada una, no ameritan grafica --- #}
+<section class="rejilla-kpis">
+  <article class="kpi">
+    <span class="kpi-etiqueta">Tiempo promedio de entrega</span>
+    {% if tiempo.promedio_min is not none %}
+      <span class="kpi-valor">{{ tiempo.promedio_min }}<small class="kpi-unidad">min</small></span>
+      <span class="kpi-detalle">Entre "en ruta" y "entregado" &middot; {{ tiempo.muestras }} entregas</span>
+    {% else %}
+      <span class="kpi-valor kpi-sin-dato">—</span>
+      <span class="kpi-detalle">Sin entregas cerradas en el periodo</span>
+    {% endif %}
+  </article>
+
+  <article class="kpi">
+    <span class="kpi-etiqueta">Cumplimiento de ventana horaria</span>
+    {% if ventana.porcentaje is not none %}
+      <span class="kpi-valor">{{ ventana.porcentaje }}<small class="kpi-unidad">%</small></span>
+      <span class="kpi-detalle">{{ ventana.dentro }} de {{ ventana.total }} dentro del horario pactado</span>
+    {% else %}
+      <span class="kpi-valor kpi-sin-dato">—</span>
+      <span class="kpi-detalle">Sin entregas con ventana definida</span>
+    {% endif %}
+  </article>
+
+  <article class="kpi">
+    <span class="kpi-etiqueta">Rango de duracion</span>
+    {% if tiempo.minimo is not none %}
+      <span class="kpi-valor">{{ tiempo.minimo }}–{{ tiempo.maximo }}<small class="kpi-unidad">min</small></span>
+      <span class="kpi-detalle">Entrega mas rapida y mas lenta</span>
+    {% else %}
+      <span class="kpi-valor kpi-sin-dato">—</span>
+      <span class="kpi-detalle">Sin datos suficientes</span>
+    {% endif %}
+  </article>
+</section>
+
+{# --- Entregas por dia: dos series, columna apilada --- #}
+<section class="tarjeta">
+  <div class="grafica-encabezado">
+    <h2 class="tarjeta-titulo sin-borde">Entregas cerradas por dia</h2>
+    <ul class="leyenda">
+      <li><span class="muestra" style="background: var(--serie-1)"></span>Entregadas</li>
+      <li><span class="muestra" style="background: var(--serie-2)"></span>Fallidas</li>
+    </ul>
+  </div>
+
+  {% if maximo_dia %}
+  <div class="grafica-columnas" role="img"
+       aria-label="Entregas cerradas por dia durante los ultimos {{ dias }} dias">
+    {% for punto in serie %}
+      {% set alto_entregadas = (punto.entregadas / maximo_dia * 100) if maximo_dia else 0 %}
+      {% set alto_fallidas = (punto.fallidas / maximo_dia * 100) if maximo_dia else 0 %}
+      <div class="columna-dia"
+           data-tooltip="{{ punto.fecha.strftime('%d/%m/%Y') }} — {{ punto.entregadas }} entregada{{ 's' if punto.entregadas != 1 }}, {{ punto.fallidas }} fallida{{ 's' if punto.fallidas != 1 }}">
+        <div class="columna-pila">
+          {% if punto.fallidas %}
+            <div class="segmento segmento-fallidas" style="height: {{ alto_fallidas }}%"></div>
+          {% endif %}
+          {% if punto.entregadas %}
+            <div class="segmento segmento-entregadas{{ ' sin-tope' if punto.fallidas }}"
+                 style="height: {{ alto_entregadas }}%"></div>
+          {% endif %}
+        </div>
+        <span class="etiqueta-dia">{{ punto.fecha.strftime('%d/%m') }}</span>
+      </div>
+    {% endfor %}
+  </div>
+
+  <details class="tabla-alterna">
+    <summary>Ver los datos en tabla</summary>
+    <table class="tabla">
+      <thead><tr><th>Fecha</th><th class="derecha">Entregadas</th><th class="derecha">Fallidas</th><th class="derecha">Total</th></tr></thead>
+      <tbody>
+      {% for punto in serie %}
+        <tr>
+          <td>{{ punto.fecha.strftime('%d/%m/%Y') }}</td>
+          <td class="derecha">{{ punto.entregadas }}</td>
+          <td class="derecha">{{ punto.fallidas }}</td>
+          <td class="derecha"><strong>{{ punto.total }}</strong></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% else %}
+    <p class="vacio">No hay entregas cerradas en los ultimos {{ dias }} dias.</p>
+  {% endif %}
+</section>
+
+<div class="rejilla-dos">
+  {# --- Motivos de fallo: una sola serie, barra horizontal ordenada --- #}
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Causas de entrega fallida</h2>
+    {% if motivos %}
+      <div class="grafica-barras" role="img" aria-label="Causas de entrega fallida ordenadas por frecuencia">
+      {% for fila in motivos %}
+        <div class="fila-barra" data-tooltip="{{ fila.motivo }} — {{ fila.cantidad }} caso{{ 's' if fila.cantidad != 1 }}">
+          <span class="etiqueta-barra">{{ fila.motivo }}</span>
+          <div class="pista-barra">
+            <div class="barra" style="width: {{ (fila.cantidad / maximo_motivo * 100) }}%"></div>
+          </div>
+          <span class="valor-barra">{{ fila.cantidad }}</span>
+        </div>
+      {% endfor %}
+      </div>
+      <p class="nota-pie">
+        Identificar la causa dominante permite atacarla en la planificacion,
+        no solo registrarla.
+      </p>
+    {% else %}
+      <p class="vacio">No se registraron entregas fallidas en el periodo.</p>
+    {% endif %}
+  </section>
+
+  {# --- Productividad por conductor --- #}
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Entregas cerradas por conductor</h2>
+    {% if conductores %}
+      <div class="grafica-barras" role="img" aria-label="Entregas cerradas por conductor">
+      {% for fila in conductores %}
+        <div class="fila-barra"
+             data-tooltip="{{ fila.conductor }} — {{ fila.entregadas }} entregadas, {{ fila.fallidas }} fallidas ({{ fila.exito }}% de exito)">
+          <span class="etiqueta-barra">{{ fila.conductor }}</span>
+          <div class="pista-barra">
+            <div class="barra" style="width: {{ (fila.cerradas / maximo_conductor * 100) if maximo_conductor else 0 }}%"></div>
+          </div>
+          <span class="valor-barra">{{ fila.cerradas }}</span>
+        </div>
+      {% endfor %}
+      </div>
+      <details class="tabla-alterna">
+        <summary>Ver detalle por conductor</summary>
+        <table class="tabla">
+          <thead><tr><th>Conductor</th><th class="derecha">Entregadas</th><th class="derecha">Fallidas</th><th class="derecha">Exito</th></tr></thead>
+          <tbody>
+          {% for fila in conductores %}
+            <tr>
+              <td>{{ fila.conductor }}</td>
+              <td class="derecha">{{ fila.entregadas }}</td>
+              <td class="derecha">{{ fila.fallidas }}</td>
+              <td class="derecha">{{ fila.exito }}%</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    {% else %}
+      <p class="vacio">Ningun conductor tiene entregas cerradas en el periodo.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/graficas.js') }}"></script>
+{% endblock %}

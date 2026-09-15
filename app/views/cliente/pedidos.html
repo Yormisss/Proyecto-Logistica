@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block titulo %}Mis pedidos | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Mis pedidos</h1>
+  <p class="subtitulo-pagina">{{ cliente.nombre }} &middot; seguimiento de sus ordenes de despacho</p>
+</div>
+
+<div class="rejilla-kpis">
+  <div class="kpi">
+    <span class="kpi-etiqueta">En curso</span>
+    <span class="kpi-valor">{{ resumen.en_curso }}</span>
+    <span class="kpi-detalle">Pedidos aun no cerrados</span>
+  </div>
+  <div class="kpi kpi-exito">
+    <span class="kpi-etiqueta">Entregados</span>
+    <span class="kpi-valor">{{ resumen.entregados }}</span>
+    <span class="kpi-detalle">Historico acumulado</span>
+  </div>
+  <div class="kpi {{ 'kpi-alerta' if resumen.fallidos }}">
+    <span class="kpi-etiqueta">No entregados</span>
+    <span class="kpi-valor">{{ resumen.fallidos }}</span>
+    <span class="kpi-detalle">Requirieron reprogramacion</span>
+  </div>
+</div>
+
+<section class="tarjeta">
+  <div class="tarjeta-titulo fila-encabezado">
+    <span>{{ paginacion.total }} pedido(s)</span>
+    <nav class="filtros-estado">
+      <a href="{{ url_for('cliente.mis_pedidos') }}"
+         class="chip {{ 'chip-activo' if not filtro }}">Todos</a>
+      <a href="{{ url_for('cliente.mis_pedidos', estado='abiertos') }}"
+         class="chip {{ 'chip-activo' if filtro == 'abiertos' }}">En curso</a>
+      <a href="{{ url_for('cliente.mis_pedidos', estado='cerrados') }}"
+         class="chip {{ 'chip-activo' if filtro == 'cerrados' }}">Cerrados</a>
+    </nav>
+  </div>
+
+  {% if pedidos %}
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Pedido</th><th>Estado</th><th>Fecha de despacho</th>
+            <th>Direccion de entrega</th><th>Ventana</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for pedido in pedidos %}
+          <tr>
+            <td class="mono">{{ pedido.codigo }}</td>
+            <td>
+              <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">
+                {{ seguimiento.get(pedido.estado, pedido.estado_etiqueta) }}
+              </span>
+            </td>
+            <td>{{ pedido.fecha_despacho.strftime('%d/%m/%Y') }}</td>
+            <td class="celda-direccion">{{ pedido.direccion }}, {{ pedido.ciudad }}</td>
+            <td class="mono">{{ pedido.ventana_texto }}</td>
+            <td class="derecha">
+              <a href="{{ url_for('cliente.seguimiento', pedido_id=pedido.id) }}">Ver seguimiento</a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if paginacion.pages > 1 %}
+    <nav class="paginacion">
+      {% if paginacion.has_prev %}
+        <a href="{{ url_for('cliente.mis_pedidos', pagina=paginacion.prev_num, estado=filtro) }}">Anterior</a>
+      {% endif %}
+      <span>Pagina {{ paginacion.page }} de {{ paginacion.pages }}</span>
+      {% if paginacion.has_next %}
+        <a href="{{ url_for('cliente.mis_pedidos', pagina=paginacion.next_num, estado=filtro) }}">Siguiente</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+  {% else %}
+    <p class="vacio">No hay pedidos que coincidan con este filtro.</p>
+  {% endif %}
+</section>
+{% endblock %}

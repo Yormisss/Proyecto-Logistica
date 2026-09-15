@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block titulo %}Planificar ruta | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Planificar ruta</h1>
+  <p class="subtitulo-pagina">
+    Asignacion de pedidos y trazado automatico de la secuencia de entrega (RF3)
+  </p>
+</div>
+
+<form method="get" class="barra-filtros">
+  <label class="etiqueta-filtro" for="fecha-consulta">Pedidos pendientes del</label>
+  <input type="date" id="fecha-consulta" name="fecha" value="{{ fecha_seleccionada.isoformat() }}">
+  <button type="submit" class="boton boton-primario">Consultar</button>
+</form>
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+  <input type="hidden" name="fecha" value="{{ fecha_seleccionada.isoformat() }}">
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Asignacion</h2>
+    <div class="rejilla-campos">
+      <div class="campo">
+        {{ formulario.conductor_id.label }}
+        {{ formulario.conductor_id() }}
+        {% for e in formulario.conductor_id.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.vehiculo_id.label }}
+        {{ formulario.vehiculo_id() }}
+      </div>
+      <div class="campo campo-ancho">
+        {{ formulario.estrategia.label }}
+        {{ formulario.estrategia() }}
+        <small class="ayuda-campo">
+          La optimizacion por distancia delega el ordenamiento al servicio de geolocalizacion.
+          La opcion por ventana horaria prioriza los clientes con hora limite mas temprana.
+        </small>
+      </div>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo fila-encabezado">
+      <span>Pedidos disponibles ({{ disponibles|length }})</span>
+      {% if disponibles %}
+      <label class="campo-inline">
+        <input type="checkbox" id="marcar-todos"> <span>Seleccionar todos</span>
+      </label>
+      {% endif %}
+    </h2>
+
+    {% if disponibles %}
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th style="width:40px"></th>
+            <th>Codigo</th><th>Cliente</th><th>Direccion</th>
+            <th>Ventana</th><th>Prioridad</th><th>Geo</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for pedido in disponibles %}
+          <tr>
+            <td><input type="checkbox" name="pedido_id" value="{{ pedido.id }}" class="casilla-pedido"></td>
+            <td class="mono">{{ pedido.codigo }}</td>
+            <td>{{ pedido.cliente_nombre }}</td>
+            <td class="celda-direccion">{{ pedido.direccion }}</td>
+            <td class="mono">{{ pedido.ventana_texto }}</td>
+            <td>
+              {% if pedido.prioridad == 1 %}<span class="marca-prioridad">Alta</span>
+              {% else %}{{ {2:'Media', 3:'Baja'}.get(pedido.prioridad, '—') }}{% endif %}
+            </td>
+            <td>
+              {% if pedido.tiene_coordenadas %}
+                <span class="etiqueta etiqueta-entregado">Si</span>
+              {% else %}
+                <span class="etiqueta etiqueta-fallido" title="No entra en el calculo de distancia">No</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="vacio">
+        No hay pedidos pendientes sin asignar para esta fecha.
+        <a href="{{ url_for('pedidos.nuevo') }}">Cree un pedido</a> o
+        <a href="{{ url_for('pedidos.importar') }}">importe un archivo CSV</a>.
+      </p>
+    {% endif %}
+  </section>
+
+  {% if disponibles %}
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('rutas.lista') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">Generar ruta</button>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const todos = document.getElementById("marcar-todos");
+  if (!todos) return;
+  todos.addEventListener("change", function () {
+    document.querySelectorAll(".casilla-pedido").forEach(function (casilla) {
+      casilla.checked = todos.checked;
+    });
+  });
+})();
+</script>
+{% endblock %}

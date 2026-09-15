@@ -1,0 +1,20 @@
+# Despliegue en Render (RNF3). El plan gratuito suspende la instancia tras
+# 15 minutos sin trafico; el primer acceso posterior tarda ~30 segundos.
+services:
+  - type: web
+    name: sgds
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn "run:app" --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /salud
+    envVars:
+      - key: ENTORNO
+        value: produccion
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # DATABASE_URL debe apuntar a la base gestionada del piloto.
+      - key: DATABASE_URL
+        sync: false

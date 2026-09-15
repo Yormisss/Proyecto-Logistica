@@ -1,0 +1,38 @@
+# Motor MySQL para la fase de implementacion piloto (RNF4).
+#
+#   docker compose up -d          Levanta la base
+#   docker compose down           La detiene (conserva los datos)
+#   docker compose down -v        La detiene y borra los datos
+#
+# Luego defina en .env:
+#   DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3306/logistica
+# y ejecute:  .venv/bin/flask --app run init-db
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: sgds-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_clave
+      MYSQL_DATABASE: logistica
+      MYSQL_USER: sgds
+      MYSQL_PASSWORD: sgds_clave
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # Workbench 8.x negocia sin problema con este plugin; se fija de forma
+      # explicita para que el comportamiento no dependa de la version del cliente.
+      - --default-authentication-plugin=caching_sha2_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - datos_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  datos_mysql:

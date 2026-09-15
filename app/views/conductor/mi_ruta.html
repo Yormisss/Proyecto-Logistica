@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block titulo %}Mi ruta | {{ nombre_sistema }}{% endblock %}
+{% block clase_body %}vista-movil{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Mi ruta</h1>
+    <p class="subtitulo-pagina">{{ hoy.strftime('%d/%m/%Y') }}</p>
+  </div>
+  <a class="boton boton-plano" href="{{ url_for('conductor.historial') }}">Historial</a>
+</div>
+
+{% if ruta %}
+  <section class="tarjeta resumen-ruta">
+    <div class="resumen-fila">
+      <span class="mono">{{ ruta.codigo }}</span>
+      <span class="etiqueta etiqueta-{{ ruta.estado|lower }}">{{ ruta.estado_etiqueta }}</span>
+    </div>
+    <div class="resumen-metricas">
+      <div><strong>{{ ruta.total_paradas }}</strong><span>Paradas</span></div>
+      <div><strong>{{ ruta.distancia_km|round(1) }}</strong><span>km</span></div>
+      <div><strong>{{ ruta.duracion_min|round(0)|int }}</strong><span>min</span></div>
+    </div>
+    <div class="barra-avance grande"><span style="width: {{ ruta.avance_porcentaje }}%"></span></div>
+    <small>{{ ruta.paradas_cerradas }} de {{ ruta.total_paradas }} completadas</small>
+
+    {% if ruta.vehiculo %}
+      <p class="nota-pie">Vehiculo asignado: <strong class="mono">{{ ruta.vehiculo.placa }}</strong></p>
+    {% endif %}
+
+    {% set pendientes_inicio = ruta.pedidos | selectattr('estado', 'equalto', EstadoPedido.ASIGNADO) | list %}
+    {% if pendientes_inicio %}
+    <form method="post" action="{{ url_for('conductor.iniciar', ruta_id=ruta.id) }}" class="accion-bloque">
+      {{ formulario.hidden_tag() }}
+      <button type="submit" class="boton boton-primario boton-bloque boton-grande">
+        Iniciar ruta ({{ pendientes_inicio|length }} parada{{ 's' if pendientes_inicio|length != 1 }})
+      </button>
+    </form>
+    {% endif %}
+  </section>
+
+  <h2 class="titulo-seccion">Paradas</h2>
+  <ol class="lista-paradas">
+  {% for pedido in ruta.pedidos %}
+    <li class="parada parada-{{ pedido.estado|lower }}">
+      <a class="parada-enlace" href="{{ url_for('conductor.parada', pedido_id=pedido.id) }}">
+        <div class="parada-orden">{{ pedido.orden_en_ruta or loop.index }}</div>
+        <div class="parada-datos">
+          <strong>{{ pedido.cliente_nombre }}</strong>
+          <span class="parada-direccion">{{ pedido.direccion }}</span>
+          <span class="parada-meta">{{ pedido.codigo }} &middot; {{ pedido.ventana_texto }}</span>
+        </div>
+        <div class="parada-derecha">
+          <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
+          <span class="flecha">&rsaquo;</span>
+        </div>
+      </a>
+    </li>
+  {% endfor %}
+  </ol>
+{% else %}
+  <div class="tarjeta vacio-centrado">
+    <p>No tiene una ruta asignada para hoy.</p>
+    <small>El gestor logistico le asignara los despachos del dia.</small>
+  </div>
+{% endif %}
+{% endblock %}

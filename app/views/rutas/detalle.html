@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block titulo %}{{ ruta.codigo }} | {{ nombre_sistema }}{% endblock %}
+
+{% block cabecera %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">{{ ruta.codigo }}</h1>
+    <p class="subtitulo-pagina">
+      <span class="etiqueta etiqueta-{{ ruta.estado|lower }}">{{ ruta.estado_etiqueta }}</span>
+      &middot; {{ ruta.fecha.strftime('%d/%m/%Y') }}
+      &middot; {{ ruta.conductor.nombre }}
+      {% if ruta.vehiculo %}&middot; <span class="mono">{{ ruta.vehiculo.placa }}</span>{% endif %}
+    </p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-plano" href="{{ url_for('rutas.lista') }}">Volver</a>
+    {% if ruta.estado != EstadoRuta.FINALIZADA %}
+    <form method="post" action="{{ url_for('rutas.eliminar', ruta_id=ruta.id) }}"
+          onsubmit="return confirm('¿Eliminar la ruta {{ ruta.codigo }}? Sus pedidos volveran a pendientes.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="boton boton-peligro">Eliminar ruta</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<section class="rejilla-kpis">
+  <article class="kpi">
+    <span class="kpi-etiqueta">Paradas</span>
+    <span class="kpi-valor">{{ ruta.total_paradas }}</span>
+    <span class="kpi-detalle">{{ ruta.paradas_cerradas }} cerradas &middot; {{ ruta.total_paradas - ruta.paradas_cerradas }} pendientes</span>
+  </article>
+  <article class="kpi">
+    <span class="kpi-etiqueta">Distancia estimada</span>
+    <span class="kpi-valor">{{ ruta.distancia_km|round(1) }}<small class="kpi-unidad">km</small></span>
+    <span class="kpi-detalle">
+      {% if ruta.proveedor_ruteo == 'OSRM' %}Calculada por OSRM sobre malla vial
+      {% elif ruta.proveedor_ruteo == 'LOCAL' %}Estimacion local en linea recta
+      {% else %}Sin calcular{% endif %}
+    </span>
+  </article>
+  <article class="kpi kpi-exito">
+    <span class="kpi-etiqueta">Duracion estimada</span>
+    <span class="kpi-valor">{{ ruta.duracion_min|round(0)|int }}<small class="kpi-unidad">min</small></span>
+    <span class="kpi-detalle">Avance {{ ruta.avance_porcentaje }}%</span>
+  </article>
+</section>
+
+{% if ruta.proveedor_ruteo == 'LOCAL' %}
+<div class="alerta alerta-advertencia">
+  Esta ruta se calculo con la heuristica local porque el servicio de geolocalizacion
+  no estuvo disponible. Las metricas son estimaciones en linea recta; recalcule la
+  ruta cuando haya conexion para obtener distancias sobre la malla vial real.
+</div>
+{% endif %}
+
+<div class="rejilla-dos">
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Secuencia de entrega</h2>
+    <div id="mapa-ruta" class="mapa"></div>
+
+    <ol class="lista-paradas lista-paradas-admin">
+      <li class="parada parada-origen">
+        <div class="parada-orden origen">CD</div>
+        <div class="parada-datos">
+          <strong>{{ origen.nombre }}</strong>
+          <span class="parada-meta">Punto de partida</span>
+        </div>
+      </li>
+      {% for pedido in ruta.pedidos %}
+      <li class="parada parada-{{ pedido.estado|lower }}">
+        <div class="parada-orden">{{ pedido.orden_en_ruta or '?' }}</div>
+        <div class="parada-datos">
+          <strong>{{ pedido.cliente_nombre }}</strong>
+          <span class="parada-direccion">{{ pedido.direccion }}</span>
+          <span class="parada-meta">
+            <a href="{{ url_for('pedidos.detalle', pedido_id=pedido.id) }}">{{ pedido.codigo }}</a>
+            &middot; {{ pedido.ventana_texto }}
+            {% if not pedido.tiene_coordenadas %}&middot; <span class="aviso-inline">sin geolocalizar</span>{% endif %}
+          </span>
+        </div>
+        <div class="parada-acciones">
+          <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
+          {% if pedido.estado not in EstadoPedido.CERRADOS %}
+          <form method="post" action="{{ url_for('rutas.quitar_parada', ruta_id=ruta.id, pedido_id=pedido.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="boton-quitar" title="Retirar de la ruta">&times;</button>
+          </form>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <div>
+    {% if ruta.estado != EstadoRuta.FINALIZADA %}
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Recalcular secuencia</h2>
+      <p class="nota-superior">
+        Vuelve a ordenar unicamente las paradas pendientes. Las entregas ya cerradas
+        conservan su posicion en el historico.
+      </p>
+      <form method="post" action="{{ url_for('rutas.recalcular', ruta_id=ruta.id) }}" class="formulario">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="campo">
+          <label for="estrategia">Criterio de ordenamiento</label>
+          <select name="estrategia" id="estrategia">
+            {% for clave, etiqueta in estrategias.items() %}
+              <option value="{{ clave }}">{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="boton boton-primario">Recalcular ruta</button>
+      </form>
+    </section>
+    {% endif %}
+
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Ficha de la ruta</h2>
+      <dl class="lista-datos">
+        <dt>Conductor</dt><dd>{{ ruta.conductor.nombre }}</dd>
+        <dt>Vehiculo</dt>
+        <dd>{% if ruta.vehiculo %}{{ ruta.vehiculo.placa }} ({{ ruta.vehiculo.tipo }}){% else %}Sin asignar{% endif %}</dd>
+        <dt>Proveedor</dt><dd>{{ ruta.proveedor_ruteo or 'Sin calcular' }}</dd>
+        <dt>Creada</dt><dd>{{ ruta.creada_en.strftime('%d/%m/%Y %H:%M') }}</dd>
+        {% if ruta.iniciada_en %}<dt>Iniciada</dt><dd>{{ ruta.iniciada_en.strftime('%d/%m/%Y %H:%M') }}</dd>{% endif %}
+        {% if ruta.finalizada_en %}<dt>Finalizada</dt><dd>{{ ruta.finalizada_en.strftime('%d/%m/%Y %H:%M') }}</dd>{% endif %}
+      </dl>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script id="datos-mapa" type="application/json">{{ datos_mapa|tojson }}</script>
+<script>
+(function () {
+  const datos = JSON.parse(document.getElementById("datos-mapa").textContent);
+  const origen = datos.origen;
+
+  const mapa = L.map("mapa-ruta");
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; colaboradores de OpenStreetMap"
+  }).addTo(mapa);
+
+  const limites = [[origen.lat, origen.lng]];
+
+  // Centro de distribucion
+  L.marker([origen.lat, origen.lng], {
+    icon: L.divIcon({
+      className: "marcador-mapa",
+      html: "<div class='pin pin-cd'>CD</div>",
+      iconSize: [32, 32], iconAnchor: [16, 16]
+    })
+  }).addTo(mapa).bindPopup("<strong>" + origen.nombre + "</strong><br>Punto de partida");
+
+  // Paradas numeradas segun la secuencia calculada
+  datos.paradas.forEach(function (parada) {
+    L.marker([parada.lat, parada.lng], {
+      icon: L.divIcon({
+        className: "marcador-mapa",
+        html: "<div class='pin pin-" + parada.estado.toLowerCase() + "'>" + parada.orden + "</div>",
+        iconSize: [28, 28], iconAnchor: [14, 14]
+      })
+    }).addTo(mapa).bindPopup(
+      "<strong>" + parada.orden + ". " + parada.cliente + "</strong><br>" +
+      parada.direccion + "<br><small>" + parada.codigo + " &middot; " + parada.ventana + "</small>"
+    );
+    limites.push([parada.lat, parada.lng]);
+  });
+
+  // Trazado real devuelto por el proveedor; si no hay, se unen los puntos en linea recta
+  if (datos.geometria && datos.geometria.length) {
+    L.polyline(datos.geometria, { color: "#1f6feb", weight: 4, opacity: 0.75 }).addTo(mapa);
+  } else if (limites.length > 1) {
+    L.polyline(limites, { color: "#98a2b3", weight: 3, dashArray: "6 6" }).addTo(mapa);
+  }
+
+  if (limites.length > 1) {
+    mapa.fitBounds(limites, { padding: [30, 30] });
+  } else {
+    mapa.setView([origen.lat, origen.lng], 12);
+  }
+})();
+</script>
+{% endblock %}

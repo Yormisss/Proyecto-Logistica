@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Error del servidor | {{ nombre_sistema }}{% endblock %}
+{% block contenido %}
+<div class="tarjeta vacio-centrado">
+  <h1 class="codigo-error">500</h1>
+  <h2>Error del servidor</h2>
+  <p>Ocurrio un error interno. Intente nuevamente.</p>
+  <a class="boton boton-primario" href="{{ url_for('principal.inicio') }}">Volver al inicio</a>
+</div>
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar cuenta' if usuario else 'Nueva cuenta' }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('usuarios.lista') }}">&lsaquo; Volver a usuarios</a>
+  <h1 class="titulo-pagina">{{ usuario.nombre if usuario else 'Nueva cuenta de acceso' }}</h1>
+  <p class="subtitulo-pagina">
+    {% if usuario %}Cuenta creada el {{ usuario.creado_en.strftime('%d/%m/%Y') }}
+    {% else %}Alta de un usuario del sistema (RF1){% endif %}
+  </p>
+</div>
+
+{% if es_propia %}
+<div class="alerta alerta-advertencia">
+  Esta es su propia cuenta: no puede cambiarse el rol ni desactivarse, para no
+  quedar sin acceso a la gestion de usuarios.
+</div>
+{% endif %}
+
+{% if rutas_abiertas %}
+<div class="alerta alerta-advertencia">
+  Este conductor tiene {{ rutas_abiertas }} ruta(s) sin cerrar. Si le cambia el rol o
+  desactiva la cuenta, reasignelas primero.
+</div>
+{% endif %}
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Datos de la persona</h2>
+    <div class="rejilla-campos">
+      <div class="campo campo-ancho">
+        {{ formulario.nombre.label }}
+        {{ formulario.nombre(placeholder="Nombre y apellidos") }}
+        {% for e in formulario.nombre.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.correo.label }}
+        {{ formulario.correo(placeholder="persona@empresa.com") }}
+        {% for e in formulario.correo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.documento.label }}
+        {{ formulario.documento(placeholder="Cedula") }}
+        {% for e in formulario.documento.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.telefono.label }}
+        {{ formulario.telefono(placeholder="3115550101") }}
+      </div>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Rol y acceso</h2>
+    <div class="rejilla-campos">
+      <div class="campo">
+        {{ formulario.rol.label }}
+        {{ formulario.rol(disabled=true) if es_propia else formulario.rol() }}
+        {% if es_propia %}<input type="hidden" name="rol" value="{{ formulario.rol.data }}">{% endif %}
+        {% for e in formulario.rol.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo" id="campo-cliente">
+        {{ formulario.cliente_id.label }}
+        {{ formulario.cliente_id() }}
+        {% for e in formulario.cliente_id.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">
+          Solo para el rol Cliente: define de quien vera los pedidos.
+          <a href="{{ url_for('clientes_admin.nuevo') }}">Registrar un cliente nuevo</a>.
+        </small>
+      </div>
+      <div class="campo campo-ancho">
+        <label class="campo-inline">
+          {{ formulario.activo(disabled=true) if es_propia else formulario.activo() }}
+          <span>Cuenta activa</span>
+        </label>
+        {% if es_propia %}<input type="hidden" name="activo" value="y">{% endif %}
+        <small class="ayuda-campo">Una cuenta inactiva no puede iniciar sesion.</small>
+      </div>
+    </div>
+    <p class="nota-pie">
+      Solo se ofrecen los clientes sin cuenta: la relacion es uno a uno, de modo que
+      un cliente no puede quedar asociado a dos credenciales.
+    </p>
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Contrasena</h2>
+    <div class="rejilla-campos">
+      <div class="campo campo-ancho">
+        {{ formulario.contrasena.label }}
+        {{ formulario.contrasena(placeholder="Dejar vacio para generar una temporal", autocomplete="new-password") }}
+        {% for e in formulario.contrasena.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">
+          {% if usuario %}
+            Dejela vacia para conservar la contrasena actual. Minimo {{ longitud_minima }} caracteres.
+          {% else %}
+            Si la deja vacia, el sistema genera una contrasena temporal y la muestra una
+            sola vez para que la entregue por un canal aparte.
+          {% endif %}
+        </small>
+      </div>
+    </div>
+  </section>
+
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('usuarios.lista') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">
+      {{ 'Guardar cambios' if usuario else 'Crear cuenta' }}
+    </button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// El cliente asociado solo aplica al rol CLIENTE: se oculta para los demas y se
+// evita que el formulario pida un dato que no corresponde.
+(function () {
+  const rol = document.querySelector("select[name='rol']");
+  const campo = document.getElementById("campo-cliente");
+  if (!rol || !campo) return;
+
+  function sincronizar() {
+    campo.hidden = rol.value !== "CLIENTE";
+  }
+  rol.addEventListener("change", sincronizar);
+  sincronizar();
+})();
+</script>
+{% endblock %}

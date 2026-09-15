@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block titulo %}Usuarios | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Cuentas de acceso</h1>
+    <p class="subtitulo-pagina">{{ usuarios|length }} cuenta(s) &middot; gestion de usuarios y roles (RF1)</p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-primario" href="{{ url_for('usuarios.nuevo') }}">Nueva cuenta</a>
+  </div>
+</div>
+
+{% if sin_portal %}
+<div class="alerta alerta-advertencia">
+  {{ sin_portal }} cliente(s) todavia no tienen acceso al portal de seguimiento.
+  <a href="{{ url_for('clientes_admin.lista', portal='no') }}">Ver cuales</a>.
+</div>
+{% endif %}
+
+<section class="tarjeta">
+  <form method="get" class="barra-filtros">
+    <input type="search" name="q" value="{{ filtros.q }}" placeholder="Nombre, correo o documento">
+    <select name="rol">
+      <option value="">Todos los roles</option>
+      {% for valor, etiqueta in roles %}
+        <option value="{{ valor }}" {{ 'selected' if filtros.rol == valor }}>
+          {{ etiqueta }}{% if conteos.get(valor) %} ({{ conteos[valor] }}){% endif %}
+        </option>
+      {% endfor %}
+    </select>
+    <select name="estado">
+      <option value="">Activas e inactivas</option>
+      <option value="activos" {{ 'selected' if filtros.estado == 'activos' }}>Solo activas</option>
+      <option value="inactivos" {{ 'selected' if filtros.estado == 'inactivos' }}>Solo inactivas</option>
+    </select>
+    <button type="submit" class="boton boton-secundario">Filtrar</button>
+    {% if filtros.q or filtros.rol or filtros.estado %}
+      <a class="boton boton-plano" href="{{ url_for('usuarios.lista') }}">Limpiar</a>
+    {% endif %}
+  </form>
+
+  {% if usuarios %}
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Cliente asociado</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for usuario in usuarios %}
+        <tr class="{{ 'fila-inactiva' if not usuario.activo }}">
+          <td>
+            {{ usuario.nombre }}
+            {% if usuario.id == current_user.id %}<span class="chip">usted</span>{% endif %}
+          </td>
+          <td class="mono">{{ usuario.correo }}</td>
+          <td>{{ usuario.rol_etiqueta }}</td>
+          <td>
+            {% if usuario.cliente %}
+              <a href="{{ url_for('clientes_admin.detalle', cliente_id=usuario.cliente.id) }}">
+                {{ usuario.cliente.nombre }}</a>
+            {% elif usuario.es_cliente %}
+              <span class="aviso-inline">Sin cliente: no vera nada</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <span class="etiqueta etiqueta-{{ 'entregado' if usuario.activo else 'fallido' }}">
+              {{ 'Activa' if usuario.activo else 'Inactiva' }}
+            </span>
+          </td>
+          <td class="derecha acciones-fila">
+            <a href="{{ url_for('usuarios.editar', usuario_id=usuario.id) }}">Editar</a>
+            <form method="post" action="{{ url_for('usuarios.restablecer', usuario_id=usuario.id) }}"
+                  onsubmit="return confirm('¿Generar una contrasena temporal para {{ usuario.nombre }}? La actual dejara de servir.');">
+              {{ formulario.hidden_tag() }}
+              <button type="submit" class="boton-enlace">Restablecer clave</button>
+            </form>
+            {% if usuario.id != current_user.id %}
+            <form method="post" action="{{ url_for('usuarios.alternar_estado', usuario_id=usuario.id) }}"
+                  onsubmit="return confirm('¿{{ 'Desactivar' if usuario.activo else 'Activar' }} la cuenta de {{ usuario.nombre }}?');">
+              {{ formulario.hidden_tag() }}
+              <button type="submit" class="boton-enlace {{ 'texto-alerta' if usuario.activo }}">
+                {{ 'Desactivar' if usuario.activo else 'Activar' }}
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="nota-pie">
+    Las cuentas no se eliminan: se desactivan. <code>Usuario</code> es el origen de la
+    trazabilidad de rutas, eventos y movimientos de inventario, y borrarlo la rompe.
+    Una cuenta inactiva no puede iniciar sesion.
+  </p>
+  {% else %}
+    <p class="vacio">Ninguna cuenta coincide con el filtro.</p>
+  {% endif %}
+</section>
+{% endblock %}

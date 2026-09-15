@@ -1,0 +1,24 @@
+# Entorno virtual y cache de Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Credenciales: se ignora cualquier variante de .env salvo la plantilla,
+# porque los respaldos (.env.bak, .env.sqlite.bak) tambien llevan la clave.
+.env
+.env.*
+!.env.example
+
+# Base de datos local y archivos subidos
+instance/
+*.db
+*.sqlite3
+
+# Registros de ejecucion
+*.log
+
+# Sistema operativo y editores
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,11 @@
+codigo,cliente_nombre,cliente_documento,cliente_telefono,direccion,ciudad,latitud,longitud,fecha_despacho,ventana_inicio,ventana_fin,prioridad,sku,cantidad,observaciones
+,Supermercado La 80,900111222-1,3115550101,Cra 80 #45-12,Bogota,4.6712,-74.0912,2026-09-09,08:00,12:00,2,SKU-1001,10,Entregar en muelle de carga
+,Droguería Salud Total,900222333-2,3125550202,Calle 72 #10-34,Bogota,4.6560,-74.0620,2026-09-09,09:00,13:00,1,SKU-1005,8,
+LOTE-TEIS,Tienda El Progreso,900333444-3,3135550303,Av. Boyaca #66-20,Bogota,4.6880,-74.0980,2026-09-09,10:00,14:00,3,SKU-1002,15,Pedido combinado
+LOTE-TEIS,Tienda El Progreso,900333444-3,3135550303,Av. Boyaca #66-20,Bogota,4.6880,-74.0980,2026-09-09,10:00,14:00,3,SKU-1003,6,
+LOTE-TEIS,Tienda El Progreso,900333444-3,3135550303,Av. Boyaca #66-20,Bogota,4.6880,-74.0980,2026-09-09,10:00,14:00,3,SKU-1005,4,
+,Mercado Los Andes,900444555-4,3145550404,Calle 134 #22-15,Bogota,4.7160,-74.0450,2026-09-09,13:00,17:00,2,SKU-1001,20,Cliente exige factura impresa
+,Autoservicio Bosa,900555666-5,3155550505,Cra 87 #59-30 Sur,Bogota,4.6180,-74.1890,2026-09-09,14:00,18:00,3,SKU-1002,12,
+,Minimarket Teusaquillo,900666777-6,3165550606,Cra 24 #39-45,Bogota,4.6320,-74.0790,2026-09-09,08:30,11:30,1,SKU-1003,9,Zona de parqueo restringida
+,SUPERMERCADO  LA 80,,,cra 80 #45-12,bogota,,,2026-09-09,08:00,12:00,2,SKU-1002,5,Misma tienda mal escrita: NO debe crear un cliente nuevo
+,Supermercado La 80,900111222-1,3115550101,Av. Calle 26 #92-32,Bogota,4.6690,-74.1180,2026-09-09,15:00,18:00,3,SKU-1001,6,Segunda sede del mismo cliente

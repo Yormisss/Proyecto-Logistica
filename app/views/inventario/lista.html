@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}Inventario | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Inventario del almacen</h1>
+    <p class="subtitulo-pagina">{{ productos|length }} producto(s) en catalogo</p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-primario" href="{{ url_for('inventario.nuevo') }}">Nuevo producto</a>
+  </div>
+</div>
+
+<form method="get" class="barra-filtros">
+  <input type="search" name="q" placeholder="SKU o nombre" value="{{ filtros.q }}">
+  <label class="campo-inline">
+    <input type="checkbox" name="criticos" value="1" {{ 'checked' if filtros.criticos == '1' }}>
+    <span>Solo bajo minimo</span>
+  </label>
+  <button type="submit" class="boton boton-primario">Filtrar</button>
+  <a class="boton boton-plano" href="{{ url_for('inventario.lista') }}">Limpiar</a>
+</form>
+
+<div class="tarjeta">
+  {% if productos %}
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr><th>SKU</th><th>Producto</th><th class="derecha">Stock</th><th class="derecha">Minimo</th><th>Estado</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for producto in productos %}
+        <tr class="fila-clicable" onclick="window.location='{{ url_for('inventario.detalle', producto_id=producto.id) }}'">
+          <td class="mono">{{ producto.sku }}</td>
+          <td>
+            {{ producto.nombre }}
+            {% if not producto.activo %}<span class="marca-inactivo">Inactivo</span>{% endif %}
+          </td>
+          <td class="derecha"><strong>{{ producto.stock_actual }}</strong> <small>{{ producto.unidad }}</small></td>
+          <td class="derecha">{{ producto.stock_minimo }}</td>
+          <td>
+            {% if producto.bajo_minimo %}
+              <span class="etiqueta etiqueta-fallido">Bajo minimo</span>
+            {% else %}
+              <span class="etiqueta etiqueta-entregado">Disponible</span>
+            {% endif %}
+          </td>
+          <td class="derecha">
+            <a class="enlace-tabla" href="{{ url_for('inventario.editar', producto_id=producto.id) }}"
+               onclick="event.stopPropagation()">Editar</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="vacio">No hay productos que coincidan con la busqueda.</p>
+  {% endif %}
+</div>
+{% endblock %}

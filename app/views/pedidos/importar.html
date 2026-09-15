@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block titulo %}Importar pedidos | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Importar ordenes desde CSV</h1>
+  <p class="subtitulo-pagina">
+    Integracion con el ERP legado mediante archivo plano (RF2)
+  </p>
+</div>
+
+<section class="tarjeta">
+  <form method="post" enctype="multipart/form-data" class="formulario-importar">
+    {{ formulario.hidden_tag() }}
+    <div class="campo">
+      <label for="archivo">Archivo CSV (maximo 2 MB)</label>
+      <input type="file" name="archivo" id="archivo" accept=".csv" required>
+    </div>
+    <div class="acciones-formulario">
+      <a class="boton boton-plano" href="{{ url_for('pedidos.plantilla') }}">Descargar plantilla</a>
+      <button type="submit" class="boton boton-primario">Analizar archivo</button>
+    </div>
+  </form>
+
+  <details class="ayuda-formato">
+    <summary>Formato esperado del archivo</summary>
+    <p>Una fila por producto. Las filas que comparten el mismo <code>codigo</code> se agrupan en un solo pedido.</p>
+    <table class="tabla">
+      <thead><tr><th>Columna</th><th>Obligatoria</th><th>Formato</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">cliente_nombre</td><td>Si</td><td>Texto</td></tr>
+        <tr><td class="mono">cliente_documento</td><td>No</td><td>NIT o cedula; evita duplicar el cliente si cambia el nombre</td></tr>
+        <tr><td class="mono">direccion</td><td>Si</td><td>Texto</td></tr>
+        <tr><td class="mono">sku</td><td>Si</td><td>Debe existir en el inventario</td></tr>
+        <tr><td class="mono">cantidad</td><td>Si</td><td>Entero mayor que cero</td></tr>
+        <tr><td class="mono">codigo</td><td>No</td><td>Se genera si se omite</td></tr>
+        <tr><td class="mono">cliente_telefono</td><td>No</td><td>Texto</td></tr>
+        <tr><td class="mono">ciudad</td><td>No</td><td>Por defecto Bogota</td></tr>
+        <tr><td class="mono">latitud / longitud</td><td>No</td><td>Decimal</td></tr>
+        <tr><td class="mono">fecha_despacho</td><td>No</td><td>AAAA-MM-DD (por defecto hoy)</td></tr>
+        <tr><td class="mono">ventana_inicio / ventana_fin</td><td>No</td><td>HH:MM</td></tr>
+        <tr><td class="mono">prioridad</td><td>No</td><td>1 alta, 2 media, 3 baja</td></tr>
+        <tr><td class="mono">observaciones</td><td>No</td><td>Texto</td></tr>
+      </tbody>
+    </table>
+    <p class="nota-pie">Se aceptan separadores por coma o punto y coma, y codificacion UTF-8 o Latin-1.</p>
+    <p class="nota-pie">
+      Los clientes se reconocen por su NIT y, en su defecto, por el nombre sin
+      acentos ni puntuacion. Las filas del mismo destinatario no crean registros
+      repetidos.
+    </p>
+  </details>
+</section>
+
+{% if errores %}
+<section class="tarjeta tarjeta-error">
+  <h2 class="tarjeta-titulo">{{ errores|length }} fila(s) con errores</h2>
+  <p class="nota-superior">Estas filas se omitiran. Corrija el archivo si desea incluirlas.</p>
+  <table class="tabla">
+    <thead><tr><th style="width:90px">Linea</th><th>Motivo</th></tr></thead>
+    <tbody>
+    {% for error in errores %}
+      <tr><td class="mono">{{ error.linea }}</td><td>{{ error.mensaje }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if pedidos is not none %}
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Vista previa: {{ pedidos|length }} pedido(s) listos para cargar</h2>
+
+  {% if pedidos %}
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead>
+          <tr><th>Codigo</th><th>Cliente</th><th>Direccion</th><th>Fecha</th><th>Ventana</th><th>Productos</th></tr>
+        </thead>
+        <tbody>
+        {% for pedido in pedidos %}
+          <tr>
+            <td class="mono">{{ pedido.codigo or 'Automatico' }}</td>
+            <td>
+              {{ pedido.cliente_nombre }}
+              {% if not pedido.cliente_existente %}
+                <span class="chip chip-nuevo" title="No existe en el sistema; se creara al confirmar">nuevo</span>
+              {% endif %}
+            </td>
+            <td class="celda-direccion">{{ pedido.direccion }}</td>
+            <td>{{ pedido.fecha_despacho.strftime('%d/%m/%Y') }}</td>
+            <td class="mono">
+              {%- if pedido.ventana_inicio and pedido.ventana_fin -%}
+                {{ pedido.ventana_inicio.strftime('%H:%M') }}-{{ pedido.ventana_fin.strftime('%H:%M') }}
+              {%- else -%}—{%- endif -%}
+            </td>
+            <td>
+              {% for item in pedido['items'] %}
+                <span class="chip">{{ item.sku }} &times;{{ item.cantidad }}</span>
+              {% endfor %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="{{ url_for('pedidos.confirmar_importacion') }}" class="acciones-formulario">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <a class="boton boton-plano" href="{{ url_for('pedidos.importar') }}">Cancelar</a>
+      <button type="submit" class="boton boton-primario">Confirmar carga de {{ pedidos|length }} pedido(s)</button>
+    </form>
+  {% else %}
+    <p class="vacio">Ninguna fila del archivo pudo procesarse.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

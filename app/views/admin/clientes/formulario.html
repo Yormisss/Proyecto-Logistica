@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar cliente' if cliente else 'Nuevo cliente' }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('clientes_admin.lista') }}">&lsaquo; Volver a clientes</a>
+  <h1 class="titulo-pagina">{{ cliente.nombre if cliente else 'Nuevo cliente' }}</h1>
+  <p class="subtitulo-pagina">
+    {% if cliente %}Los pedidos ya despachados conservan la razon social con la que salieron
+    {% else %}Alta manual; la importacion CSV tambien crea clientes por su cuenta{% endif %}
+  </p>
+</div>
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Datos del cliente</h2>
+    <div class="rejilla-campos">
+      <div class="campo campo-ancho">
+        {{ formulario.nombre.label }}
+        {{ formulario.nombre(placeholder="Supermercado La 80") }}
+        {% for e in formulario.nombre.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.documento.label }}
+        {{ formulario.documento(placeholder="900123456-1") }}
+        {% for e in formulario.documento.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">
+          Clave mas confiable que el nombre: identifica al cliente aunque el ERP
+          reescriba la razon social.
+        </small>
+      </div>
+      <div class="campo">
+        {{ formulario.telefono.label }}
+        {{ formulario.telefono(placeholder="3115550101") }}
+      </div>
+      <div class="campo">
+        {{ formulario.correo.label }}
+        {{ formulario.correo(placeholder="contacto@empresa.com") }}
+        {% for e in formulario.correo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo campo-ancho">
+        <label class="campo-inline">
+          {{ formulario.activo() }} <span>Cliente activo</span>
+        </label>
+        <small class="ayuda-campo">
+          Un cliente inactivo no admite pedidos nuevos y su portal deja de responder.
+          No se elimina: los pedidos historicos lo referencian.
+        </small>
+      </div>
+    </div>
+  </section>
+
+  <div class="acciones-formulario">
+    <a class="boton boton-plano"
+       href="{{ url_for('clientes_admin.detalle', cliente_id=cliente.id) if cliente else url_for('clientes_admin.lista') }}">
+      Cancelar</a>
+    <button type="submit" class="boton boton-primario">
+      {{ 'Guardar cambios' if cliente else 'Registrar cliente' }}
+    </button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block titulo %}Rendimiento | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Tiempos de respuesta</h1>
+    <p class="subtitulo-pagina">
+      RNF2 &middot; Limite establecido: {{ (datos.umbral_maximo_ms / 1000)|int }} segundos
+    </p>
+  </div>
+  <nav class="selector-rango">
+    <a href="{{ url_for('admin.rendimiento', horas=1) }}" class="{{ 'activo' if datos.horas == 1 }}">1 hora</a>
+    <a href="{{ url_for('admin.rendimiento', horas=24) }}" class="{{ 'activo' if datos.horas == 24 }}">24 horas</a>
+    <a href="{{ url_for('admin.rendimiento', horas=168) }}" class="{{ 'activo' if datos.horas == 168 }}">7 dias</a>
+  </nav>
+</div>
+
+{% if datos.muestras %}
+<section class="rejilla-kpis">
+  <article class="kpi {{ 'kpi-exito' if datos.porcentaje_cumplimiento == 100 else 'kpi-alerta' }}">
+    <span class="kpi-etiqueta">Cumplimiento del RNF2</span>
+    <span class="kpi-valor">{{ datos.porcentaje_cumplimiento }}<small class="kpi-unidad">%</small></span>
+    <span class="kpi-detalle">
+      {{ datos.cumplen }} de {{ datos.muestras }} transacciones bajo {{ (datos.umbral_maximo_ms / 1000)|int }} s
+    </span>
+  </article>
+  <article class="kpi">
+    <span class="kpi-etiqueta">Mediana</span>
+    <span class="kpi-valor">{{ datos.mediana_ms }}<small class="kpi-unidad">ms</small></span>
+    <span class="kpi-detalle">La mitad de las peticiones responde mas rapido</span>
+  </article>
+  <article class="kpi">
+    <span class="kpi-etiqueta">Percentil 95</span>
+    <span class="kpi-valor">{{ datos.p95_ms }}<small class="kpi-unidad">ms</small></span>
+    <span class="kpi-detalle">Peor caso observado: {{ datos.maximo_ms }} ms</span>
+  </article>
+</section>
+
+<section class="tarjeta">
+  <div class="grafica-encabezado">
+    <h2 class="tarjeta-titulo sin-borde">Percentil 95 por transaccion critica</h2>
+    <span class="nota-umbral">Linea roja: limite de {{ (datos.umbral_maximo_ms / 1000)|int }} s</span>
+  </div>
+
+  <div class="grafica-barras grafica-latencia" role="img"
+       aria-label="Percentil 95 del tiempo de respuesta por transaccion critica">
+  {% for fila in datos.transacciones %}
+    <div class="fila-barra"
+         data-tooltip="{{ fila.nombre }} — mediana {{ fila.mediana_ms }} ms, p95 {{ fila.p95_ms }} ms, maximo {{ fila.maximo_ms }} ms ({{ fila.muestras }} muestras)">
+      <span class="etiqueta-barra ancha">{{ fila.nombre }}</span>
+      <div class="pista-barra">
+        <div class="barra" style="width: {{ (fila.p95_ms / escala_ms * 100) }}%"></div>
+        <div class="marca-umbral" style="left: {{ (datos.umbral_maximo_ms / escala_ms * 100) }}%"></div>
+      </div>
+      <span class="valor-barra">{{ fila.p95_ms }} ms</span>
+    </div>
+  {% endfor %}
+  </div>
+
+  <details class="tabla-alterna" open>
+    <summary>Detalle por transaccion</summary>
+    <div class="tabla-scroll">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Transaccion</th><th class="derecha">Muestras</th>
+            <th class="derecha">Mediana</th><th class="derecha">P95</th>
+            <th class="derecha">Maximo</th><th>Cumple</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for fila in datos.transacciones %}
+          <tr>
+            <td>{{ fila.nombre }}</td>
+            <td class="derecha">{{ fila.muestras }}</td>
+            <td class="derecha">{{ fila.mediana_ms }} ms</td>
+            <td class="derecha">{{ fila.p95_ms }} ms</td>
+            <td class="derecha">{{ fila.maximo_ms }} ms</td>
+            <td>
+              {% if fila.cumple %}
+                <span class="etiqueta etiqueta-entregado">&#10003; Si</span>
+              {% else %}
+                <span class="etiqueta etiqueta-fallido">&#10007; No</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <p class="nota-pie">
+    La medicion se toma en el servidor, por lo que no incluye la latencia de la red
+    movil del conductor. El propio RNF2 la contempla aparte al condicionar el limite
+    "a la conexion a internet movil".
+  </p>
+</section>
+{% else %}
+<div class="tarjeta vacio-centrado">
+  <p>Aun no hay mediciones registradas en las ultimas {{ datos.horas }} horas.</p>
+  <small>Use el sistema con normalidad y las mediciones apareceran aqui automaticamente.</small>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/graficas.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block titulo %}{{ pedido.codigo }} | {{ nombre_sistema }}{% endblock %}
+{% block clase_body %}vista-movil{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('conductor.mi_ruta') }}">&lsaquo; Volver a mi ruta</a>
+  <h1 class="titulo-pagina">Parada {{ pedido.orden_en_ruta or '—' }}</h1>
+  <p class="subtitulo-pagina">
+    <span class="mono">{{ pedido.codigo }}</span>
+    &middot; <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
+  </p>
+</div>
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">{{ pedido.cliente_nombre }}</h2>
+  <dl class="lista-datos">
+    <dt>Direccion</dt><dd>{{ pedido.direccion }}, {{ pedido.ciudad }}</dd>
+    <dt>Ventana</dt><dd>{{ pedido.ventana_texto }}</dd>
+    {% if pedido.cliente_telefono %}
+    <dt>Telefono</dt><dd><a href="tel:{{ pedido.cliente_telefono }}">{{ pedido.cliente_telefono }}</a></dd>
+    {% endif %}
+    {% if pedido.observaciones %}
+    <dt>Instrucciones</dt><dd>{{ pedido.observaciones }}</dd>
+    {% endif %}
+  </dl>
+
+  {% if pedido.tiene_coordenadas %}
+  <a class="boton boton-secundario boton-bloque"
+     href="https://www.google.com/maps/dir/?api=1&destination={{ pedido.latitud }},{{ pedido.longitud }}"
+     target="_blank" rel="noopener">Abrir en el navegador GPS</a>
+  {% endif %}
+</section>
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Mercancia a entregar</h2>
+  <ul class="lista-mercancia">
+  {% for item in pedido.items %}
+    <li>
+      <span class="cantidad-item">{{ item.cantidad }}</span>
+      <span class="nombre-item">{{ item.producto.nombre }}</span>
+      <span class="mono sku-item">{{ item.producto.sku }}</span>
+    </li>
+  {% else %}
+    <li class="vacio">Este pedido no tiene productos asociados.</li>
+  {% endfor %}
+  </ul>
+</section>
+
+{# --- Acciones segun el estado actual (RF4) --- #}
+{% if pedido.estado == EstadoPedido.ASIGNADO %}
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Iniciar desplazamiento</h2>
+  <form method="post" action="{{ url_for('conductor.marcar_en_ruta', pedido_id=pedido.id) }}" class="formulario-geo">
+    {{ formulario_accion.hidden_tag() }}
+    <button type="submit" class="boton boton-primario boton-bloque boton-grande">Marcar en ruta</button>
+  </form>
+</section>
+
+{% elif pedido.estado == EstadoPedido.EN_RUTA %}
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Confirmar entrega</h2>
+  <p class="nota-superior">
+    Al confirmar, el sistema descuenta automaticamente la mercancia del inventario del almacen.
+  </p>
+  <form method="post" action="{{ url_for('conductor.entregar', pedido_id=pedido.id) }}"
+        class="formulario formulario-geo" novalidate>
+    {{ formulario_entrega.hidden_tag() }}
+    <div class="campo">
+      {{ formulario_entrega.receptor_nombre.label }}
+      {{ formulario_entrega.receptor_nombre(placeholder="Nombre de quien recibe") }}
+    </div>
+    <div class="campo">
+      {{ formulario_entrega.receptor_documento.label }}
+      {{ formulario_entrega.receptor_documento(placeholder="Cedula o NIT", inputmode="numeric") }}
+    </div>
+    <div class="campo">
+      {{ formulario_entrega.observacion.label }}
+      {{ formulario_entrega.observacion(rows=2, placeholder="Opcional") }}
+    </div>
+    <button type="submit" class="boton boton-exito boton-bloque boton-grande">Confirmar entrega</button>
+  </form>
+</section>
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">No se pudo entregar</h2>
+  <form method="post" action="{{ url_for('conductor.fallar', pedido_id=pedido.id) }}"
+        class="formulario formulario-geo" novalidate>
+    {{ formulario_fallo.hidden_tag() }}
+    <div class="campo">
+      <label for="motivo_fallo">Motivo</label>
+      <select name="motivo_fallo" id="motivo_fallo" required>
+        <option value="">Seleccione un motivo</option>
+        {% for motivo in motivos %}<option value="{{ motivo }}">{{ motivo }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      {{ formulario_fallo.observacion.label }}
+      {{ formulario_fallo.observacion(rows=2, placeholder="Detalle de lo ocurrido") }}
+    </div>
+    <button type="submit" class="boton boton-peligro boton-bloque">Registrar entrega fallida</button>
+  </form>
+</section>
+
+{% elif pedido.estado == EstadoPedido.FALLIDO %}
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Entrega fallida</h2>
+  {% if pedido.prueba_entrega %}
+    <dl class="lista-datos">
+      <dt>Motivo</dt><dd>{{ pedido.prueba_entrega.motivo_fallo or '—' }}</dd>
+      {% if pedido.prueba_entrega.observacion %}
+      <dt>Detalle</dt><dd>{{ pedido.prueba_entrega.observacion }}</dd>
+      {% endif %}
+      <dt>Registrado</dt><dd>{{ pedido.prueba_entrega.registrado_en.strftime('%d/%m/%Y %H:%M') }}</dd>
+    </dl>
+  {% endif %}
+  <form method="post" action="{{ url_for('conductor.reintentar', pedido_id=pedido.id) }}" class="formulario-geo">
+    {{ formulario_accion.hidden_tag() }}
+    <button type="submit" class="boton boton-primario boton-bloque">Reintentar entrega</button>
+  </form>
+</section>
+
+{% elif pedido.estado == EstadoPedido.ENTREGADO %}
+<section class="tarjeta tarjeta-entregada">
+  <h2 class="tarjeta-titulo">Entrega completada</h2>
+  {% if pedido.prueba_entrega %}
+  <dl class="lista-datos">
+    <dt>Recibido por</dt><dd>{{ pedido.prueba_entrega.receptor_nombre or 'No registrado' }}</dd>
+    <dt>Documento</dt><dd>{{ pedido.prueba_entrega.receptor_documento or '—' }}</dd>
+    <dt>Fecha</dt><dd>{{ pedido.prueba_entrega.registrado_en.strftime('%d/%m/%Y %H:%M') }}</dd>
+    {% if pedido.prueba_entrega.observacion %}
+    <dt>Observacion</dt><dd>{{ pedido.prueba_entrega.observacion }}</dd>
+    {% endif %}
+  </dl>
+  {% endif %}
+  <p class="nota-pie">
+    {% if pedido.inventario_descontado %}
+      La mercancia fue descontada del inventario del almacen.
+    {% else %}
+      Este pedido no afecto el inventario.
+    {% endif %}
+  </p>
+</section>
+{% endif %}
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Actividad</h2>
+  <ol class="linea-tiempo">
+  {% for evento in pedido.eventos|reverse %}
+    <li>
+      <span class="etiqueta etiqueta-{{ evento.estado_nuevo|lower }}">
+        {{ EstadoPedido.ETIQUETAS.get(evento.estado_nuevo, evento.estado_nuevo) }}
+      </span>
+      <span class="linea-tiempo-fecha">{{ evento.registrado_en.strftime('%d/%m/%Y %H:%M') }}</span>
+      {% if evento.nota %}<span class="linea-tiempo-nota">{{ evento.nota }}</span>{% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Captura la ubicacion del dispositivo al enviar cualquier accion en terreno.
+// La limitacion del numeral 1.4 obliga a depender del telefono del conductor:
+// si el permiso se niega o el GPS no responde, la accion se envia igual.
+(function () {
+  const formularios = document.querySelectorAll(".formulario-geo");
+  if (!formularios.length || !navigator.geolocation) return;
+
+  navigator.geolocation.getCurrentPosition(function (posicion) {
+    formularios.forEach(function (formulario) {
+      const lat = formulario.querySelector("input[name='latitud']");
+      const lng = formulario.querySelector("input[name='longitud']");
+      if (lat) lat.value = posicion.coords.latitude;
+      if (lng) lng.value = posicion.coords.longitude;
+    });
+  }, function () {
+    // Permiso denegado o sin senal: se continua sin coordenadas.
+  }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+})();
+</script>
+{% endblock %}

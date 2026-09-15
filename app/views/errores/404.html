@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Pagina no encontrada | {{ nombre_sistema }}{% endblock %}
+{% block contenido %}
+<div class="tarjeta vacio-centrado">
+  <h1 class="codigo-error">404</h1>
+  <h2>Pagina no encontrada</h2>
+  <p>La pagina solicitada no existe.</p>
+  <a class="boton boton-primario" href="{{ url_for('principal.inicio') }}">Volver al inicio</a>
+</div>
+{% endblock %}

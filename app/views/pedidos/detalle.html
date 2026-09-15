@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block titulo %}{{ pedido.codigo }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">{{ pedido.codigo }}</h1>
+    <p class="subtitulo-pagina">
+      <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
+      &middot; Despacho del {{ pedido.fecha_despacho.strftime('%d/%m/%Y') }}
+    </p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-plano" href="{{ url_for('pedidos.lista') }}">Volver</a>
+    {% if pedido.estado != EstadoPedido.ENTREGADO %}
+    <form method="post" action="{{ url_for('pedidos.anular', pedido_id=pedido.id) }}"
+          onsubmit="return confirm('¿Anular el pedido {{ pedido.codigo }}? Esta accion no se puede deshacer.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="boton boton-peligro">Anular</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="rejilla-dos">
+  <div>
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Datos de entrega</h2>
+      <dl class="lista-datos">
+        <dt>Cliente</dt>
+        <dd>
+          {{ pedido.cliente_nombre }}
+          {% if pedido.cliente and pedido.cliente.documento %}
+            <span class="mono">({{ pedido.cliente.documento }})</span>
+          {% endif %}
+          {% if pedido.cliente and pedido.cliente.tiene_portal %}
+            <span class="chip">con portal</span>
+          {% endif %}
+        </dd>
+        <dt>Telefono</dt><dd>{{ pedido.cliente_telefono or '—' }}</dd>
+        <dt>Direccion</dt><dd>{{ pedido.direccion }}, {{ pedido.ciudad }}</dd>
+        <dt>Sede</dt>
+        <dd>{% if pedido.direccion_entrega %}{{ pedido.direccion_entrega.etiqueta }}{% else %}Sin registrar{% endif %}</dd>
+        <dt>Coordenadas</dt>
+        <dd>
+          {% if pedido.tiene_coordenadas %}
+            <span class="mono">{{ '%.5f'|format(pedido.latitud) }}, {{ '%.5f'|format(pedido.longitud) }}</span>
+          {% else %}
+            <span class="aviso-inline">Sin geolocalizar</span>
+          {% endif %}
+        </dd>
+        <dt>Ventana horaria</dt><dd>{{ pedido.ventana_texto }}</dd>
+        <dt>Prioridad</dt><dd>{{ {1:'Alta', 2:'Media', 3:'Baja'}[pedido.prioridad] }}</dd>
+        <dt>Ruta</dt>
+        <dd>{% if pedido.ruta %}<span class="mono">{{ pedido.ruta.codigo }}</span> ({{ pedido.ruta.conductor.nombre }}){% else %}Sin asignar{% endif %}</dd>
+        {% if pedido.observaciones %}
+        <dt>Observaciones</dt><dd>{{ pedido.observaciones }}</dd>
+        {% endif %}
+      </dl>
+    </section>
+
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Productos del pedido</h2>
+      <table class="tabla">
+        <thead><tr><th>SKU</th><th>Producto</th><th class="derecha">Cantidad</th><th class="derecha">Stock</th></tr></thead>
+        <tbody>
+        {% for item in pedido.items %}
+          <tr>
+            <td class="mono">{{ item.producto.sku }}</td>
+            <td>{{ item.producto.nombre }}</td>
+            <td class="derecha"><strong>{{ item.cantidad }}</strong></td>
+            <td class="derecha {{ 'texto-alerta' if item.producto.stock_actual < item.cantidad }}">
+              {{ item.producto.stock_actual }}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if pedido.inventario_descontado %}
+        <p class="nota-pie">Inventario descontado al confirmar la entrega (RF5).</p>
+      {% else %}
+        <p class="nota-pie">El inventario se descuenta al marcar el pedido como entregado.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Trazabilidad</h2>
+    {% if pedido.eventos %}
+      <ol class="linea-tiempo">
+      {% for evento in pedido.eventos|reverse %}
+        <li>
+          <span class="etiqueta etiqueta-{{ evento.estado_nuevo|lower }}">
+            {{ EstadoPedido.ETIQUETAS.get(evento.estado_nuevo, evento.estado_nuevo) }}
+          </span>
+          <span class="linea-tiempo-fecha">{{ evento.registrado_en.strftime('%d/%m/%Y %H:%M') }}</span>
+          {% if evento.nota %}<span class="linea-tiempo-nota">{{ evento.nota }}</span>{% endif %}
+          {% if evento.usuario %}<span class="linea-tiempo-autor">{{ evento.usuario.nombre }}</span>{% endif %}
+        </li>
+      {% endfor %}
+      </ol>
+    {% else %}
+      <p class="vacio">Sin eventos registrados.</p>
+    {% endif %}
+
+    {% if pedido.prueba_entrega %}
+    <h2 class="tarjeta-titulo" style="margin-top:1.2rem">Prueba de entrega</h2>
+    <dl class="lista-datos">
+      <dt>Recibido por</dt><dd>{{ pedido.prueba_entrega.receptor_nombre or '—' }}</dd>
+      <dt>Documento</dt><dd>{{ pedido.prueba_entrega.receptor_documento or '—' }}</dd>
+      <dt>Registrado</dt><dd>{{ pedido.prueba_entrega.registrado_en.strftime('%d/%m/%Y %H:%M') }}</dd>
+      {% if pedido.prueba_entrega.motivo_fallo %}
+      <dt>Motivo de fallo</dt><dd>{{ pedido.prueba_entrega.motivo_fallo }}</dd>
+      {% endif %}
+    </dl>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block titulo %}Mis sedes | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Mis sedes de entrega</h1>
+  <p class="subtitulo-pagina">
+    Puntos registrados para {{ cliente.nombre }}{% if cliente.documento %} &middot; NIT {{ cliente.documento }}{% endif %}
+  </p>
+</div>
+
+{% if sedes %}
+<div class="rejilla-dos">
+  {% for sede in sedes %}
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">{{ sede.etiqueta }}</h2>
+    <dl class="lista-datos">
+      <dt>Direccion</dt><dd>{{ sede.direccion }}</dd>
+      <dt>Ciudad</dt><dd>{{ sede.ciudad }}</dd>
+      <dt>Ventana</dt>
+      <dd>
+        {% if sede.ventana_inicio and sede.ventana_fin %}
+          {{ sede.ventana_inicio.strftime('%H:%M') }} - {{ sede.ventana_fin.strftime('%H:%M') }}
+        {% else %}Sin restriccion{% endif %}
+      </dd>
+      <dt>Geolocalizada</dt>
+      <dd>
+        {% if sede.tiene_coordenadas %}
+          <span class="mono">{{ '%.5f'|format(sede.latitud) }}, {{ '%.5f'|format(sede.longitud) }}</span>
+        {% else %}
+          <span class="aviso-inline">Pendiente</span>
+        {% endif %}
+      </dd>
+    </dl>
+  </section>
+  {% endfor %}
+</div>
+<p class="nota-pie">
+  Para agregar o corregir una sede, comuniquese con el centro de distribucion.
+</p>
+{% else %}
+<div class="tarjeta vacio-centrado"><p>Aun no tiene sedes registradas.</p></div>
+{% endif %}
+{% endblock %}

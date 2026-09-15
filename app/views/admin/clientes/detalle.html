@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block titulo %}{{ cliente.nombre }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <a class="enlace-volver" href="{{ url_for('clientes_admin.lista') }}">&lsaquo; Volver a clientes</a>
+    <h1 class="titulo-pagina">{{ cliente.nombre }}</h1>
+    <p class="subtitulo-pagina">
+      {% if cliente.documento %}NIT {{ cliente.documento }} &middot; {% endif %}
+      {{ total_pedidos }} pedido(s) &middot; {{ cliente.direcciones|length }} sede(s)
+    </p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-plano" href="{{ url_for('clientes_admin.editar', cliente_id=cliente.id) }}">Editar</a>
+    {% if not cliente.usuario and current_user.es_admin %}
+      <a class="boton boton-primario" href="{{ url_for('usuarios.nuevo', cliente_id=cliente.id) }}">
+        Habilitar portal</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="rejilla-dos">
+  <div>
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Acceso al portal</h2>
+      {% if cliente.usuario %}
+        <dl class="lista-datos">
+          <dt>Cuenta</dt><dd class="mono">{{ cliente.usuario.correo }}</dd>
+          <dt>Titular</dt><dd>{{ cliente.usuario.nombre }}</dd>
+          <dt>Estado</dt>
+          <dd>
+            <span class="etiqueta etiqueta-{{ 'entregado' if cliente.usuario.activo else 'fallido' }}">
+              {{ 'Activa' if cliente.usuario.activo else 'Inactiva' }}
+            </span>
+          </dd>
+        </dl>
+        {% if current_user.es_admin %}
+        <p class="nota-pie">
+          <a href="{{ url_for('usuarios.editar', usuario_id=cliente.usuario.id) }}">
+            Administrar esta cuenta</a>
+        </p>
+        {% endif %}
+      {% else %}
+        <p class="vacio">
+          Este cliente no tiene acceso al portal de seguimiento.
+          {% if current_user.es_admin %}
+            <a href="{{ url_for('usuarios.nuevo', cliente_id=cliente.id) }}">Crear su cuenta</a>.
+          {% else %}
+            Solicitelo a un administrador.
+          {% endif %}
+        </p>
+      {% endif %}
+    </section>
+
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Sedes de entrega</h2>
+      {% if cliente.direcciones %}
+      <table class="tabla">
+        <thead><tr><th>Etiqueta</th><th>Direccion</th><th>Ventana</th><th>Coordenadas</th></tr></thead>
+        <tbody>
+        {% for sede in cliente.direcciones %}
+          <tr>
+            <td>{{ sede.etiqueta }}</td>
+            <td class="celda-direccion">{{ sede.direccion }}, {{ sede.ciudad }}</td>
+            <td class="mono">
+              {%- if sede.ventana_inicio and sede.ventana_fin -%}
+                {{ sede.ventana_inicio.strftime('%H:%M') }}-{{ sede.ventana_fin.strftime('%H:%M') }}
+              {%- else -%}—{%- endif -%}
+            </td>
+            <td>
+              {% if sede.tiene_coordenadas %}
+                <span class="mono">{{ '%.4f'|format(sede.latitud) }}, {{ '%.4f'|format(sede.longitud) }}</span>
+              {% else %}<span class="aviso-inline">Sin geolocalizar</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p class="vacio">Sin sedes registradas.</p>
+      {% endif %}
+
+      <details class="ayuda-formato">
+        <summary>Agregar una sede</summary>
+        <form method="post" class="formulario">
+          {{ formulario_sede.hidden_tag() }}
+          <div class="rejilla-campos">
+            <div class="campo">
+              {{ formulario_sede.etiqueta.label }}
+              {{ formulario_sede.etiqueta(placeholder="Sede Norte") }}
+            </div>
+            <div class="campo">
+              {{ formulario_sede.ciudad.label }}
+              {{ formulario_sede.ciudad() }}
+            </div>
+            <div class="campo campo-ancho">
+              {{ formulario_sede.direccion.label }}
+              {{ formulario_sede.direccion(placeholder="Av. Cra 19 #166-30") }}
+              {% for e in formulario_sede.direccion.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+            </div>
+            <div class="campo">
+              {{ formulario_sede.ventana_inicio.label }}
+              {{ formulario_sede.ventana_inicio() }}
+            </div>
+            <div class="campo">
+              {{ formulario_sede.ventana_fin.label }}
+              {{ formulario_sede.ventana_fin() }}
+            </div>
+          </div>
+          <div class="acciones-formulario">
+            <button type="submit" class="boton boton-secundario">Agregar sede</button>
+          </div>
+        </form>
+        <p class="nota-pie">
+          Las coordenadas se toman del primer pedido geolocalizado que use la sede;
+          sin ellas el pedido queda al final del trazado automatico.
+        </p>
+      </details>
+    </section>
+  </div>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Ultimos pedidos</h2>
+    {% if pedidos %}
+      <table class="tabla">
+        <thead><tr><th>Pedido</th><th>Fecha</th><th>Estado</th></tr></thead>
+        <tbody>
+        {% for pedido in pedidos %}
+          <tr>
+            <td class="mono">
+              <a href="{{ url_for('pedidos.detalle', pedido_id=pedido.id) }}">{{ pedido.codigo }}</a>
+            </td>
+            <td>{{ pedido.fecha_despacho.strftime('%d/%m/%Y') }}</td>
+            <td>
+              <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if total_pedidos > pedidos|length %}
+        <p class="nota-pie">
+          Mostrando {{ pedidos|length }} de {{ total_pedidos }}.
+          <a href="{{ url_for('pedidos.lista', q=cliente.documento or cliente.nombre) }}">Ver todos</a>.
+        </p>
+      {% endif %}
+    {% else %}
+      <p class="vacio">Este cliente aun no tiene pedidos.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

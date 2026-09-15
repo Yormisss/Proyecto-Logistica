@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Historial | {{ nombre_sistema }}{% endblock %}
+{% block clase_body %}vista-movil{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('conductor.mi_ruta') }}">&lsaquo; Volver a mi ruta</a>
+  <h1 class="titulo-pagina">Historial de rutas</h1>
+</div>
+
+{% if rutas %}
+  <ul class="lista-historial">
+  {% for ruta in rutas %}
+    <li class="tarjeta tarjeta-historial">
+      <div class="resumen-fila">
+        <span class="mono">{{ ruta.codigo }}</span>
+        <span class="etiqueta etiqueta-{{ ruta.estado|lower }}">{{ ruta.estado_etiqueta }}</span>
+      </div>
+      <p class="fecha-historial">{{ ruta.fecha.strftime('%d/%m/%Y') }}</p>
+      <div class="barra-avance"><span style="width: {{ ruta.avance_porcentaje }}%"></span></div>
+      <small>{{ ruta.paradas_cerradas }} de {{ ruta.total_paradas }} entregas &middot; {{ ruta.distancia_km|round(1) }} km</small>
+    </li>
+  {% endfor %}
+  </ul>
+{% else %}
+  <div class="tarjeta vacio-centrado"><p>Aun no tiene rutas registradas.</p></div>
+{% endif %}
+{% endblock %}

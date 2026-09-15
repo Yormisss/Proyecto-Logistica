@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block titulo %}Clientes | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Clientes</h1>
+    <p class="subtitulo-pagina">
+      {{ clientes|length }} cliente(s) &middot; {{ con_portal }} con acceso al portal
+    </p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-primario" href="{{ url_for('clientes_admin.nuevo') }}">Nuevo cliente</a>
+  </div>
+</div>
+
+<section class="tarjeta">
+  <form method="get" class="barra-filtros">
+    <input type="search" name="q" value="{{ filtros.q }}" placeholder="Razon social o NIT">
+    <select name="portal">
+      <option value="">Con y sin portal</option>
+      <option value="si" {{ 'selected' if filtros.portal == 'si' }}>Con portal</option>
+      <option value="no" {{ 'selected' if filtros.portal == 'no' }}>Sin portal</option>
+    </select>
+    <button type="submit" class="boton boton-secundario">Filtrar</button>
+    {% if filtros.q or filtros.portal %}
+      <a class="boton boton-plano" href="{{ url_for('clientes_admin.lista') }}">Limpiar</a>
+    {% endif %}
+  </form>
+
+  {% if clientes %}
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr>
+          <th>Razon social</th><th>NIT</th><th class="derecha">Sedes</th>
+          <th class="derecha">Pedidos</th><th class="derecha">En curso</th>
+          <th>Portal</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for cliente in clientes %}
+        <tr class="{{ 'fila-inactiva' if not cliente.activo }}">
+          <td>
+            <a href="{{ url_for('clientes_admin.detalle', cliente_id=cliente.id) }}">{{ cliente.nombre }}</a>
+            {% if not cliente.activo %}<span class="chip chip-nuevo">inactivo</span>{% endif %}
+          </td>
+          <td class="mono">{{ cliente.documento or '—' }}</td>
+          <td class="derecha">{{ sedes_por_cliente.get(cliente.id, 0) }}</td>
+          <td class="derecha">{{ pedidos_por_cliente.get(cliente.id, 0) }}</td>
+          <td class="derecha">{{ abiertos_por_cliente.get(cliente.id, 0) or '—' }}</td>
+          <td>
+            {% if cliente.usuario %}
+              <span class="etiqueta etiqueta-entregado">{{ cliente.usuario.correo }}</span>
+            {% else %}
+              <span class="aviso-inline">Sin acceso</span>
+            {% endif %}
+          </td>
+          <td class="derecha acciones-fila">
+            {% if not cliente.usuario and current_user.es_admin %}
+              <a href="{{ url_for('usuarios.nuevo', cliente_id=cliente.id) }}">Crear cuenta</a>
+            {% endif %}
+            <a href="{{ url_for('clientes_admin.editar', cliente_id=cliente.id) }}">Editar</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="vacio">Ningun cliente coincide con el filtro.</p>
+  {% endif %}
+</section>
+{% endblock %}

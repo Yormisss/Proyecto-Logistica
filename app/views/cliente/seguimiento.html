@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block titulo %}{{ pedido.codigo }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('cliente.mis_pedidos') }}">&lsaquo; Volver a mis pedidos</a>
+  <h1 class="titulo-pagina">{{ pedido.codigo }}</h1>
+  <p class="subtitulo-pagina">
+    <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">
+      {{ seguimiento.get(pedido.estado, pedido.estado_etiqueta) }}
+    </span>
+    &middot; Despacho del {{ pedido.fecha_despacho.strftime('%d/%m/%Y') }}
+  </p>
+</div>
+
+{% if pedido.estado == EstadoPedido.EN_RUTA %}
+  <div class="alerta alerta-exito">Su pedido va en camino a la direccion de entrega.</div>
+{% elif pedido.estado == EstadoPedido.FALLIDO %}
+  <div class="alerta alerta-advertencia">
+    No fue posible completar la entrega. El centro de distribucion reprogramara el despacho.
+  </div>
+{% endif %}
+
+<div class="rejilla-dos">
+  <div>
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Datos de la entrega</h2>
+      <dl class="lista-datos">
+        <dt>Direccion</dt><dd>{{ pedido.direccion }}, {{ pedido.ciudad }}</dd>
+        <dt>Ventana horaria</dt><dd>{{ pedido.ventana_texto }}</dd>
+        <dt>Telefono</dt><dd>{{ pedido.cliente_telefono or '—' }}</dd>
+        {% if pedido.observaciones %}
+        <dt>Observaciones</dt><dd>{{ pedido.observaciones }}</dd>
+        {% endif %}
+      </dl>
+      <p class="nota-pie">
+        Los datos corresponden a la direccion registrada al momento del despacho.
+      </p>
+    </section>
+
+    <section class="tarjeta">
+      <h2 class="tarjeta-titulo">Productos solicitados</h2>
+      <table class="tabla">
+        <thead><tr><th>Producto</th><th class="derecha">Cantidad</th></tr></thead>
+        <tbody>
+        {% for item in pedido.items %}
+          <tr>
+            <td>{{ item.producto.nombre }}</td>
+            <td class="derecha"><strong>{{ item.cantidad }}</strong></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Seguimiento</h2>
+    {% if hitos %}
+      <ol class="linea-tiempo">
+      {% for hito in hitos|reverse %}
+        <li>
+          <span class="etiqueta etiqueta-{{ hito.estado|lower }}">{{ hito.texto }}</span>
+          <span class="linea-tiempo-fecha">{{ hito.momento.strftime('%d/%m/%Y %H:%M') }}</span>
+        </li>
+      {% endfor %}
+      </ol>
+    {% else %}
+      <p class="vacio">Aun no hay movimientos registrados.</p>
+    {% endif %}
+
+    {% if pedido.prueba_entrega %}
+    <h2 class="tarjeta-titulo" style="margin-top:1.2rem">Constancia de entrega</h2>
+    <dl class="lista-datos">
+      <dt>Recibido por</dt><dd>{{ pedido.prueba_entrega.receptor_nombre or '—' }}</dd>
+      <dt>Fecha</dt><dd>{{ pedido.prueba_entrega.registrado_en.strftime('%d/%m/%Y %H:%M') }}</dd>
+      {% if pedido.prueba_entrega.motivo_fallo %}
+      <dt>Motivo</dt><dd>{{ pedido.prueba_entrega.motivo_fallo }}</dd>
+      {% endif %}
+    </dl>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

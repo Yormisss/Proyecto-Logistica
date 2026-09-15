@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Acceso denegado | {{ nombre_sistema }}{% endblock %}
+{% block contenido %}
+<div class="tarjeta vacio-centrado">
+  <h1 class="codigo-error">403</h1>
+  <h2>Acceso denegado</h2>
+  <p>No tiene permisos para acceder a esta seccion.</p>
+  <a class="boton boton-primario" href="{{ url_for('principal.inicio') }}">Volver al inicio</a>
+</div>
+{% endblock %}

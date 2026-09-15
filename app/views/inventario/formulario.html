@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar' if producto else 'Nuevo' }} producto | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">{{ 'Editar producto' if producto else 'Nuevo producto' }}</h1>
+  {% if producto %}<p class="subtitulo-pagina mono">{{ producto.sku }}</p>{% endif %}
+</div>
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+  <section class="tarjeta">
+    <div class="rejilla-campos">
+      <div class="campo">
+        {{ formulario.sku.label }}
+        {{ formulario.sku(placeholder="SKU-1007") }}
+        {% for e in formulario.sku.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.unidad.label }}
+        {{ formulario.unidad(placeholder="UND") }}
+      </div>
+      <div class="campo campo-ancho">
+        {{ formulario.nombre.label }}
+        {{ formulario.nombre(placeholder="Caja bebidas 12 und") }}
+        {% for e in formulario.nombre.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo campo-ancho">
+        {{ formulario.descripcion.label }}
+        {{ formulario.descripcion(rows=2) }}
+      </div>
+      <div class="campo">
+        {{ formulario.stock_actual.label }}
+        {{ formulario.stock_actual() }}
+        {% for e in formulario.stock_actual.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        {% if producto %}<small class="ayuda-campo">Cambiarlo registra un movimiento de ajuste.</small>{% endif %}
+      </div>
+      <div class="campo">
+        {{ formulario.stock_minimo.label }}
+        {{ formulario.stock_minimo() }}
+        {% for e in formulario.stock_minimo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">Por debajo de este valor se genera la alerta en el tablero.</small>
+      </div>
+      <label class="campo-inline campo-ancho">
+        {{ formulario.activo() }} <span>Producto activo</span>
+      </label>
+    </div>
+  </section>
+
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('inventario.lista') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">Guardar</button>
+  </div>
+</form>
+{% endblock %}
