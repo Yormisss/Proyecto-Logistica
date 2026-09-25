@@ -4,6 +4,7 @@ Evitan que personal no autorizado acceda a las rutas de entrega o altere el inve
 """
 
 from functools import wraps
+from urllib.parse import urlsplit
 
 from flask import abort, url_for
 from flask_login import current_user
@@ -28,6 +29,27 @@ INICIO_POR_DEFECTO = "auth.perfil"
 def destino_por_rol(usuario):
     """URL de aterrizaje del usuario segun su rol: tablero, ruta del dia o portal."""
     return url_for(INICIO_POR_ROL.get(usuario.rol, INICIO_POR_DEFECTO))
+
+
+def es_redireccion_segura(destino):
+    """True si `destino` es una ruta relativa al propio sitio (RNF5).
+
+    El parametro `next` del login lo escribe el cliente, asi que no basta con
+    exigir que empiece por "/": un navegador resuelve "//evil.com" y
+    "/\\evil.com" como una URL hacia otro host (la barra invertida se
+    normaliza a "/" antes de interpretar la URL en varios navegadores), y ahi
+    el "/" inicial no protege nada. Se rechaza cualquier variante con
+    esquema o dominio explicito o implicito.
+    """
+    if not destino:
+        return False
+    if "\\" in destino:
+        return False
+    if not destino.startswith("/") or destino.startswith("//"):
+        return False
+
+    partes = urlsplit(destino)
+    return not partes.scheme and not partes.netloc
 
 
 def requiere_rol(*roles):
