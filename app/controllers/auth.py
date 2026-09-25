@@ -6,7 +6,7 @@ from flask_wtf import FlaskForm
 from wtforms import BooleanField, PasswordField, StringField
 from wtforms.validators import DataRequired, Email, Length
 
-from app.controllers.seguridad import destino_por_rol
+from app.controllers.seguridad import destino_por_rol, es_redireccion_segura
 from app.extensions import db
 from app.models import Usuario
 
@@ -55,7 +55,7 @@ def login():
         flash(f"Bienvenido, {usuario.nombre}.", "exito")
 
         siguiente = request.args.get("next")
-        if siguiente and siguiente.startswith("/"):
+        if siguiente and es_redireccion_segura(siguiente):
             return redirect(siguiente)
         return redirect(destino_por_rol(usuario))
 

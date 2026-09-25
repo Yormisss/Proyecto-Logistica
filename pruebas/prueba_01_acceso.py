@@ -56,6 +56,29 @@ with app.test_client() as c:
     r = c.get("/admin/", follow_redirects=False)
     check(r.status_code == 302, "sesion cerrada correctamente")
 
+print("\n== 6. Proteccion contra redireccion abierta (parametro next) ==")
+with app.test_client() as c:
+    r = c.post("/auth/login?next=/pedidos/",
+               data={"correo":"admin@sgds.com","contrasena":"Admin123*"}, follow_redirects=False)
+    check(r.headers.get("Location", "").endswith("/pedidos/"), "respeta un next relativo valido")
+
+DESTINOS_MALICIOSOS = (
+    "//evil.com",              # protocolo relativo: el navegador cambia de host
+    "//evil.com/robar-sesion",
+    "/\\evil.com",             # varios navegadores normalizan "\" a "/"
+    "/\\/evil.com",
+    "https://evil.com",        # esquema y dominio explicitos
+    "http://evil.com/x",
+    "javascript://evil.com",
+)
+for destino in DESTINOS_MALICIOSOS:
+    with app.test_client() as c:
+        r = c.post(f"/auth/login?next={destino}",
+                   data={"correo":"admin@sgds.com","contrasena":"Admin123*"}, follow_redirects=False)
+        destino_final = r.headers.get("Location", "")
+        check("evil.com" not in destino_final,
+              f"rechaza next={destino!r} y aterriza en el tablero, no en {destino_final!r}")
+
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))
 sys.exit(1 if fallos else 0)
