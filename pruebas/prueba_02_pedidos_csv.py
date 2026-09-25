@@ -1,9 +1,11 @@
 import pathlib
 import io, re, sys
+from datetime import date
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from run import app
 from app.extensions import db
-from app.models import Pedido, Producto, PedidoItem, MovimientoInventario
+from app.models import (Pedido, Producto, PedidoItem, MovimientoInventario,
+                        EstadoPedido, EstadoRuta, EventoPedido, Ruta, Usuario)
 
 fallos = []
 def check(cond, msg):
@@ -160,19 +162,78 @@ for url in ["/pedidos/", "/pedidos/nuevo", "/pedidos/importar", "/inventario/", 
 anon = app.test_client()
 check(anon.get("/pedidos/").status_code == 302, "anonimo redirigido al login")
 
-print("\n== 11. Anulacion ==")
+print("\n== 11. Anulacion (CANCELADO en vez de borrado fisico) ==")
 with app.app_context():
     entregado = db.session.query(Pedido).filter_by(estado="ENTREGADO").first()
     eid = entregado.id
-    pendiente = db.session.query(Pedido).filter_by(cliente_nombre="Tienda Excel").first()
-    pid = pendiente.id if pendiente else None
-r = c.post(f"/pedidos/{eid}/anular", follow_redirects=True)
-check(b"No se puede anular un pedido ya entregado" in r.data, "protege pedidos entregados")
-if pid:
-    r = c.post(f"/pedidos/{pid}/anular", follow_redirects=True)
-    check(b"anulado" in r.data, "anula pedido pendiente")
-    with app.app_context():
-        check(db.session.get(Pedido, pid) is None, "elimina el pedido y sus items en cascada")
+
+    # Escenario dedicado para cubrir PENDIENTE, ASIGNADO, FALLIDO y EN_RUTA.
+    despachador = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").first()
+    conductor = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").first()
+    ruta = Ruta(codigo="RUT-ANUL-01", fecha=date.today(), estado=EstadoRuta.PLANIFICADA,
+                conductor_id=conductor.id)
+    db.session.add(ruta); db.session.flush()
+    p_pendiente = Pedido(codigo="ANUL-PENDIENTE", cliente_nombre="Cliente Pendiente",
+                         direccion="Calle P", fecha_despacho=date.today(),
+                         estado=EstadoPedido.PENDIENTE, creado_por_id=despachador.id)
+    p_asignado = Pedido(codigo="ANUL-ASIGNADO", cliente_nombre="Cliente Asignado",
+                        direccion="Calle A", fecha_despacho=date.today(),
+                        estado=EstadoPedido.ASIGNADO, ruta_id=ruta.id, orden_en_ruta=1,
+                        creado_por_id=despachador.id)
+    p_fallido = Pedido(codigo="ANUL-FALLIDO", cliente_nombre="Cliente Fallido",
+                       direccion="Calle B", fecha_despacho=date.today(),
+                       estado=EstadoPedido.FALLIDO, ruta_id=ruta.id, orden_en_ruta=2,
+                       creado_por_id=despachador.id)
+    p_en_ruta = Pedido(codigo="ANUL-EN-RUTA", cliente_nombre="Cliente En Ruta",
+                       direccion="Calle C", fecha_despacho=date.today(),
+                       estado=EstadoPedido.EN_RUTA, ruta_id=ruta.id, orden_en_ruta=3,
+                       creado_por_id=despachador.id)
+    db.session.add_all([p_pendiente, p_asignado, p_fallido, p_en_ruta])
+    db.session.flush()
+    db.session.add(PedidoItem(pedido_id=p_pendiente.id, producto_id=prod_id, cantidad=1))
+    db.session.commit()
+    pid, id_asignado, id_fallido, id_en_ruta, rid = (
+        p_pendiente.id, p_asignado.id, p_fallido.id, p_en_ruta.id, ruta.id,
+    )
+
+r = c.post(f"/pedidos/{pid}/anular", data={"motivo": ""}, follow_redirects=True)
+check(b"Indique el motivo de la anulacion" in r.data, "exige el motivo")
+with app.app_context():
+    check(db.session.get(Pedido, pid).estado == "PENDIENTE", "sin motivo el pedido no cambia de estado")
+
+r = c.post(f"/pedidos/{eid}/anular", data={"motivo": "Prueba"}, follow_redirects=True)
+check(b"No se puede anular un pedido en estado Entregado" in r.data, "protege pedidos entregados")
+
+r = c.post(f"/pedidos/{id_en_ruta}/anular", data={"motivo": "Prueba"}, follow_redirects=True)
+check(b"No se puede anular un pedido en estado En ruta" in r.data, "protege pedidos en ruta")
+with app.app_context():
+    check(db.session.get(Pedido, id_en_ruta).estado == EstadoPedido.EN_RUTA, "el pedido en ruta no cambia")
+
+r = c.post(f"/pedidos/{pid}/anular", data={"motivo": "Cliente desistio de la compra"}, follow_redirects=True)
+check(b"anulado" in r.data, "anula pedido pendiente")
+with app.app_context():
+    p = db.session.get(Pedido, pid)
+    check(p is not None and p.estado == EstadoPedido.CANCELADO,
+          "el pedido pasa a CANCELADO en vez de borrarse")
+    check(len(p.items) > 0, "sus items siguen existiendo (no hay borrado en cascada)")
+    evento = (
+        db.session.query(EventoPedido)
+        .filter_by(pedido_id=pid, estado_nuevo=EstadoPedido.CANCELADO)
+        .first()
+    )
+    check(evento is not None and "Cliente desistio" in (evento.nota or ""),
+          "registra un EventoPedido con el motivo")
+
+r = c.post(f"/pedidos/{id_asignado}/anular", data={"motivo": "Producto agotado"}, follow_redirects=True)
+check(b"anulado" in r.data, "permite anular desde ASIGNADO")
+r = c.post(f"/pedidos/{id_fallido}/anular", data={"motivo": "Cliente cerro definitivamente"}, follow_redirects=True)
+check(b"anulado" in r.data, "permite anular desde FALLIDO")
+with app.app_context():
+    check(db.session.get(Pedido, id_asignado).estado == EstadoPedido.CANCELADO, "ASIGNADO queda CANCELADO")
+    check(db.session.get(Pedido, id_fallido).estado == EstadoPedido.CANCELADO, "FALLIDO queda CANCELADO")
+    # Solo queda EN_RUTA sin cerrar: la ruta no debe finalizarse todavia.
+    check(db.session.get(Ruta, rid).estado != EstadoRuta.FINALIZADA,
+          "la ruta no finaliza mientras quede una parada EN_RUTA")
 
 print("\n" + "="*55)
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS"))

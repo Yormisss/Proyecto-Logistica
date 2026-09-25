@@ -167,6 +167,39 @@ with app.app_context():
     check(ruta.finalizada_en is not None, "registra la hora de finalizacion")
     check(ruta.avance_porcentaje==100.0, f"avance 100% ({ruta.avance_porcentaje})")
 
+print("\n== 9b. Una ruta se puede finalizar con pedidos cancelados ==")
+with app.app_context():
+    from app.services.despacho import anular_pedido
+
+    desp3 = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").first()
+    ruta3 = Ruta(codigo="RUT-TEST-03", fecha=hoy, estado=EstadoRuta.PLANIFICADA, conductor_id=cond_id)
+    db.session.add(ruta3); db.session.flush()
+    p_entregar = Pedido(codigo="T4-CANC-01", cliente_nombre="Cliente Cancela Uno", direccion="Calle Y1",
+                        latitud=4.66, longitud=-74.08, fecha_despacho=hoy,
+                        estado=EstadoPedido.ASIGNADO, ruta_id=ruta3.id, orden_en_ruta=1,
+                        creado_por_id=desp3.id)
+    p_cancelar = Pedido(codigo="T4-CANC-02", cliente_nombre="Cliente Cancela Dos", direccion="Calle Y2",
+                        fecha_despacho=hoy, estado=EstadoPedido.ASIGNADO, ruta_id=ruta3.id, orden_en_ruta=2,
+                        creado_por_id=desp3.id)
+    db.session.add_all([p_entregar, p_cancelar]); db.session.flush()
+    ruta3_id, id_entregar, id_cancelar = ruta3.id, p_entregar.id, p_cancelar.id
+    anular_pedido(p_cancelar, desp3.id, "Cliente cancelo el pedido")
+    db.session.commit()
+    check(db.session.get(Ruta, ruta3_id).estado != EstadoRuta.FINALIZADA,
+          "con una parada aun asignada la ruta no finaliza")
+
+t = tok(c, f"/conductor/parada/{id_entregar}")
+c.post(f"/conductor/parada/{id_entregar}/en-ruta", data={"csrf_token": t}, follow_redirects=True)
+t = tok(c, f"/conductor/parada/{id_entregar}")
+c.post(f"/conductor/parada/{id_entregar}/entregar",
+       data={"csrf_token": t, "receptor_nombre": "Alguien"}, follow_redirects=True)
+with app.app_context():
+    ruta3 = db.session.get(Ruta, ruta3_id)
+    check(ruta3.estado == EstadoRuta.FINALIZADA,
+          f"la ruta finaliza aunque tenga una parada CANCELADA ({ruta3.estado})")
+    check(db.session.get(Pedido, id_cancelar).estado == EstadoPedido.CANCELADO,
+          "el pedido cancelado se conserva en la ruta, no se elimina")
+
 print("\n== 10. Transiciones invalidas ==")
 with app.app_context():
     from flask_wtf.csrf import generate_csrf

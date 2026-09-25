@@ -85,7 +85,7 @@
         </div>
         <div class="parada-acciones">
           <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
-          {% if pedido.estado not in EstadoPedido.CERRADOS %}
+          {% if pedido.estado not in EstadoPedido.FINALES %}
           <form method="post" action="{{ url_for('rutas.quitar_parada', ruta_id=ruta.id, pedido_id=pedido.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="boton-quitar" title="Retirar de la ruta">&times;</button>

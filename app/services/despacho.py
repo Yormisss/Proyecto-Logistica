@@ -79,11 +79,14 @@ def _sincronizar_estado_ruta(ruta):
         return
 
     hay_movimiento = any(
-        p.estado in (EstadoPedido.EN_RUTA,) or p.estado in EstadoPedido.CERRADOS
+        p.estado in (EstadoPedido.EN_RUTA,) or p.estado in EstadoPedido.FINALES
         for p in ruta.pedidos
     )
+    # FINALES (no CERRADOS) para que una ruta con paradas canceladas tambien
+    # pueda finalizarse: anular no es un intento de entrega, pero es tan
+    # definitivo para la parada como uno entregado o fallido.
     todas_cerradas = bool(ruta.pedidos) and all(
-        p.estado in EstadoPedido.CERRADOS for p in ruta.pedidos
+        p.estado in EstadoPedido.FINALES for p in ruta.pedidos
     )
 
     if todas_cerradas:
@@ -167,6 +170,47 @@ def cambiar_estado(
     _sincronizar_estado_ruta(pedido.ruta)
 
     return ResultadoTransicion(pedido, estado_anterior, movimientos, advertencias)
+
+
+# Un pedido solo puede anularse antes de salir a reparto, o tras un intento
+# fallido. EN_RUTA y ENTREGADO quedan fuera: el primero porque el conductor ya
+# esta desplazado hacia el destino, el segundo porque revertir una entrega ya
+# confirmada exigiria revertir tambien el descuento de inventario (RF5).
+ESTADOS_ANULABLES = (EstadoPedido.PENDIENTE, EstadoPedido.ASIGNADO, EstadoPedido.FALLIDO)
+
+
+def anular_pedido(pedido, usuario_id, motivo):
+    """Cancela un pedido que aun no fue entregado (RF4).
+
+    A diferencia de `cambiar_estado`, anular NO es un intento de entrega: no
+    genera PruebaEntrega ni toca el inventario, solo deja constancia en la
+    bitacora. El pedido conserva su ruta si tenia una asignada, de modo que el
+    historico de la ruta y su avance reflejen la parada como resuelta (ver
+    `_sincronizar_estado_ruta`, que trata CANCELADO como estado final).
+    """
+    estado_anterior = pedido.estado
+
+    if estado_anterior not in ESTADOS_ANULABLES:
+        raise TransicionInvalida(
+            f"No se puede anular un pedido en estado "
+            f"{EstadoPedido.ETIQUETAS.get(estado_anterior, estado_anterior)}."
+        )
+
+    pedido.estado = EstadoPedido.CANCELADO
+
+    db.session.add(
+        EventoPedido(
+            pedido_id=pedido.id,
+            usuario_id=usuario_id,
+            estado_anterior=estado_anterior,
+            estado_nuevo=EstadoPedido.CANCELADO,
+            nota=f"Pedido anulado: {motivo}",
+        )
+    )
+
+    _sincronizar_estado_ruta(pedido.ruta)
+
+    return pedido
 
 
 def iniciar_ruta(ruta, usuario_id):

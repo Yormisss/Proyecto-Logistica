@@ -23,6 +23,13 @@
     <span class="kpi-valor">{{ resumen.fallidos }}</span>
     <span class="kpi-detalle">Requirieron reprogramacion</span>
   </div>
+  {% if resumen.cancelados %}
+  <div class="kpi">
+    <span class="kpi-etiqueta">Anulados</span>
+    <span class="kpi-valor">{{ resumen.cancelados }}</span>
+    <span class="kpi-detalle">Cancelados por el centro de distribucion</span>
+  </div>
+  {% endif %}
 </div>
 
 <section class="tarjeta">

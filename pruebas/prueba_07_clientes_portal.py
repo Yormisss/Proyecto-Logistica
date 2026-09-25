@@ -184,6 +184,34 @@ r = cliente_c.get("/portal/direcciones")
 check(r.status_code == 200, "consulta sus sedes registradas")
 check(b"Principal" in r.data, "lista la sede principal")
 
+print("\n== 9b. Un pedido anulado se traduce en el portal del cliente ==")
+with app.app_context():
+    from app.services.despacho import anular_pedido
+    from app.tiempo import hoy
+
+    portal = cliente_portal()
+    sede = portal.direcciones[0]
+    despachador = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").one()
+    pedido = Pedido(
+        codigo="PORTAL-CANC-001", cliente_id=portal.id, direccion_id=sede.id,
+        cliente_nombre=portal.nombre, direccion=sede.direccion, ciudad=sede.ciudad,
+        fecha_despacho=hoy(), estado=EstadoPedido.PENDIENTE,
+        creado_por_id=despachador.id,
+    )
+    db.session.add(pedido)
+    db.session.flush()
+    anular_pedido(pedido, despachador.id, "Cliente solicito cancelar el pedido")
+    db.session.commit()
+    pid_cancelado = pedido.id
+
+html = cliente_c.get("/portal/?estado=cerrados").data.decode()
+check("PORTAL-CANC-001" in html, "el pedido anulado aparece en el filtro de cerrados")
+check("Pedido anulado" in html, "la lista traduce CANCELADO a un texto para el cliente")
+
+detalle = cliente_c.get(f"/portal/pedido/{pid_cancelado}").data.decode()
+check("Pedido anulado" in detalle, "el seguimiento traduce el estado cancelado")
+check("Cliente solicito cancelar" not in detalle, "no expone el motivo interno de la anulacion")
+
 print("\n== 10. La importacion no duplica clientes existentes ==")
 CSV = (
     "cliente_nombre,cliente_documento,direccion,ciudad,latitud,longitud,sku,cantidad\n"

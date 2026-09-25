@@ -292,7 +292,7 @@ def recalcular(ruta_id):
 
     resultado = calcular_ruta(_origen_centro_distribucion(), abiertos, estrategia)
 
-    cerrados = [p for p in ruta.pedidos if p.estado in EstadoPedido.CERRADOS]
+    cerrados = [p for p in ruta.pedidos if p.estado in EstadoPedido.FINALES]
     posiciones = {pedido_id: indice for indice, pedido_id in enumerate(resultado.orden, start=1)}
     desplazamiento = len(cerrados)
 
@@ -328,7 +328,7 @@ def quitar_parada(ruta_id, pedido_id):
     if ruta is None or pedido is None or pedido.ruta_id != ruta.id:
         abort(404)
 
-    if pedido.estado in EstadoPedido.CERRADOS:
+    if pedido.estado in EstadoPedido.FINALES:
         flash("No se puede retirar una parada ya cerrada.", "error")
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
 
@@ -358,7 +358,7 @@ def eliminar(ruta_id):
     if ruta is None:
         abort(404)
 
-    if any(p.estado in EstadoPedido.CERRADOS for p in ruta.pedidos):
+    if any(p.estado in EstadoPedido.FINALES for p in ruta.pedidos):
         flash(
             "No se puede eliminar una ruta que ya tiene entregas registradas.", "error"
         )

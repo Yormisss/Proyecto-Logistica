@@ -91,7 +91,7 @@ class Ruta(db.Model):
     def paradas_cerradas(self):
         from app.models.pedido import EstadoPedido
 
-        return sum(1 for p in self.pedidos if p.estado in EstadoPedido.CERRADOS)
+        return sum(1 for p in self.pedidos if p.estado in EstadoPedido.FINALES)
 
     @property
     def avance_porcentaje(self):

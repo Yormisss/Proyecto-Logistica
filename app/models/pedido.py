@@ -15,6 +15,7 @@ class EstadoPedido:
     EN_RUTA = "EN_RUTA"        # El conductor inicio el desplazamiento
     ENTREGADO = "ENTREGADO"    # Entrega exitosa -> descuenta inventario (RF5)
     FALLIDO = "FALLIDO"        # Entrega no lograda (cliente ausente, zona cerrada...)
+    CANCELADO = "CANCELADO"    # Anulado antes de salir a reparto o tras un fallo
 
     ETIQUETAS = {
         PENDIENTE: "Pendiente",
@@ -22,19 +23,30 @@ class EstadoPedido:
         EN_RUTA: "En ruta",
         ENTREGADO: "Entregado",
         FALLIDO: "Fallido",
+        CANCELADO: "Cancelado",
     }
 
     ABIERTOS = (PENDIENTE, ASIGNADO, EN_RUTA)
+    # Cierre por resultado de un intento de entrega en terreno (dispara PoD).
     CERRADOS = (ENTREGADO, FALLIDO)
+    # Estados terminales en cualquier sentido: ya no admiten mas movimiento.
+    # Se distingue de CERRADOS porque anular NO es un intento de entrega (no
+    # genera PruebaEntrega ni descuenta inventario), pero para el avance de la
+    # ruta, el reordenamiento de paradas y las protecciones contra sobrescribir
+    # historico es tan definitivo como un pedido entregado o fallido.
+    FINALES = CERRADOS + (CANCELADO,)
 
     # Transiciones validas; evita que un pedido entregado vuelva atras y
-    # descuente inventario dos veces.
+    # descuente inventario dos veces. La anulacion (a CANCELADO) no pasa por
+    # aqui: la valida `app.services.despacho.anular_pedido`, que exige un
+    # motivo y no aplica a EN_RUTA ni a ENTREGADO.
     TRANSICIONES = {
         PENDIENTE: (ASIGNADO,),
         ASIGNADO: (EN_RUTA, PENDIENTE),
         EN_RUTA: (ENTREGADO, FALLIDO),
         FALLIDO: (ASIGNADO, EN_RUTA),
         ENTREGADO: (),
+        CANCELADO: (),
     }
 
     @classmethod
@@ -115,7 +127,7 @@ class Pedido(db.Model):
 
     @property
     def esta_cerrado(self):
-        return self.estado in EstadoPedido.CERRADOS
+        return self.estado in EstadoPedido.FINALES
 
     @property
     def ventana_texto(self):
