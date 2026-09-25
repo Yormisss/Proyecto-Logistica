@@ -36,7 +36,11 @@ def crear_app(nombre_configuracion="desarrollo"):
     # la crean por si solos. Sin esto, `flask --app run init-db` o el primer
     # `seed.py` fallan con "unable to open database file".
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
-    app.config.from_object(CONFIGURACIONES[nombre_configuracion])
+
+    configuracion = CONFIGURACIONES[nombre_configuracion]
+    if hasattr(configuracion, "validar"):
+        configuracion.validar()
+    app.config.from_object(configuracion)
 
     _registrar_extensiones(app)
     _registrar_controladores(app)
