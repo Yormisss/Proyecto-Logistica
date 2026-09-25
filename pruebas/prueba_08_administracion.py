@@ -305,6 +305,25 @@ check(b"activada" in r.data, "se puede reactivar")
 r = sesion("conductor1@sgds.com", "Conductor123*").get("/conductor/", follow_redirects=True)
 check(b"Mi ruta" in r.data, "y vuelve a operar con su clave original")
 
+print("\n== 13b. Una sesion abierta pierde acceso al desactivar la cuenta ==")
+with app.app_context():
+    id_conductor1 = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").one().id
+
+sesion_abierta = sesion("conductor1@sgds.com", "Conductor123*")
+r = sesion_abierta.get("/conductor/", follow_redirects=True)
+check(b"Mi ruta" in r.data, "la sesion arranca con acceso normal")
+
+r = admin.post(f"/admin/usuarios/{id_conductor1}/alternar-estado", follow_redirects=True)
+check(b"desactivada" in r.data, "el admin desactiva la cuenta desde otra sesion")
+
+r = sesion_abierta.get("/conductor/", follow_redirects=False)
+check(r.status_code == 302, "la sesion ya abierta pierde el acceso sin volver a iniciar sesion")
+
+r = admin.post(f"/admin/usuarios/{id_conductor1}/alternar-estado", follow_redirects=True)
+check(b"activada" in r.data, "se reactiva la cuenta (limpieza)")
+r = sesion_abierta.get("/conductor/", follow_redirects=True)
+check(b"Mi ruta" in r.data, "al reactivarla la misma sesion recupera el acceso")
+
 print("\n== 14. Filtros del listado ==")
 for consulta, descripcion in (
     ("?rol=CONDUCTOR", "filtra por rol"),

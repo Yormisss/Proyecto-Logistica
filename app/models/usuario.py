@@ -103,4 +103,15 @@ class Usuario(UserMixin, db.Model):
 
 @login_manager.user_loader
 def cargar_usuario(usuario_id):
-    return db.session.get(Usuario, int(usuario_id))
+    """Recarga el usuario de la sesion en cada peticion (RNF5).
+
+    Devolver None cuando la cuenta esta inactiva hace que Flask-Login trate la
+    sesion como anonima: sin esto, una cuenta desactivada mientras el usuario
+    la tiene abierta en el navegador conservaba el acceso hasta que volviera a
+    iniciar sesion, porque el login ya la rechaza pero nada revisaba una
+    sesion ya autenticada.
+    """
+    usuario = db.session.get(Usuario, int(usuario_id))
+    if usuario is None or not usuario.activo:
+        return None
+    return usuario
