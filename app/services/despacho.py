@@ -12,6 +12,8 @@ from app.models import (
     EstadoRuta,
     EventoPedido,
     MovimientoInventario,
+    Pedido,
+    Producto,
     PruebaEntrega,
     TipoMovimiento,
 )
@@ -36,6 +38,17 @@ def _descontar_inventario(pedido, usuario_id):
     La bandera `inventario_descontado` garantiza idempotencia: aunque la peticion
     se repita (reintento del conductor por conectividad intermitente), el stock
     se afecta una sola vez.
+
+    Cada producto se vuelve a leer con `with_for_update()` justo antes de
+    modificarlo: sin el bloqueo, dos peticiones concurrentes que despachan el
+    mismo producto podrian leer el mismo `stock_actual`, calcular el
+    descuento por separado y la segunda escritura pisaria la primera
+    (actualizacion perdida). Con la fila bloqueada, la segunda peticion espera
+    a que la primera confirme y parte del stock ya actualizado. `populate_existing()`
+    es necesario ademas del bloqueo: si el producto ya estaba cargado en el
+    identity map de esta sesion, una consulta nueva por si sola devuelve el
+    mismo objeto sin refrescar sus columnas, y se seguiria calculando sobre el
+    valor que ya tenia en memoria Python.
     """
     if pedido.inventario_descontado:
         return [], []
@@ -43,7 +56,13 @@ def _descontar_inventario(pedido, usuario_id):
     movimientos, advertencias = [], []
 
     for item in pedido.items:
-        producto = item.producto
+        producto = (
+            db.session.query(Producto)
+            .filter_by(id=item.producto_id)
+            .populate_existing()
+            .with_for_update()
+            .one()
+        )
         stock_previo = producto.stock_actual
 
         producto.stock_actual = stock_previo - item.cantidad
@@ -122,6 +141,22 @@ def cambiar_estado(
 
     No hace commit: el controlador decide cuando confirmar la transaccion.
     """
+    # Vuelve a leer el pedido con la fila bloqueada (`with_for_update`) antes de
+    # decidir la transicion: el objeto que llega por parametro pudo cargarse
+    # antes de que otra peticion concurrente (doble clic, reintento del
+    # conductor por conectividad intermitente) ya lo hubiera cambiado de
+    # estado. `populate_existing()` fuerza a refrescar sus columnas desde la
+    # fila bloqueada aunque ya estuviera en el identity map de la sesion; sin
+    # ella la consulta devolveria el mismo objeto con el estado obsoleto que
+    # ya tenia en memoria Python.
+    pedido = (
+        db.session.query(Pedido)
+        .filter_by(id=pedido.id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
+
     estado_anterior = pedido.estado
 
     if estado_anterior == nuevo_estado:
@@ -188,6 +223,17 @@ def anular_pedido(pedido, usuario_id, motivo):
     historico de la ruta y su avance reflejen la parada como resuelta (ver
     `_sincronizar_estado_ruta`, que trata CANCELADO como estado final).
     """
+    # Igual que en cambiar_estado: bloquea la fila y la refresca (populate_existing)
+    # para que una anulacion no se decida sobre un estado que otra peticion
+    # concurrente ya cambio, ni sobre el que este objeto tenia cacheado.
+    pedido = (
+        db.session.query(Pedido)
+        .filter_by(id=pedido.id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
+
     estado_anterior = pedido.estado
 
     if estado_anterior not in ESTADOS_ANULABLES:

@@ -154,6 +154,39 @@ r = c.post(f"/inventario/{nid}", data={"tipo":"AJUSTE","cantidad":"60","motivo":
 with app.app_context():
     check(db.session.get(Producto, nid).stock_actual == 60, "ajuste reemplaza el stock")
 
+print("\n== 9b. with_for_update evita actualizaciones perdidas en ajustes manuales ==")
+with app.app_context():
+    from app.controllers.inventario import registrar_movimiento
+
+    despachador_id = (
+        db.session.query(Usuario).filter_by(correo="despachador@sgds.com").first().id
+    )
+    producto = db.session.get(Producto, nid)
+    stock_cacheado = producto.stock_actual  # 60, segun el bloque anterior
+
+    # Otra sesion ya modifico el stock por su cuenta (p.ej. una recepcion
+    # registrada por otro usuario) usando una conexion aparte, sin pasar por
+    # el objeto `producto` que ya esta en el identity map de esta sesion.
+    with db.engine.begin() as conexion:
+        conexion.execute(
+            Producto.__table__.update()
+            .where(Producto.__table__.c.id == nid)
+            .values(stock_actual=stock_cacheado - 15)
+        )
+
+    registrar_movimiento(
+        producto, "ENTRADA", 10, despachador_id, motivo="Prueba de concurrencia"
+    )
+    db.session.commit()
+
+    esperado = (stock_cacheado - 15) + 10
+    resultado = db.session.get(Producto, nid).stock_actual
+    check(
+        resultado == esperado,
+        f"el ajuste parte del stock real en la BD, no del cacheado en Python "
+        f"({resultado} vs esperado {esperado}; sin with_for_update habria dado {stock_cacheado + 10})",
+    )
+
 print("\n== 10. Seguridad de los nuevos modulos ==")
 cc = app.test_client()
 cc.post("/auth/login", data={"correo":"conductor1@sgds.com","contrasena":"Conductor123*"})
