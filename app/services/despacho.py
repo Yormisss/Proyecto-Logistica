@@ -6,8 +6,6 @@ conecta la ultima milla con la bodega y elimina la descoordinacion entre el stoc
 real y las ordenes de despacho descrita en la cadena causal 2.3.2.
 """
 
-from datetime import datetime
-
 from app.extensions import db
 from app.models import (
     EstadoPedido,
@@ -17,6 +15,7 @@ from app.models import (
     PruebaEntrega,
     TipoMovimiento,
 )
+from app.tiempo import ahora
 
 
 class TransicionInvalida(Exception):
@@ -90,12 +89,12 @@ def _sincronizar_estado_ruta(ruta):
     if todas_cerradas:
         ruta.estado = EstadoRuta.FINALIZADA
         if ruta.finalizada_en is None:
-            ruta.finalizada_en = datetime.utcnow()
+            ruta.finalizada_en = ahora()
     elif hay_movimiento:
         ruta.estado = EstadoRuta.EN_CURSO
         ruta.finalizada_en = None
         if ruta.iniciada_en is None:
-            ruta.iniciada_en = datetime.utcnow()
+            ruta.iniciada_en = ahora()
     else:
         ruta.estado = EstadoRuta.PLANIFICADA
 
@@ -150,7 +149,7 @@ def cambiar_estado(
         prueba.motivo_fallo = motivo_fallo if nuevo_estado == EstadoPedido.FALLIDO else None
         prueba.latitud = latitud if latitud is not None else prueba.latitud
         prueba.longitud = longitud if longitud is not None else prueba.longitud
-        prueba.registrado_en = datetime.utcnow()
+        prueba.registrado_en = ahora()
         db.session.add(prueba)
 
     db.session.add(
@@ -192,7 +191,7 @@ def iniciar_ruta(ruta, usuario_id):
                 advertencias.append(f"{pedido.codigo}: {error}")
 
     if ruta.iniciada_en is None and afectados:
-        ruta.iniciada_en = datetime.utcnow()
+        ruta.iniciada_en = ahora()
     _sincronizar_estado_ruta(ruta)
 
     return afectados, advertencias

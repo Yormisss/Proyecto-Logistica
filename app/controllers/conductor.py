@@ -4,8 +4,6 @@ Vista mobile-first (RNF1) donde el conductor consulta su ruta asignada, actualiz
 el estado de cada pedido en terreno y registra la prueba de entrega (PoD).
 """
 
-from datetime import date
-
 from flask import (
     Blueprint, abort, flash, redirect, render_template, request, url_for,
 )
@@ -19,6 +17,7 @@ from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import EstadoPedido, EstadoRuta, Pedido, Rol, Ruta
 from app.services.despacho import TransicionInvalida, cambiar_estado, iniciar_ruta
+from app.tiempo import hoy
 
 conductor_bp = Blueprint("conductor", __name__)
 
@@ -80,7 +79,7 @@ def _longitud(formulario):
 
 
 def _ruta_del_dia(fecha=None):
-    fecha = fecha or date.today()
+    fecha = fecha or hoy()
     return (
         db.session.query(Ruta)
         .options(joinedload(Ruta.pedidos))
@@ -112,13 +111,13 @@ def _pedido_del_conductor(pedido_id):
 @login_required
 @requiere_rol(Rol.CONDUCTOR)
 def mi_ruta():
-    hoy = date.today()
-    ruta = _ruta_del_dia(hoy)
+    fecha_hoy = hoy()
+    ruta = _ruta_del_dia(fecha_hoy)
 
     return render_template(
         "conductor/mi_ruta.html",
         ruta=ruta,
-        hoy=hoy,
+        hoy=fecha_hoy,
         formulario=FormularioAccion(),
     )
 

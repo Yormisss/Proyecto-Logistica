@@ -3,9 +3,8 @@
 Incluye la prueba de entrega (Proof of Delivery) contemplada en el numeral 1.4 Alcances.
 """
 
-from datetime import datetime
-
 from app.extensions import db
+from app.tiempo import ahora
 
 
 class EstadoPedido:
@@ -84,8 +83,8 @@ class Pedido(db.Model):
     orden_en_ruta = db.Column(db.Integer)  # Secuencia sugerida por la API (RF3)
 
     creado_por_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
-    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
-    actualizado_en = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    creado_en = db.Column(db.DateTime, default=ahora)
+    actualizado_en = db.Column(db.DateTime, default=ahora, onupdate=ahora)
     inventario_descontado = db.Column(db.Boolean, nullable=False, default=False)
 
     ruta = db.relationship("Ruta", back_populates="pedidos")
@@ -158,7 +157,7 @@ class EventoPedido(db.Model):
     nota = db.Column(db.String(255))
     latitud = db.Column(db.Float)
     longitud = db.Column(db.Float)
-    registrado_en = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    registrado_en = db.Column(db.DateTime, default=ahora, index=True)
 
     pedido = db.relationship("Pedido", back_populates="eventos")
     usuario = db.relationship("Usuario")
@@ -177,6 +176,6 @@ class PruebaEntrega(db.Model):
     motivo_fallo = db.Column(db.String(160))
     latitud = db.Column(db.Float)
     longitud = db.Column(db.Float)
-    registrado_en = db.Column(db.DateTime, default=datetime.utcnow)
+    registrado_en = db.Column(db.DateTime, default=ahora)
 
     pedido = db.relationship("Pedido", back_populates="prueba_entrega")

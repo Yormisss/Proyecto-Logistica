@@ -18,12 +18,13 @@ normalizado cuando no (ver `app.services.clientes`).
 
 import csv
 import io
-from datetime import date, datetime
+from datetime import datetime
 
 from app.extensions import db
 from app.models import EstadoPedido, Pedido, PedidoItem, Producto
 from app.services.clientes import Resolutor, existe_cliente, vincular_destino
 from app.services.codigos import generar_codigo_pedido
+from app.tiempo import hoy
 
 COLUMNAS_REQUERIDAS = {"cliente_nombre", "direccion", "sku", "cantidad"}
 
@@ -48,7 +49,7 @@ def _normalizar_encabezados(campos):
 
 def _leer_fecha(valor, linea):
     if not valor:
-        return date.today()
+        return hoy()
     for formato in FORMATOS_FECHA:
         try:
             return datetime.strptime(valor, formato).date()
@@ -309,12 +310,12 @@ def generar_plantilla_csv():
     escritor.writerow(COLUMNAS_RECONOCIDAS)
     escritor.writerow([
         "", "Supermercado La 80", "900123456-1", "3115550101", "Cra 80 #45-12",
-        "Bogota", "4.6712", "-74.0912", date.today().strftime("%Y-%m-%d"),
+        "Bogota", "4.6712", "-74.0912", hoy().strftime("%Y-%m-%d"),
         "08:00", "12:00", "2", "SKU-1001", "10", "Entregar en muelle de carga",
     ])
     escritor.writerow([
         "", "Supermercado La 80", "900123456-1", "3115550101", "Cra 80 #45-12",
-        "Bogota", "4.6712", "-74.0912", date.today().strftime("%Y-%m-%d"),
+        "Bogota", "4.6712", "-74.0912", hoy().strftime("%Y-%m-%d"),
         "08:00", "12:00", "2", "SKU-1002", "5", "",
     ])
     return salida.getvalue()

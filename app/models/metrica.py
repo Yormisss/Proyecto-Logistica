@@ -6,9 +6,8 @@ reflejo en el tablero del administrador) se procesan dentro del limite de 3 a 5
 segundos establecido por el requisito.
 """
 
-from datetime import datetime
-
 from app.extensions import db
+from app.tiempo import ahora
 
 # Umbrales del RNF2, en milisegundos.
 UMBRAL_OBJETIVO_MS = 3000   # Meta
@@ -34,7 +33,7 @@ class MedicionRendimiento(db.Model):
     metodo = db.Column(db.String(10), nullable=False)
     estado_http = db.Column(db.Integer, nullable=False)
     duracion_ms = db.Column(db.Float, nullable=False)
-    registrado_en = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    registrado_en = db.Column(db.DateTime, default=ahora, index=True)
 
     @property
     def es_critico(self):

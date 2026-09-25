@@ -17,9 +17,9 @@ Se separan dos conceptos que no son el mismo:
 
 import re
 import unicodedata
-from datetime import datetime
 
 from app.extensions import db
+from app.tiempo import ahora
 
 
 def normalizar_texto(valor):
@@ -62,7 +62,7 @@ class Cliente(db.Model):
     )
 
     activo = db.Column(db.Boolean, nullable=False, default=True)
-    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
+    creado_en = db.Column(db.DateTime, default=ahora)
 
     usuario = db.relationship("Usuario", back_populates="cliente")
     direcciones = db.relationship(
@@ -123,7 +123,7 @@ class DireccionCliente(db.Model):
     ventana_fin = db.Column(db.Time)
 
     activa = db.Column(db.Boolean, nullable=False, default=True)
-    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
+    creado_en = db.Column(db.DateTime, default=ahora)
 
     cliente = db.relationship("Cliente", back_populates="direcciones")
     pedidos = db.relationship("Pedido", back_populates="direccion_entrega", lazy="dynamic")

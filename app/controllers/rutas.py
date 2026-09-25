@@ -6,7 +6,7 @@ un servicio de geolocalizacion.
 """
 
 import json
-from datetime import date, datetime
+from datetime import datetime
 
 from flask import (
     Blueprint, abort, current_app, flash, redirect, render_template, request, url_for,
@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.services.codigos import generar_codigo_ruta
 from app.services.ruteo import ESTRATEGIA_DISTANCIA, ESTRATEGIAS, calcular_ruta
+from app.tiempo import hoy
 
 rutas_bp = Blueprint("rutas", __name__)
 
@@ -125,9 +126,9 @@ def nueva():
         try:
             fecha_seleccionada = datetime.strptime(fecha_seleccionada, "%Y-%m-%d").date()
         except ValueError:
-            fecha_seleccionada = date.today()
+            fecha_seleccionada = hoy()
     else:
-        fecha_seleccionada = date.today()
+        fecha_seleccionada = hoy()
 
     if not formulario.fecha.data:
         formulario.fecha.data = fecha_seleccionada
