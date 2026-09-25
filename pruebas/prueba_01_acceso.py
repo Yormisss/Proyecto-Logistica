@@ -79,6 +79,24 @@ for destino in DESTINOS_MALICIOSOS:
         check("evil.com" not in destino_final,
               f"rechaza next={destino!r} y aterriza en el tablero, no en {destino_final!r}")
 
+print("\n== 7. instance_path explicito y portabilidad de las pruebas ==")
+raiz_proyecto = pathlib.Path(__file__).resolve().parent.parent
+check(
+    pathlib.Path(app.instance_path) == raiz_proyecto / "instance",
+    f"instance_path apunta a la carpeta del proyecto, no a la auto-detectada por Flask ({app.instance_path})",
+)
+check(
+    pathlib.Path(app.instance_path).is_dir(),
+    "crear_app() crea la carpeta instance/ si no existia (clon nuevo, .gitignore)",
+)
+
+sys.path.insert(0, str(raiz_proyecto / "pruebas"))
+import _preparar
+check(
+    _preparar.PYTHON == sys.executable,
+    "pruebas/_preparar.py usa sys.executable, no una ruta fija a .venv (portable entre SO)",
+)
+
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))
 sys.exit(1 if fallos else 0)

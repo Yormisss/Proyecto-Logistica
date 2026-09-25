@@ -6,6 +6,7 @@ para que la estructura de carpetas refleje explicitamente el patron.
 """
 
 import time
+from pathlib import Path
 
 from flask import Flask, g, render_template, request
 
@@ -13,13 +14,28 @@ from config import CONFIGURACIONES
 from app.extensions import csrf, db, login_manager
 from app.tiempo import ahora
 
+# Carpeta `instance/` en la raiz del proyecto (hermana de `app/`), la misma
+# que usa config.py para la base SQLite. No se deja a la auto-deteccion de
+# Flask: `auto_find_instance_path()` la calcula distinto segun si detecta el
+# paquete como "instalado" (p. ej. bajo site-packages en un despliegue con
+# gunicorn) o como codigo fuente suelto, y en el primer caso apunta a
+# `sys.prefix/var/app-instance`, una ruta que no coincide con la de config.py
+# ni sobrevive a un redeploy.
+RAIZ_PROYECTO = Path(__file__).resolve().parent.parent
+
 
 def crear_app(nombre_configuracion="desarrollo"):
     app = Flask(
         __name__,
         template_folder="views",
         static_folder="static",
+        instance_path=str(RAIZ_PROYECTO / "instance"),
     )
+    # `instance/` esta en .gitignore (guarda la base SQLite local y los CSV
+    # subidos): en un clon nuevo no existe todavia, y ni Flask ni SQLAlchemy
+    # la crean por si solos. Sin esto, `flask --app run init-db` o el primer
+    # `seed.py` fallan con "unable to open database file".
+    Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     app.config.from_object(CONFIGURACIONES[nombre_configuracion])
 
     _registrar_extensiones(app)
