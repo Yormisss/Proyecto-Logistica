@@ -284,6 +284,9 @@ Python con OpenSSL moderno el primer intento tiene éxito y nunca se usa el cana
 cifrar. Para producción, defina `URL_OSRM` en `.env` apuntando a una instancia propia:
 el servidor público no ofrece garantías de disponibilidad.
 
+Con `ENTORNO=produccion` el reintento por HTTP se desactiva por completo, aunque nunca
+se dispare en la práctica: las coordenadas de los clientes no deben viajar sin cifrar.
+
 ## Ciclo de entrega y sincronización de inventario (RF4 + RF5)
 
 La regla central del proyecto vive en [`app/services/despacho.py`](app/services/despacho.py):

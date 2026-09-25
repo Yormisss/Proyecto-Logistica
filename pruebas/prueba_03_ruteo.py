@@ -106,6 +106,19 @@ with app.app_context():
     r1 = ruteo.calcular_ruta(ORIGEN, [PEDIDOS[0]])
 check(len(r1.orden)==1 and r1.distancia_km > 0, f"una parada: {r1.distancia_km} km, proveedor {r1.proveedor}")
 
+print("\n== 10. En produccion se desactiva el reintento por HTTP a OSRM ==")
+import os
+with app.app_context():
+    with patch.dict(os.environ, {"ENTORNO": "produccion"}):
+        bases_prod = ruteo._base_osrm()
+    with patch.dict(os.environ, {"ENTORNO": "desarrollo"}):
+        bases_dev = ruteo._base_osrm()
+check(bases_prod == [ruteo.URL_OSRM_SEGURA], f"produccion solo intenta HTTPS ({bases_prod})")
+check(
+    bases_dev == [ruteo.URL_OSRM_SEGURA, ruteo.URL_OSRM_PLANA],
+    f"fuera de produccion conserva el reintento por HTTP ({bases_dev})",
+)
+
 print("\n"+"="*55)
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS"))
 for f in fallos: print("   - "+f)

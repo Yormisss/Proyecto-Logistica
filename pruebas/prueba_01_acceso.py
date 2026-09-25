@@ -97,6 +97,64 @@ check(
     "pruebas/_preparar.py usa sys.executable, no una ruta fija a .venv (portable entre SO)",
 )
 
+print("\n== 8. ConfiguracionProduccion: variables obligatorias y opciones del motor ==")
+import os
+from unittest.mock import patch
+
+from config import ConfiguracionProduccion
+from app import crear_app
+
+check(
+    ConfiguracionProduccion.SQLALCHEMY_ENGINE_OPTIONS == {"pool_pre_ping": True, "pool_recycle": 280},
+    f"agrega pool_pre_ping y pool_recycle=280 al motor ({ConfiguracionProduccion.SQLALCHEMY_ENGINE_OPTIONS})",
+)
+
+base_sin_vars = {k: v for k, v in os.environ.items() if k not in ("SECRET_KEY", "DATABASE_URL")}
+
+with patch.dict(os.environ, base_sin_vars, clear=True):
+    mensaje = None
+    try:
+        ConfiguracionProduccion.validar()
+    except RuntimeError as error:
+        mensaje = str(error)
+check(mensaje is not None, "produccion no arranca sin SECRET_KEY ni DATABASE_URL")
+check(
+    mensaje is not None and "SECRET_KEY" in mensaje and "DATABASE_URL" in mensaje,
+    f"el mensaje nombra las variables que faltan ({mensaje})",
+)
+
+with patch.dict(os.environ, base_sin_vars, clear=True):
+    fallo_crear_app = False
+    try:
+        crear_app("produccion")
+    except RuntimeError:
+        fallo_crear_app = True
+check(fallo_crear_app, "crear_app('produccion') tambien falla sin las variables obligatorias")
+
+solo_secret = dict(base_sin_vars, SECRET_KEY="clave-de-prueba-suficientemente-larga")
+with patch.dict(os.environ, solo_secret, clear=True):
+    mensaje2 = None
+    try:
+        ConfiguracionProduccion.validar()
+    except RuntimeError as error:
+        mensaje2 = str(error)
+check(
+    mensaje2 is not None and "DATABASE_URL" in mensaje2 and "SECRET_KEY" not in mensaje2,
+    f"si solo falta DATABASE_URL, el mensaje no la confunde con SECRET_KEY ({mensaje2})",
+)
+
+con_vars = dict(solo_secret, DATABASE_URL="mysql+pymysql://usuario:clave@host/logistica")
+with patch.dict(os.environ, con_vars, clear=True):
+    error_inesperado = None
+    try:
+        ConfiguracionProduccion.validar()
+    except RuntimeError as error:
+        error_inesperado = str(error)
+check(
+    error_inesperado is None,
+    f"arranca sin error cuando SECRET_KEY y DATABASE_URL estan definidas ({error_inesperado})",
+)
+
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))
 sys.exit(1 if fallos else 0)

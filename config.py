@@ -47,6 +47,33 @@ class ConfiguracionProduccion(ConfiguracionBase):
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
 
+    # RNF3 - Despliegue: evita servir con una conexion que el motor (o un
+    # proxy intermedio, comun en el plan gratuito de las plataformas cloud)
+    # ya cerro por inactividad. pool_recycle la renueva antes de que MySQL la
+    # cierre por su propio wait_timeout, que en esos planes suele ser bajo.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
+
+    # Variables sin las que produccion no puede arrancar de forma segura:
+    # sin SECRET_KEY las sesiones quedarian firmadas con la clave de
+    # desarrollo (visible en este repositorio publico), y sin DATABASE_URL
+    # SQLALCHEMY_DATABASE_URI queda vacia. Se comprueba la variable de
+    # entorno directamente -no el atributo de la clase- porque SECRET_KEY ya
+    # aplico su valor de reserva antes de llegar aqui.
+    VARIABLES_OBLIGATORIAS = ("SECRET_KEY", "DATABASE_URL")
+
+    @classmethod
+    def validar(cls):
+        faltantes = [v for v in cls.VARIABLES_OBLIGATORIAS if not os.getenv(v)]
+        if faltantes:
+            raise RuntimeError(
+                "No se puede arrancar en produccion: faltan las variables de "
+                f"entorno {', '.join(faltantes)}. Definalas en el entorno de "
+                "despliegue antes de iniciar la aplicacion."
+            )
+
 
 class ConfiguracionPruebas(ConfiguracionBase):
     TESTING = True

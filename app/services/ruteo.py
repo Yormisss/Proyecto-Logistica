@@ -17,6 +17,7 @@ nunca queda bloqueada por la ausencia de conexion.
 
 import json
 import math
+import os
 
 import requests
 
@@ -27,7 +28,9 @@ RADIO_TIERRA_KM = 6371.0
 # del sistema (compilado contra LibreSSL 2.8.3) no puede negociar. Se intenta
 # primero por HTTPS y, ante un fallo estrictamente de SSL, se reintenta por HTTP.
 # En un despliegue sobre un Python con OpenSSL moderno el primer intento tiene
-# exito y nunca se recurre al canal sin cifrar.
+# exito y nunca se recurre al canal sin cifrar. En produccion (ENTORNO=produccion)
+# el reintento se desactiva por completo: las coordenadas de los clientes no
+# deben viajar sin cifrar aunque el fallback rara vez se dispare (ver `_base_osrm`).
 URL_OSRM_SEGURA = "https://router.project-osrm.org"
 URL_OSRM_PLANA = "http://router.project-osrm.org"
 
@@ -142,6 +145,9 @@ def _base_osrm():
             return [configurada]
     except RuntimeError:
         pass  # Fuera del contexto de aplicacion
+
+    if os.getenv("ENTORNO") == "produccion":
+        return [URL_OSRM_SEGURA]
     return [URL_OSRM_SEGURA, URL_OSRM_PLANA]
 
 
