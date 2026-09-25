@@ -46,7 +46,23 @@ def registrar_movimiento(producto, tipo, cantidad, usuario_id, motivo=None, pedi
     """Aplica un movimiento y deja la trazabilidad correspondiente.
 
     `cantidad` siempre es positiva; el signo lo determina el tipo de movimiento.
+
+    Vuelve a leer el producto con `with_for_update()` justo antes de tocar el
+    stock: sin el bloqueo, dos ajustes manuales concurrentes sobre el mismo
+    producto (o un ajuste que coincide con un despacho en curso) podrian
+    partir del mismo `stock_actual` y la segunda escritura pisaria la
+    primera (actualizacion perdida). `populate_existing()` fuerza a refrescar
+    sus columnas desde esa fila aunque el producto ya estuviera cargado en el
+    identity map de la sesion.
     """
+    producto = (
+        db.session.query(Producto)
+        .filter_by(id=producto.id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
+
     if tipo in (TipoMovimiento.ENTRADA, TipoMovimiento.REVERSION):
         producto.stock_actual += cantidad
     elif tipo == TipoMovimiento.SALIDA:

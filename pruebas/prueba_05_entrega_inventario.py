@@ -253,6 +253,70 @@ with app.app_context():
     check(db.session.get(Pedido,esc_pid).estado==EstadoPedido.ENTREGADO, "la entrega NO se bloquea (la mercancia ya salio)")
     check(db.session.get(Producto,esc_prod).stock_actual==-8, f"el stock refleja el faltante real ({db.session.get(Producto,esc_prod).stock_actual})")
 
+print("\n== 13b. with_for_update evita actualizaciones perdidas de inventario ==")
+with app.app_context():
+    from app.services.despacho import TransicionInvalida, cambiar_estado
+
+    producto = db.session.query(Producto).filter_by(sku="SKU-1003").first()
+    prod_conc_id, stock_original = producto.id, producto.stock_actual
+
+    desp_conc = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").first()
+    cond_conc = db.session.query(Usuario).filter_by(correo="conductor2@sgds.com").first()
+    ruta_conc = Ruta(codigo="RUT-CONC-01", fecha=hoy, estado=EstadoRuta.PLANIFICADA,
+                     conductor_id=cond_conc.id)
+    db.session.add(ruta_conc); db.session.flush()
+    p_conc = Pedido(codigo="T5-CONC-01", cliente_nombre="Cliente Concurrencia",
+                    direccion="Calle Z", fecha_despacho=hoy, estado=EstadoPedido.EN_RUTA,
+                    ruta_id=ruta_conc.id, orden_en_ruta=1, creado_por_id=desp_conc.id)
+    db.session.add(p_conc); db.session.flush()
+    db.session.add(PedidoItem(pedido_id=p_conc.id, producto_id=prod_conc_id, cantidad=3))
+    db.session.commit()
+    pid_conc = p_conc.id
+
+    # `producto` sigue en el identity map de esta sesion con stock_original
+    # cacheado. Se simula otra transaccion concurrente que ya modifico el
+    # stock por su cuenta (otro despacho), escribiendo directo con una
+    # conexion aparte para no tocar la sesion ni su cache.
+    with db.engine.begin() as conexion:
+        conexion.execute(
+            Producto.__table__.update()
+            .where(Producto.__table__.c.id == prod_conc_id)
+            .values(stock_actual=stock_original - 50)
+        )
+
+    pedido_conc = db.session.get(Pedido, pid_conc)
+    cambiar_estado(pedido_conc, EstadoPedido.ENTREGADO, cond_conc.id, nota="Prueba de concurrencia")
+    db.session.commit()
+
+    esperado = (stock_original - 50) - 3
+    resultado = db.session.get(Producto, prod_conc_id).stock_actual
+    check(
+        resultado == esperado,
+        f"el descuento parte del stock real en la BD, no del cacheado en Python "
+        f"({resultado} vs esperado {esperado}; sin with_for_update habria dado {stock_original - 3})",
+    )
+
+    # El pedido tambien se relee con la fila bloqueada: si otra peticion ya lo
+    # transiciono por su cuenta, la validacion debe basarse en ese estado real.
+    p_estado = Pedido(codigo="T5-CONC-02", cliente_nombre="Cliente Concurrencia 2",
+                      direccion="Calle Z2", fecha_despacho=hoy, estado=EstadoPedido.ASIGNADO,
+                      ruta_id=ruta_conc.id, orden_en_ruta=2, creado_por_id=desp_conc.id)
+    db.session.add(p_estado); db.session.commit()
+    pid_estado = p_estado.id
+
+    pedido_obj = db.session.query(Pedido).filter_by(id=pid_estado).first()  # cachea estado ASIGNADO
+    with db.engine.begin() as conexion:
+        conexion.execute(
+            Pedido.__table__.update().where(Pedido.__table__.c.id == pid_estado)
+            .values(estado=EstadoPedido.EN_RUTA)
+        )
+    try:
+        cambiar_estado(pedido_obj, EstadoPedido.EN_RUTA, cond_conc.id)
+        rechazo = False
+    except TransicionInvalida:
+        rechazo = True
+    check(rechazo, "cambiar_estado valida el estado real en BD, no el que tenia cacheado en Python")
+
 print("\n== 14. Historial ==")
 html = c.get("/conductor/historial").data.decode()
 check("RUT-TEST-01" in html, "lista las rutas del conductor")
