@@ -30,7 +30,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               393 verificaciones automatizadas en 8 suites
+├── pruebas/               456 verificaciones automatizadas en 8 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -299,15 +299,20 @@ causal 2.3.2.
 
 ```
 PENDIENTE ──► ASIGNADO ──► EN_RUTA ──► ENTREGADO   (descuenta inventario)
-                  ▲            │
-                  │            └────► FALLIDO       (NO descuenta inventario)
-                  │                      │
-                  └──────────────────────┘          (reintento)
+   │              ▲            │
+   │              │            └────► FALLIDO       (NO descuenta inventario)
+   │              │                      │
+   │              └──────────────────────┘          (reintento)
+   │              │
+   └──────────────┴──────────────────────────────► CANCELADO  (anulación, exige motivo)
 ```
 
 Las transiciones se validan en el modelo (`EstadoPedido.TRANSICIONES`). Un pedido
 entregado es terminal: no admite reversión, lo que impide descontar el inventario dos
-veces por un error de operación.
+veces por un error de operación. `CANCELADO` es aparte: no es un intento de entrega
+(no genera PoD ni toca el inventario), así que se valida y aplica por separado en
+`app.services.despacho.anular_pedido`, permitido solo desde `PENDIENTE`, `ASIGNADO` o
+`FALLIDO`.
 
 ### Garantías implementadas
 
@@ -318,8 +323,11 @@ veces por un error de operación.
 | Reintento tras un fallo | Vuelve a `EN_RUTA`; si luego se entrega, ahí sí descuenta |
 | Stock insuficiente al entregar | La entrega **no se bloquea** (la mercancía ya salió físicamente): se descuenta, el stock queda negativo y el sistema alerta del descuadre para que el administrador lo concilie |
 | Última parada cerrada | La ruta pasa automáticamente a `FINALIZADA` y registra la hora |
+| Se anula un pedido | Exige motivo, pasa a `CANCELADO` (no se borra) y registra un `EventoPedido`; se excluye de la tasa de éxito, los pendientes y la productividad por conductor |
+| Una ruta tiene paradas canceladas | Puede finalizarse igual: `CANCELADO` cuenta como estado definitivo para el avance y el cierre automático |
 | Un conductor intenta operar la parada de otro | 403 |
 | La sesión caduca con la pantalla abierta | Página en español explicando que expiró, en lugar del error crudo de Flask |
+| Se desactiva una cuenta con la sesión ya abierta | Pierde el acceso en la siguiente petición, sin esperar a que vuelva a iniciar sesión |
 
 Cada cambio de estado deja un `EventoPedido` con usuario, hora y coordenadas, y cada
 descuento un `MovimientoInventario` que cita el pedido de origen: trazabilidad completa
@@ -339,19 +347,19 @@ crítico en terreno; la ubicación es complementaria.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**393 verificaciones en 8 suites**, todas pasando. Cada suite reinicia y resiembra la
+**456 verificaciones en 8 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
 |---|---|---|
-| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero | 15 |
-| `prueba_02_pedidos_csv.py` | RF2 · alta manual, importación CSV, inventario | 50 |
-| `prueba_03_ruteo.py` | RF3 · OSRM, ordenamientos, respaldo offline | 29 |
+| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción | 44 |
+| `prueba_02_pedidos_csv.py` | RF2 · alta manual, importación CSV, inventario, anulación | 64 |
+| `prueba_03_ruteo.py` | RF3 · OSRM, ordenamientos, respaldo offline | 31 |
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
-| `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock | 64 |
-| `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores y tiempos | 57 |
-| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 64 |
-| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 74 |
+| `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
+| `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 66 |
+| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 63 |
+| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo.
@@ -399,8 +407,9 @@ en tabla.
 ## MySQL y MySQL Workbench (fase piloto)
 
 El proyecto corre indistintamente sobre SQLite (desarrollo) o MySQL (piloto).
-**La migración está verificada:** las 12 tablas se crean correctamente y las 393
-pruebas pasan íntegras contra MySQL 8.0.46.
+**La migración está verificada:** las 12 tablas se crean correctamente y las 456
+pruebas (461 contra MySQL, que suma las verificaciones de claves ajenas propias
+de ese motor) pasan íntegras contra MySQL 8.0.46.
 
 `docker-compose.yml` no necesita cambios al evolucionar el esquema: solo provisiona
 el servidor MySQL. Las tablas las crea el ORM, así que `init-db` recoge los modelos
