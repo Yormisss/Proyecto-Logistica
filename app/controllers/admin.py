@@ -4,8 +4,6 @@ Paso 1: tablero de control con los tres KPIs fundamentales del RF6.
 Los modulos de pedidos, rutas e inventario se incorporan en los pasos siguientes.
 """
 
-from datetime import date
-
 from flask import Blueprint, render_template
 from flask_login import login_required
 from sqlalchemy import func
@@ -16,6 +14,7 @@ from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import EstadoPedido, Pedido, Producto, Rol, Ruta, Usuario
 from app.services import analitica
+from app.tiempo import hoy
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -27,7 +26,7 @@ def calcular_kpis(fecha=None):
     2. Entregas pendientes
     3. Porcentaje de exito de entrega
     """
-    fecha = fecha or date.today()
+    fecha = fecha or hoy()
 
     conteos = dict(
         db.session.query(Pedido.estado, func.count(Pedido.id))

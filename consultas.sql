@@ -42,13 +42,16 @@ WHERE u.rol = 'CLIENTE'
 ORDER BY p.fecha_despacho DESC, p.codigo DESC
 LIMIT 15;
 
+-- Bogota es siempre UTC-5 (Colombia no observa horario de verano): el ajuste
+-- fijo reproduce lo que app.tiempo.hoy() calcula con ZoneInfo en la aplicacion,
+-- para que estas consultas usen el mismo "dia de despacho" que el sistema.
 SELECT '--- Pedidos de hoy con su ruta y conductor ---' AS '';
 SELECT p.codigo, p.cliente_nombre, p.estado, p.orden_en_ruta,
        r.codigo AS ruta, u.nombre AS conductor
 FROM pedidos p
 LEFT JOIN rutas r ON r.id = p.ruta_id
 LEFT JOIN usuarios u ON u.id = r.conductor_id
-WHERE p.fecha_despacho = date('now')
+WHERE p.fecha_despacho = date('now', '-5 hours')
 ORDER BY r.codigo, p.orden_en_ruta;
 
 SELECT '--- KPIs del dia (los tres del RF6) ---' AS '';
@@ -57,7 +60,7 @@ SELECT COUNT(*) AS total_dia,
        SUM(estado IN ('PENDIENTE','ASIGNADO','EN_RUTA')) AS pendientes,
        ROUND(100.0 * SUM(estado = 'ENTREGADO') /
              NULLIF(SUM(estado IN ('ENTREGADO','FALLIDO')), 0), 1) AS pct_exito
-FROM pedidos WHERE fecha_despacho = date('now');
+FROM pedidos WHERE fecha_despacho = date('now', '-5 hours');
 
 SELECT '--- Ultimos movimientos de inventario (RF5) ---' AS '';
 SELECT m.registrado_en, pr.sku, m.tipo, m.cantidad, m.stock_resultante,

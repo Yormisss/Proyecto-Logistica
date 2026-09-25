@@ -6,12 +6,12 @@ para que la estructura de carpetas refleje explicitamente el patron.
 """
 
 import time
-from datetime import datetime
 
 from flask import Flask, g, render_template, request
 
 from config import CONFIGURACIONES
 from app.extensions import csrf, db, login_manager
+from app.tiempo import ahora
 
 
 def crear_app(nombre_configuracion="desarrollo"):
@@ -73,7 +73,7 @@ def _registrar_medicion(app):
                         metodo=request.method,
                         estado_http=respuesta.status_code,
                         duracion_ms=duracion_ms,
-                        registrado_en=datetime.utcnow(),
+                        registrado_en=ahora(),
                     )
                 )
 

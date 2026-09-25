@@ -1,10 +1,9 @@
 """RF3 - Generacion de Rutas Basicas: flota y rutas de distribucion de ultima milla."""
 
-from datetime import datetime
-
 from sqlalchemy.dialects import mysql
 
 from app.extensions import db
+from app.tiempo import ahora
 
 # La polilinea de una ruta urbana supera con facilidad los 65 KB que admite el
 # tipo TEXT de MySQL: una ruta de 5 paradas ya ocupa ~33 KB. Se declara la
@@ -70,7 +69,7 @@ class Ruta(db.Model):
     proveedor_ruteo = db.Column(db.String(30))
     geometria = db.Column(TEXTO_LARGO)  # Polilinea para dibujar la ruta en el mapa
 
-    creada_en = db.Column(db.DateTime, default=datetime.utcnow)
+    creada_en = db.Column(db.DateTime, default=ahora)
     iniciada_en = db.Column(db.DateTime)
     finalizada_en = db.Column(db.DateTime)
 

@@ -6,12 +6,11 @@ gestores logisticos, conductores de la flota y los clientes destinatarios que
 consultan el estado de sus propias ordenes.
 """
 
-from datetime import datetime
-
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db, login_manager
+from app.tiempo import ahora
 
 
 # RNF5 - Seguridad de Acceso.
@@ -57,7 +56,7 @@ class Usuario(UserMixin, db.Model):
     contrasena_hash = db.Column(db.String(255), nullable=False)
     rol = db.Column(db.String(20), nullable=False, default=Rol.CONDUCTOR, index=True)
     activo = db.Column(db.Boolean, nullable=False, default=True)
-    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
+    creado_en = db.Column(db.DateTime, default=ahora)
 
     rutas = db.relationship("Ruta", back_populates="conductor", lazy="dynamic")
     vehiculo = db.relationship("Vehiculo", back_populates="conductor", uselist=False)

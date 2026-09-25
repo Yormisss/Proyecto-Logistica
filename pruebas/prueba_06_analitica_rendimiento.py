@@ -14,7 +14,8 @@ reiniciar_base()
 from run import app
 from app.extensions import db
 from app.services import analitica
-from app.models import MedicionRendimiento, UMBRAL_MAXIMO_MS
+from app.models import (EstadoPedido, MedicionRendimiento, Pedido, PruebaEntrega,
+                        UMBRAL_MAXIMO_MS, Usuario)
 app.config["WTF_CSRF_ENABLED"]=True
 
 def sesion(correo, clave):
@@ -148,6 +149,42 @@ check(r.status_code==403, "un 403 sigue siendo 403")
 with app.app_context():
     check(db.session.query(MedicionRendimiento).filter_by(estado_http=403).count() > 0,
           "tambien mide las respuestas 403")
+
+print("\n== 8. Zona horaria America/Bogota ==")
+with app.app_context():
+    from datetime import datetime as dt_clase, time as time_clase, timedelta as td
+    from zoneinfo import ZoneInfo
+    from app.tiempo import ZONA_BOGOTA, ahora, hoy
+
+    # Colombia no observa horario de verano: el desplazamiento es siempre -5 horas.
+    instante_utc = dt_clase(2026, 6, 15, 15, 30, tzinfo=ZoneInfo("UTC"))
+    en_bogota = instante_utc.astimezone(ZONA_BOGOTA).replace(tzinfo=None)
+    check(en_bogota == dt_clase(2026, 6, 15, 10, 30), f"15:30 UTC son las 10:30 en Bogota ({en_bogota})")
+    check(hoy() == ahora().date(), "hoy() es la fecha de ahora() en Bogota")
+
+    # Una entrega a las 10:30 (hora Bogota) debe contar como dentro de una
+    # ventana que cierra a las 11:00, sin importar la zona horaria del servidor.
+    dia_prueba = hoy() - td(days=250)
+    despachador = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").first()
+    pedido = Pedido(
+        codigo="TZ-TEST-001", cliente_nombre="Cliente Zona Horaria",
+        direccion="Calle Prueba", fecha_despacho=dia_prueba,
+        estado=EstadoPedido.ENTREGADO, ventana_fin=time_clase(11, 0),
+        creado_por_id=despachador.id,
+    )
+    db.session.add(pedido)
+    db.session.flush()
+    db.session.add(PruebaEntrega(
+        pedido_id=pedido.id, receptor_nombre="Receptor de prueba",
+        registrado_en=dt_clase(dia_prueba.year, dia_prueba.month, dia_prueba.day, 10, 30),
+    ))
+    db.session.commit()
+
+    resultado = analitica.cumplimiento_ventana(dias=1, hasta=dia_prueba)
+    check(
+        resultado["total"] == 1 and resultado["dentro"] == 1,
+        f"entrega a las 10:30 (hora Bogota) dentro de la ventana que cierra a las 11:00 ({resultado})",
+    )
 
 print("\n"+"="*55)
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS"))

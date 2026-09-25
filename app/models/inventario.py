@@ -4,9 +4,8 @@ Responde al objetivo especifico 1.3.1 (sincronizar el inventario fisico del alma
 con los despachos) y soporta el RF5 - Sincronizacion Logica de Inventario.
 """
 
-from datetime import datetime
-
 from app.extensions import db
+from app.tiempo import ahora
 
 
 class Producto(db.Model):
@@ -20,7 +19,7 @@ class Producto(db.Model):
     stock_actual = db.Column(db.Integer, nullable=False, default=0)
     stock_minimo = db.Column(db.Integer, nullable=False, default=0)
     activo = db.Column(db.Boolean, nullable=False, default=True)
-    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
+    creado_en = db.Column(db.DateTime, default=ahora)
 
     movimientos = db.relationship(
         "MovimientoInventario", back_populates="producto", lazy="dynamic"
@@ -59,7 +58,7 @@ class MovimientoInventario(db.Model):
     cantidad = db.Column(db.Integer, nullable=False)
     stock_resultante = db.Column(db.Integer, nullable=False)
     motivo = db.Column(db.String(255))
-    registrado_en = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    registrado_en = db.Column(db.DateTime, default=ahora, index=True)
 
     producto = db.relationship("Producto", back_populates="movimientos")
     pedido = db.relationship("Pedido", back_populates="movimientos")

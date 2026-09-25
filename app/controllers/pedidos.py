@@ -5,7 +5,7 @@ o mediante importacion masiva de archivos CSV exportados del ERP legado.
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 from flask import (
@@ -31,6 +31,7 @@ from app.services.codigos import generar_codigo_pedido
 from app.services.importador import (
     ErrorImportacion, analizar_csv, generar_plantilla_csv, guardar_pedidos,
 )
+from app.tiempo import hoy
 
 pedidos_bp = Blueprint("pedidos", __name__)
 
@@ -184,7 +185,7 @@ def detalle(pedido_id):
 def nuevo():
     formulario = FormularioPedido()
     if not formulario.fecha_despacho.data:
-        formulario.fecha_despacho.data = date.today()
+        formulario.fecha_despacho.data = hoy()
 
     productos = (
         db.session.query(Producto)

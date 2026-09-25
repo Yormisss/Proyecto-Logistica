@@ -5,7 +5,7 @@ una flota reducida y pedidos de ultima milla con ventanas horarias comerciales
 (numeral 1.4 - Fase de implementacion piloto).
 """
 
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 
 from app.extensions import db
 from app.models import (
@@ -25,6 +25,7 @@ from app.models import (
     Vehiculo,
 )
 from app.services.clientes import Resolutor, vincular_destino
+from app.tiempo import hoy as fecha_actual
 
 USUARIOS = [
     ("Laura Gomez", "admin@sgds.com", Rol.ADMIN, "Admin123*"),
@@ -116,7 +117,7 @@ def sembrar_datos():
     db.session.flush()
 
     # --- Pedidos del dia y ruta asignada ---
-    hoy = date.today()
+    hoy = fecha_actual()
     ruta = Ruta(
         codigo=f"RUT-{hoy.strftime('%Y%m%d')}-01",
         fecha=hoy,
@@ -226,6 +227,7 @@ def _generar_historico(usuarios, productos, resolutor, dias=21):
     import random
 
     aleatorio = random.Random(2026)
+    hoy = fecha_actual()
     conductores = [
         usuarios["conductor1@sgds.com"],
         usuarios["conductor2@sgds.com"],
@@ -236,7 +238,6 @@ def _generar_historico(usuarios, productos, resolutor, dias=21):
     for motivo, peso in MOTIVOS_DEMO:
         bolsa_motivos.extend([motivo] * peso)
 
-    hoy = date.today()
     consecutivo = 0
 
     for desplazamiento in range(dias, 0, -1):

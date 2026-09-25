@@ -5,11 +5,12 @@ la toma de decisiones estrategicas", y calcula el cumplimiento del RNF2 a partir
 de las mediciones reales de tiempo de respuesta.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import case, func
 
 from app.extensions import db
+from app.tiempo import ahora, hoy
 from app.models import (
     ENDPOINTS_CRITICOS,
     UMBRAL_MAXIMO_MS,
@@ -31,7 +32,7 @@ from app.models import (
 
 def serie_entregas(dias=14, hasta=None):
     """Entregas cerradas por dia, separadas en exitosas y fallidas."""
-    hasta = hasta or date.today()
+    hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
     filas = (
@@ -61,7 +62,7 @@ def serie_entregas(dias=14, hasta=None):
 
 def motivos_fallo(dias=30, hasta=None):
     """Ranking de causas de entrega fallida (cadena causal 2.3.1)."""
-    hasta = hasta or date.today()
+    hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
     filas = (
@@ -80,7 +81,7 @@ def motivos_fallo(dias=30, hasta=None):
 
 def productividad_conductores(dias=30, hasta=None):
     """Entregas cerradas por conductor y su tasa de exito."""
-    hasta = hasta or date.today()
+    hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
     filas = (
@@ -118,7 +119,7 @@ def tiempo_promedio_entrega(dias=30, hasta=None):
     Es el indicador que mide directamente el problema de "tiempos de entrega
     ineficientes" planteado en el objetivo general.
     """
-    hasta = hasta or date.today()
+    hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
     salidas = (
@@ -164,7 +165,7 @@ def tiempo_promedio_entrega(dias=30, hasta=None):
 
 def cumplimiento_ventana(dias=30, hasta=None):
     """Porcentaje de entregas realizadas dentro de la ventana horaria pactada."""
-    hasta = hasta or date.today()
+    hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
     filas = (
@@ -202,7 +203,7 @@ def _percentil(valores_ordenados, fraccion):
 
 def rendimiento(horas=24, solo_criticos=True):
     """Estadisticas de tiempo de respuesta por transaccion (RNF2)."""
-    desde = datetime.utcnow() - timedelta(hours=horas)
+    desde = ahora() - timedelta(hours=horas)
 
     consulta = db.session.query(
         MedicionRendimiento.endpoint, MedicionRendimiento.duracion_ms

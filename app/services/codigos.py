@@ -1,10 +1,9 @@
 """Generacion de consecutivos legibles para pedidos y rutas."""
 
-from datetime import date
-
 from sqlalchemy import func
 
 from app.extensions import db
+from app.tiempo import hoy
 
 
 def _siguiente_consecutivo(modelo, prefijo, fecha):
@@ -26,7 +25,7 @@ def _siguiente_consecutivo(modelo, prefijo, fecha):
 def generar_codigo_pedido(fecha=None):
     from app.models import Pedido
 
-    fecha = fecha or date.today()
+    fecha = fecha or hoy()
     numero = _siguiente_consecutivo(Pedido, "PED", fecha)
     return f"PED-{fecha.strftime('%Y%m%d')}-{numero:03d}"
 
@@ -34,6 +33,6 @@ def generar_codigo_pedido(fecha=None):
 def generar_codigo_ruta(fecha=None):
     from app.models import Ruta
 
-    fecha = fecha or date.today()
+    fecha = fecha or hoy()
     numero = _siguiente_consecutivo(Ruta, "RUT", fecha)
     return f"RUT-{fecha.strftime('%Y%m%d')}-{numero:02d}"
