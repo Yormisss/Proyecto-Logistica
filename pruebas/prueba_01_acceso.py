@@ -155,6 +155,51 @@ check(
     f"arranca sin error cuando SECRET_KEY y DATABASE_URL estan definidas ({error_inesperado})",
 )
 
+print("\n== 9. seed.py: trazabilidad de los pedidos entregados de hoy ==")
+from app.extensions import db
+from app.models import EstadoPedido, MovimientoInventario, Pedido, Producto, TipoMovimiento
+from app.tiempo import hoy
+
+with app.app_context():
+    entregados_hoy = (
+        db.session.query(Pedido)
+        .filter(Pedido.fecha_despacho == hoy(), Pedido.estado == EstadoPedido.ENTREGADO)
+        .all()
+    )
+    check(len(entregados_hoy) > 0, f"hay pedidos de hoy sembrados como ENTREGADO ({len(entregados_hoy)})")
+    for pedido in entregados_hoy:
+        check(len(pedido.movimientos) > 0,
+              f"{pedido.codigo}: tiene MovimientoInventario (no solo la bandera inventario_descontado)")
+        check(pedido.prueba_entrega is not None,
+              f"{pedido.codigo}: tiene PruebaEntrega (su detalle la puede mostrar)")
+
+    print("\n== 10. seed.py: el historico no oculta el stock insuficiente ==")
+    negativos = db.session.query(Producto).filter(Producto.stock_actual < 0).count()
+    check(negativos > 0,
+          f"al menos un producto quedo con stock negativo en el historico, sin piso en 0 ({negativos})")
+
+    # Consistencia aritmetica: sin el `max(..., 0)`, cada SALIDA debe encadenar
+    # exactamente con la anterior (stock_resultante = resultado_previo - cantidad).
+    # Si algun movimiento siguiera forzando el piso en 0, esta cadena se rompe.
+    for producto in db.session.query(Producto).all():
+        movimientos = (
+            db.session.query(MovimientoInventario)
+            .filter_by(producto_id=producto.id, tipo=TipoMovimiento.SALIDA)
+            .order_by(MovimientoInventario.id)
+            .all()
+        )
+        if len(movimientos) < 2:
+            continue
+        inconsistentes = [
+            m for anterior, m in zip(movimientos, movimientos[1:])
+            if m.stock_resultante != anterior.stock_resultante - m.cantidad
+        ]
+        check(
+            not inconsistentes,
+            f"{producto.sku}: la cadena de movimientos de salida es consistente "
+            f"({len(movimientos)} movimientos, {len(inconsistentes)} rotos)",
+        )
+
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))
 sys.exit(1 if fallos else 0)

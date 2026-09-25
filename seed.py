@@ -169,11 +169,32 @@ def sembrar_datos():
         db.session.add(pedido)
         db.session.flush()
 
-        db.session.add(PedidoItem(pedido_id=pedido.id, producto_id=productos[indice % len(productos)].id,
-                                  cantidad=2 + indice))
+        producto_pedido = productos[indice % len(productos)]
+        cantidad_pedido = 2 + indice
+        db.session.add(PedidoItem(pedido_id=pedido.id, producto_id=producto_pedido.id,
+                                  cantidad=cantidad_pedido))
         db.session.add(EventoPedido(pedido_id=pedido.id, estado_nuevo=estado,
                                     usuario_id=usuarios["despachador@sgds.com"].id,
                                     nota="Carga inicial de demostracion"))
+
+        if estado == EstadoPedido.ENTREGADO:
+            # Espeja lo que produce app.services.despacho.cambiar_estado() al
+            # confirmar una entrega real: sin esto el pedido quedaba marcado
+            # `inventario_descontado=True` sin ningun MovimientoInventario que
+            # lo respalde, y su detalle no mostraba la prueba de entrega (PoD)
+            # que el resto del sistema da por hecha en un pedido ENTREGADO.
+            producto_pedido.stock_actual = producto_pedido.stock_actual - cantidad_pedido
+            db.session.add(MovimientoInventario(
+                producto_id=producto_pedido.id, pedido_id=pedido.id,
+                usuario_id=usuarios["conductor1@sgds.com"].id, tipo=TipoMovimiento.SALIDA,
+                cantidad=cantidad_pedido, stock_resultante=producto_pedido.stock_actual,
+                motivo=f"Entrega confirmada del pedido {pedido.codigo}",
+            ))
+            db.session.add(PruebaEntrega(
+                pedido_id=pedido.id,
+                receptor_nombre=f"Receptor {indice}",
+                registrado_en=datetime.combine(hoy, time(10, 0)),
+            ))
 
     # Pedido de ayer, para verificar el filtro por fecha del tablero.
     ayer = hoy - timedelta(days=1)
@@ -336,7 +357,13 @@ def _generar_historico(usuarios, productos, resolutor, dias=21):
                 ))
 
                 if not fallida:
-                    producto.stock_actual = max(producto.stock_actual - cantidad, 0)
+                    # Sin el piso en 0: igual que en despacho.py, un stock
+                    # insuficiente no se oculta. Forzarlo a 0 haria que
+                    # `stock_resultante` no cuadrara con stock_previo - cantidad
+                    # en ese movimiento, y esconderia del historico de
+                    # demostracion el mismo descuadre que el sistema real deja
+                    # ver (y advierte) cuando ocurre en terreno.
+                    producto.stock_actual = producto.stock_actual - cantidad
                     db.session.add(MovimientoInventario(
                         producto_id=producto.id, pedido_id=pedido.id,
                         usuario_id=conductor.id, tipo=TipoMovimiento.SALIDA,
