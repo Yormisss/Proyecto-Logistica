@@ -14,8 +14,8 @@ reiniciar_base()
 from run import app
 from app.extensions import db
 from app.services import analitica
-from app.models import (EstadoPedido, MedicionRendimiento, Pedido, PruebaEntrega,
-                        UMBRAL_MAXIMO_MS, Usuario)
+from app.models import (EstadoPedido, EstadoRuta, MedicionRendimiento, Pedido,
+                        PruebaEntrega, Ruta, UMBRAL_MAXIMO_MS, Usuario)
 app.config["WTF_CSRF_ENABLED"]=True
 
 def sesion(correo, clave):
@@ -185,6 +185,44 @@ with app.app_context():
         resultado["total"] == 1 and resultado["dentro"] == 1,
         f"entrega a las 10:30 (hora Bogota) dentro de la ventana que cierra a las 11:00 ({resultado})",
     )
+
+print("\n== 9. CANCELADO se excluye de la tasa de exito, pendientes y productividad ==")
+with app.app_context():
+    from datetime import timedelta as td2
+    from app.controllers.admin import calcular_kpis
+
+    dia_cancel = hoy() - td2(days=260)
+    despachador = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").first()
+    conductor = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").first()
+    ruta = Ruta(codigo="RUT-CANC-TEST", fecha=dia_cancel, estado=EstadoRuta.FINALIZADA,
+                conductor_id=conductor.id)
+    db.session.add(ruta)
+    db.session.flush()
+
+    for indice, estado in enumerate(
+        (EstadoPedido.ENTREGADO, EstadoPedido.FALLIDO, EstadoPedido.CANCELADO), start=1
+    ):
+        db.session.add(Pedido(
+            codigo=f"CANC-KPI-{indice}", cliente_nombre=f"Cliente KPI {indice}",
+            direccion="Calle KPI", fecha_despacho=dia_cancel, estado=estado,
+            ruta_id=ruta.id, orden_en_ruta=indice, creado_por_id=despachador.id,
+        ))
+    db.session.commit()
+
+    kpis = calcular_kpis(fecha=dia_cancel)
+    check(kpis["total_dia"] == 3, f"el dia cuenta los 3 pedidos, cancelado incluido ({kpis['total_dia']})")
+    check(kpis["pendientes"] == 0, "el pedido cancelado no cuenta como pendiente")
+    check(
+        kpis["porcentaje_exito"] == 50.0,
+        f"tasa de exito 1 entregado / (1 entregado + 1 fallido) = 50%, sin contar el cancelado ({kpis['porcentaje_exito']})",
+    )
+
+    conductores = analitica.productividad_conductores(dias=1, hasta=dia_cancel)
+    fila = next((c for c in conductores if c["conductor"] == conductor.nombre), None)
+    check(fila is not None, "el conductor aparece en la productividad del dia")
+    if fila:
+        check(fila["cerradas"] == 2, f"cerradas cuenta solo entregado+fallido, no el cancelado ({fila['cerradas']})")
+        check(fila["exito"] == 50.0, f"tasa de exito del conductor sin el cancelado ({fila['exito']})")
 
 print("\n"+"="*55)
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS"))

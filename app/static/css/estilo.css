@@ -122,7 +122,7 @@ body {
 .etiqueta-asignado { background: var(--azul-100); color: var(--azul-700); }
 .etiqueta-en_ruta, .etiqueta-en_curso { background: var(--ambar-claro); color: var(--ambar); }
 .etiqueta-entregado, .etiqueta-finalizada { background: var(--verde-claro); color: var(--verde); }
-.etiqueta-fallido, .etiqueta-cancelada { background: var(--rojo-claro); color: var(--rojo); }
+.etiqueta-fallido, .etiqueta-cancelada, .etiqueta-cancelado { background: var(--rojo-claro); color: var(--rojo); }
 
 /* ---------- Barra de avance ---------- */
 .barra-avance { background: var(--gris-200); border-radius: 999px; height: 6px; overflow: hidden; min-width: 70px; }
@@ -194,7 +194,7 @@ body {
   border-radius: var(--radio); padding: .8rem; box-shadow: var(--sombra);
 }
 .parada-entregado { border-left-color: var(--verde); }
-.parada-fallido { border-left-color: var(--rojo); }
+.parada-fallido, .parada-cancelado { border-left-color: var(--rojo); }
 .parada-en_ruta { border-left-color: var(--ambar); }
 .parada-asignado { border-left-color: var(--azul-500); }
 .parada-orden {
@@ -220,6 +220,10 @@ body {
 .fila-encabezado { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
 .acciones-encabezado { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .acciones-encabezado form { margin: 0; }
+.formulario-anular { display: flex; gap: .4rem; align-items: center; }
+.formulario-anular input[type="text"] {
+  padding: .45rem .6rem; border: 1px solid var(--gris-400); border-radius: 6px; width: 14rem;
+}
 
 .boton-secundario { background: var(--blanco); color: var(--azul-700); border: 1px solid var(--azul-500); }
 .boton-secundario:hover { background: var(--azul-100); }
@@ -339,7 +343,7 @@ body {
 .pin-asignado { background: var(--azul-500); }
 .pin-en_ruta { background: var(--ambar); }
 .pin-entregado { background: var(--verde); }
-.pin-fallido { background: var(--rojo); }
+.pin-fallido, .pin-cancelado { background: var(--rojo); }
 
 .kpi-unidad { font-size: .95rem; font-weight: 600; color: var(--gris-600); margin-left: .2rem; }
 

@@ -19,6 +19,10 @@
   <div class="alerta alerta-advertencia">
     No fue posible completar la entrega. El centro de distribucion reprogramara el despacho.
   </div>
+{% elif pedido.estado == EstadoPedido.CANCELADO %}
+  <div class="alerta alerta-advertencia">
+    Este pedido fue anulado por el centro de distribucion y no sera despachado.
+  </div>
 {% endif %}
 
 <div class="rejilla-dos">

@@ -28,6 +28,7 @@ from app.models import (
 )
 from app.services.clientes import resolver_destino, vincular_destino
 from app.services.codigos import generar_codigo_pedido
+from app.services.despacho import TransicionInvalida, anular_pedido
 from app.services.importador import (
     ErrorImportacion, analizar_csv, generar_plantilla_csv, guardar_pedidos,
 )
@@ -280,14 +281,19 @@ def anular(pedido_id):
     if pedido is None:
         abort(404)
 
-    if pedido.estado == EstadoPedido.ENTREGADO:
-        flash("No se puede anular un pedido ya entregado.", "error")
+    motivo = (request.form.get("motivo") or "").strip()
+    if not motivo:
+        flash("Indique el motivo de la anulacion.", "error")
         return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
 
-    codigo = pedido.codigo
-    db.session.delete(pedido)
+    try:
+        anular_pedido(pedido, current_user.id, motivo)
+    except TransicionInvalida as error:
+        flash(str(error), "error")
+        return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
+
     db.session.commit()
-    flash(f"Pedido {codigo} anulado.", "exito")
+    flash(f"Pedido {pedido.codigo} anulado.", "exito")
     return redirect(url_for("pedidos.lista"))
 
 

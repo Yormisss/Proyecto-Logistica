@@ -27,11 +27,14 @@ SEGUIMIENTO_PUBLICO = {
     EstadoPedido.EN_RUTA: "En camino a su direccion",
     EstadoPedido.ENTREGADO: "Entregado",
     EstadoPedido.FALLIDO: "Entrega no lograda",
+    EstadoPedido.CANCELADO: "Pedido anulado",
 }
 
 FILTROS = {
     "abiertos": EstadoPedido.ABIERTOS,
-    "cerrados": EstadoPedido.CERRADOS,
+    # FINALES (no CERRADOS): para el cliente un pedido anulado tampoco esta
+    # "en curso", asi que el filtro de cerrados tambien lo incluye.
+    "cerrados": EstadoPedido.FINALES,
 }
 
 
@@ -77,6 +80,7 @@ def _resumen(cliente):
         "en_curso": sum(conteo.get(e, 0) for e in EstadoPedido.ABIERTOS),
         "entregados": conteo.get(EstadoPedido.ENTREGADO, 0),
         "fallidos": conteo.get(EstadoPedido.FALLIDO, 0),
+        "cancelados": conteo.get(EstadoPedido.CANCELADO, 0),
     }
 
 

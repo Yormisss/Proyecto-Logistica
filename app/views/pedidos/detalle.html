@@ -12,10 +12,12 @@
   </div>
   <div class="acciones-encabezado">
     <a class="boton boton-plano" href="{{ url_for('pedidos.lista') }}">Volver</a>
-    {% if pedido.estado != EstadoPedido.ENTREGADO %}
+    {% if pedido.estado in (EstadoPedido.PENDIENTE, EstadoPedido.ASIGNADO, EstadoPedido.FALLIDO) %}
     <form method="post" action="{{ url_for('pedidos.anular', pedido_id=pedido.id) }}"
+          class="formulario-anular"
           onsubmit="return confirm('¿Anular el pedido {{ pedido.codigo }}? Esta accion no se puede deshacer.');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="text" name="motivo" placeholder="Motivo de la anulacion" required maxlength="255">
       <button type="submit" class="boton boton-peligro">Anular</button>
     </form>
     {% endif %}
