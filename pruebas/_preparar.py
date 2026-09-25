@@ -7,9 +7,15 @@ SQLite no sirve cuando el proyecto apunta a MySQL, asi que se usa el comando
 
 import pathlib
 import subprocess
+import sys
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
-PYTHON = RAIZ / ".venv" / "bin" / "python"
+# El interprete que ya esta ejecutando la suite es el mismo que tiene las
+# dependencias del proyecto instaladas, sea Windows, macOS o Linux. Una ruta
+# fija como `.venv/bin/python` no existe en Windows (alli el entorno virtual
+# usa `.venv/Scripts/python.exe`) y tampoco sirve si el entorno virtual vive
+# en otro lugar.
+PYTHON = sys.executable
 
 
 def reiniciar_base():
