@@ -223,7 +223,8 @@ check(ejecuciones == ["A", "A"], "un resumen vencido (mas de 3 minutos) no se pu
 funcion("gestor/accion-prueba", CALL_G, {"valor": "D"})
 with app.app_context():
     vence = db.session.query(SesionAsistente).filter_by(call_id=CALL_G).one().confirmacion_vence_en
-check(timedelta(minutes=2, seconds=50) < vence - ahora() <= timedelta(minutes=3),
+# MySQL guarda DATETIME sin fraccion y redondea al segundo: hasta medio segundo de mas.
+check(timedelta(minutes=2, seconds=50) < vence - ahora() <= timedelta(minutes=3, seconds=1),
       "el resumen vence a los 3 minutos")
 
 CALL_A = llamadas[Rol.ADMIN]
