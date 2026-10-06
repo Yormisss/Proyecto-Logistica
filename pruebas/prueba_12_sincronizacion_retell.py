@@ -45,6 +45,12 @@ ERROR_VERSION = ("Error code: 400 - {'status': 'error', 'message': "
 class ErrorRetell(Exception):
     pass
 
+def timeout_simulado(metodo):
+    """La misma excepcion que lanza el SDK: "Request timed out."."""
+    import httpx
+    from retell import APITimeoutError
+    return APITimeoutError(request=httpx.Request("POST", f"https://api.retellai.com/{metodo}"))
+
 def _parametros(metodo):
     return {n for n in inspect.signature(metodo).parameters if n != "self"}
 
@@ -84,6 +90,7 @@ class AgenteSimulado(Recurso):
             has_more=False, pagination_key=None)
     def retrieve(self, agent_id, **kw):
         self._validar("retrieve", {"agent_id": agent_id, **kw})
+        self.retell.registro.append(("agent.retrieve", agent_id))
         v = self._version(agent_id, kw.get("version"))
         motor = dict(v["response_engine"])
         if "version" in motor:
@@ -92,6 +99,7 @@ class AgenteSimulado(Recurso):
                                agent_name=v["agent_name"], response_engine=SimpleNamespace(**motor))
     def create_version(self, agent_id, **kw):
         self._validar("create_version", {"agent_id": agent_id, **kw})
+        self.retell.quizas_timeout("agent.create_version", agent_id, "antes")
         base = self._version(agent_id, kw["base_version"])
         numero = self._version(agent_id)["version"] + 1
         nueva = {**base, "version": numero, "publicada": False,
@@ -102,6 +110,7 @@ class AgenteSimulado(Recurso):
             nueva["response_engine"]["version"] = numero
         self.retell.agentes[agent_id].append(nueva)
         self.retell.registro.append(("agent.create_version", agent_id, numero))
+        self.retell.quizas_timeout("agent.create_version", agent_id, "despues")
         return SimpleNamespace(version=numero)
     def update(self, agent_id, **kw):
         self._validar("update", {"agent_id": agent_id, **kw})
@@ -124,6 +133,7 @@ class AgenteSimulado(Recurso):
         return SimpleNamespace(agent_id=agent_id, version=0)
     def publish(self, agent_id, **kw):
         self._validar("publish", {"agent_id": agent_id, **kw})
+        self.retell.quizas_timeout("agent.publish", agent_id, "antes")
         v = self._version(agent_id, kw["version"])
         if v["publicada"]:
             raise ErrorRetell("Error code: 400 - esa version ya esta publicada")
@@ -136,6 +146,7 @@ class AgenteSimulado(Recurso):
 class RetellSimulado:
     def __init__(self):
         self.llms, self.agentes, self.registro = {}, {}, []
+        self.timeouts = {}      # (metodo, agent_id) -> lista de "antes"/"despues"
         self.llm = LlmSimulado(self, {m: _parametros(getattr(LlmResource, m)) for m in ("create", "update")})
         self.agent = AgenteSimulado(self, {m: _parametros(getattr(AgentResource, m))
                                            for m in ("list", "retrieve", "create_version", "update",
@@ -148,13 +159,25 @@ class RetellSimulado:
                                            "publicada": publicada}}
         self.agentes[agent_id] = [{"agent_name": nombre, "version": version, "publicada": publicada,
                                    "response_engine": {"type": motor, "llm_id": llm_id, "version": version}}]
+    def quizas_timeout(self, metodo, agent_id, momento):
+        """Agota el tiempo si hay uno programado: "antes" (no se aplica) o
+        "despues" (Retell lo aplico, pero la respuesta no llego)."""
+        programados = self.timeouts.get((metodo, agent_id))
+        if programados and programados[0] == momento:
+            programados.pop(0)
+            raise timeout_simulado(metodo)
     def publicada(self, agent_id):
         return [v for v in self.agentes[agent_id] if v["publicada"]][-1]
     def nuevos_llm(self, desde):
         return [x for x in self.registro[desde:] if x[0] == "llm.create"]
 
 retell = RetellSimulado()
-servicio_asistente.cliente_retell = lambda: retell
+CLIENTE_RETELL_REAL = servicio_asistente.cliente_retell
+timeouts_pedidos = []
+def cliente_simulado(timeout=10):
+    timeouts_pedidos.append(timeout)
+    return retell
+servicio_asistente.cliente_retell = cliente_simulado
 
 runner = app.test_cli_runner()
 def sincronizar(*opciones, **config):
@@ -342,6 +365,44 @@ retell.agentes.clear()
 r = sincronizar(RETELL_VOZ_ID="")
 check(r.exit_code == 1 and r.output.count("RETELL_VOZ_ID") == 4 and not [x for x in retell.registro[-3:] if x[0] == "agent.create"],
       "sin RETELL_VOZ_ID no se crean agentes nuevos y se explica por que")
+
+
+print("\n== 6. Timeout y reintento ==")
+check(timeouts_pedidos and set(timeouts_pedidos) == {60}, f"el comando usa un timeout de 60 s ({set(timeouts_pedidos)})")
+check(inspect.signature(CLIENTE_RETELL_REAL).parameters["timeout"].default == 10,
+      "el cliente del boton sigue con 10 s")
+
+def agente_t(version=0):
+    retell.agentes.clear()
+    retell.agregar("agent_t", "SGDS - Cliente", publicada=True, version=version)
+
+agente_t()
+retell.timeouts[("agent.publish", "agent_t")] = ["antes"]
+r = sincronizar("--rol", "cliente", RETELL_AGENTE_CLIENTE_ID="agent_t")
+check(r.exit_code == 0 and "versión 1 publicada (8 funciones, tras 1 reintento por timeout)" in r.output
+      and [v["version"] for v in retell.agentes["agent_t"]] == [0, 1],
+      f"un timeout al publicar se reintenta y publica el mismo borrador: {r.output.strip()[-90:]}")
+
+agente_t()
+retell.timeouts[("agent.create_version", "agent_t")] = ["despues"]
+r = sincronizar("--rol", "cliente", RETELL_AGENTE_CLIENTE_ID="agent_t")
+check(r.exit_code == 0 and [v["version"] for v in retell.agentes["agent_t"]] == [0, 1]
+      and retell.publicada("agent_t")["version"] == 1,
+      "si Retell creo el borrador pero la respuesta no llego, el reintento lo reutiliza sin duplicarlo")
+
+agente_t()
+retell.timeouts[("agent.publish", "agent_t")] = ["antes", "antes"]
+r = sincronizar("--rol", "cliente", RETELL_AGENTE_CLIENTE_ID="agent_t")
+check(r.exit_code == 1 and "cliente: ERROR, tras 1 reintento por timeout, Request timed out." in r.output
+      and retell.publicada("agent_t")["version"] == 0,
+      f"dos timeouts seguidos: un solo reintento y se reporta el error ({r.output.strip()[-80:]})")
+
+retell.agentes.clear()
+retell.agregar("agent_flujo", "Flujo", motor="conversation-flow")
+inicio = len(retell.registro)
+r = sincronizar("--rol", "cliente", RETELL_AGENTE_CLIENTE_ID="agent_flujo")
+check(r.exit_code == 1 and retell.registro[inicio:].count(("agent.retrieve", "agent_flujo")) == 1
+      and "reintento" not in r.output, "un error que no es timeout no se reintenta")
 
 
 print("\n" + "=" * 55)

@@ -29,6 +29,12 @@ from dataclasses import dataclass
 
 from app.asistentes import configuracion as conf
 
+# Timeout de cada llamada a Retell durante la sincronizacion, en segundos. El
+# boton del asistente usa 10; aqui nadie espera en vivo y Retell a veces tarda.
+TIMEOUT_SINCRONIZACION = 60
+# Reintentos de un agente cuyo intento termino en "Request timed out".
+REINTENTOS_POR_TIMEOUT = 1
+
 
 class ErrorSincronizacion(Exception):
     """El agente de un rol no se pudo sincronizar."""
@@ -42,6 +48,7 @@ class Resultado:
     version: int = None
     funciones: int = 0
     error: str = None
+    reintentos: int = 0
 
     @property
     def falta_en_env(self):
@@ -137,18 +144,37 @@ def sincronizar_agente(cliente, definicion, url_publica, config):
     return resultado
 
 
+def _es_timeout(error):
+    from retell import APITimeoutError
+
+    return isinstance(error, APITimeoutError) or "Request timed out" in str(error)
+
+
 def sincronizar_asistentes(cliente, url_publica, config, roles=None):
     """Sincroniza los agentes (todos, o solo los de `roles` por su clave).
 
-    Un error en uno no detiene a los demas.
+    Un error en uno no detiene a los demas. Si un intento termina en "Request
+    timed out", se repite la sincronizacion completa de ese agente (hasta
+    REINTENTOS_POR_TIMEOUT veces). Es seguro: `sincronizar_agente` vuelve a
+    leer el agente en Retell, asi que si la llamada que agoto el tiempo si se
+    aplico (un borrador ya creado, una version ya publicada) el reintento parte
+    de ese estado en vez de duplicarlo.
     """
     url = conf.normalizar_url_publica(url_publica)
     resultados = []
     for definicion in conf.AGENTES:
         if roles and definicion.clave not in roles:
             continue
-        try:
-            resultados.append(sincronizar_agente(cliente, definicion, url, config))
-        except Exception as error:
-            resultados.append(Resultado(definicion, error=str(error)))
+        intentos = 0
+        while True:
+            try:
+                resultado = sincronizar_agente(cliente, definicion, url, config)
+            except Exception as error:
+                if _es_timeout(error) and intentos < REINTENTOS_POR_TIMEOUT:
+                    intentos += 1
+                    continue
+                resultado = Resultado(definicion, error=str(error))
+            resultado.reintentos = intentos
+            resultados.append(resultado)
+            break
     return resultados

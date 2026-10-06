@@ -85,6 +85,7 @@ def sincronizar_asistentes(roles):
     cambiar la URL de ngrok basta con volver a ejecutarlo.
     """
     from app.asistentes.configuracion import normalizar_url_publica
+    from app.asistentes.sincronizacion import TIMEOUT_SINCRONIZACION
     from app.asistentes.sincronizacion import sincronizar_asistentes as sincronizar
     from app.services.asistente import cliente_retell
 
@@ -97,16 +98,19 @@ def sincronizar_asistentes(roles):
 
     click.echo(f"Sincronizando los asistentes con {url}")
     with app.app_context():
-        resultados = sincronizar(cliente_retell(), url, app.config, roles=roles)
+        resultados = sincronizar(cliente_retell(timeout=TIMEOUT_SINCRONIZACION), url, app.config,
+                                 roles=roles)
 
     faltantes = []
     for r in resultados:
         clave = r.definicion.clave
+        reintento = (f", tras {r.reintentos} reintento{'s' if r.reintentos > 1 else ''} por timeout"
+                     if r.reintentos else "")
         if r.error:
-            click.echo(f"  {clave}: ERROR, {r.error}")
+            click.echo(f"  {clave}: ERROR{reintento}, {r.error}")
             continue
         click.echo(f"  {clave}: {r.accion} {r.agent_id}, versión {r.version} publicada "
-                   f"({r.funciones} funciones)")
+                   f"({r.funciones} funciones{reintento})")
         if r.falta_en_env:
             faltantes.append(f"{r.definicion.variable}={r.agent_id}")
 

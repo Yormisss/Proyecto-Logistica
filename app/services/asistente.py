@@ -45,18 +45,20 @@ def agente_para(rol):
     return (config.get(clave) or None) if clave else None
 
 
-def cliente_retell():
+def cliente_retell(timeout=10):
     """Cliente del SDK de Retell. Las pruebas lo reemplazan por uno simulado.
 
-    Sin reintentos y con timeout corto: el conductor esta esperando frente al
-    boton, y un reintento silencioso solo alarga la espera sin informarle.
+    Sin reintentos y, por defecto, con timeout corto: el conductor esta
+    esperando frente al boton, y un reintento silencioso solo alarga la espera
+    sin informarle. `sincronizar-asistentes` pide uno mas largo y maneja sus
+    propios reintentos (ver app/asistentes/sincronizacion.py).
     """
     from retell import Retell
 
     return Retell(
         api_key=current_app.config["RETELL_API_KEY"],
         max_retries=0,
-        timeout=10,
+        timeout=timeout,
     )
 
 
