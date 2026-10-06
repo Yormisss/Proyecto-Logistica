@@ -23,6 +23,9 @@ from app.models import (
     EstadoPedido, EstadoRuta, EventoPedido, Pedido, Rol, Ruta, Usuario, Vehiculo,
 )
 from app.services.codigos import generar_codigo_ruta
+from app.services.planificacion import (
+    PlanificacionInvalida, origen_centro_distribucion, recalcular_secuencia,
+)
 from app.services.ruteo import ESTRATEGIA_DISTANCIA, ESTRATEGIAS, calcular_ruta
 from app.tiempo import hoy
 
@@ -58,10 +61,6 @@ class FormularioRuta(FlaskForm):
             (v.id, f"{v.placa} — {v.tipo}") for v in vehiculos
         ]
         return conductores, vehiculos
-
-
-def _origen_centro_distribucion():
-    return (current_app.config["CD_LAT"], current_app.config["CD_LNG"])
 
 
 def _aplicar_resultado(ruta, resultado):
@@ -196,7 +195,7 @@ def nueva():
             )
 
         resultado = calcular_ruta(
-            _origen_centro_distribucion(), pedidos, formulario.estrategia.data
+            origen_centro_distribucion(), pedidos, formulario.estrategia.data
         )
         _aplicar_resultado(ruta, resultado)
         db.session.commit()
@@ -231,7 +230,7 @@ def detalle(ruta_id):
     if ruta is None:
         abort(404)
 
-    origen = _origen_centro_distribucion()
+    origen = origen_centro_distribucion()
     datos_origen = {
         "lat": origen[0],
         "lng": origen[1],
@@ -276,35 +275,21 @@ def recalcular(ruta_id):
     if ruta is None:
         abort(404)
 
-    if ruta.estado == EstadoRuta.FINALIZADA:
-        flash("No se puede recalcular una ruta finalizada.", "error")
-        return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
-
-    # Las paradas ya cerradas conservan su posicion; solo se reordena lo pendiente.
-    abiertos = [p for p in ruta.pedidos if p.estado in EstadoPedido.ABIERTOS]
-    if not abiertos:
-        flash("No quedan paradas pendientes por reordenar.", "advertencia")
-        return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
-
     estrategia = request.form.get("estrategia", ESTRATEGIA_DISTANCIA)
     if estrategia not in ESTRATEGIAS:
         estrategia = ESTRATEGIA_DISTANCIA
 
-    resultado = calcular_ruta(_origen_centro_distribucion(), abiertos, estrategia)
+    try:
+        resultado = recalcular_secuencia(ruta, estrategia)
+    except PlanificacionInvalida as error:
+        flash(str(error), "error")
+        return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
 
-    cerrados = [p for p in ruta.pedidos if p.estado in EstadoPedido.FINALES]
-    posiciones = {pedido_id: indice for indice, pedido_id in enumerate(resultado.orden, start=1)}
-    desplazamiento = len(cerrados)
+    if resultado is None:
+        flash("No quedan paradas pendientes por reordenar.", "advertencia")
+        return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
 
-    for indice, pedido in enumerate(cerrados, start=1):
-        pedido.orden_en_ruta = indice
-    for pedido in abiertos:
-        pedido.orden_en_ruta = posiciones.get(pedido.id, 0) + desplazamiento
-
-    ruta.distancia_km = resultado.distancia_km
-    ruta.duracion_min = resultado.duracion_min
-    ruta.geometria = resultado.geometria
-    ruta.proveedor_ruteo = resultado.proveedor
+    abiertos = [p for p in ruta.pedidos if p.estado in EstadoPedido.ABIERTOS]
     db.session.commit()
 
     for advertencia in resultado.advertencias:

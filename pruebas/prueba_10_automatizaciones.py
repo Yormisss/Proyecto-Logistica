@@ -12,7 +12,7 @@ from datetime import time, timedelta
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from run import app
-from app.controllers.inventario import registrar_movimiento
+from app.services.inventario import registrar_movimiento
 from app.extensions import db
 from app.models import (Cliente, EstadoPedido, EstadoRuta, Pedido, PedidoItem, Producto,
                         PruebaEntrega, Ruta, TipoMovimiento, Usuario)
