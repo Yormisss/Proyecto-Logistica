@@ -194,7 +194,10 @@ def _registrar_errores(app):
 
 
 def _registrar_contexto(app):
+    from flask_login import current_user
+
     from app.models import EstadoPedido, EstadoRuta
+    from app.services.asistente import agente_para
 
     @app.context_processor
     def inyectar_globales():
@@ -203,4 +206,10 @@ def _registrar_contexto(app):
             "EstadoRuta": EstadoRuta,
             "nombre_sistema": "SGDS - Sistema de Gestion de Despachos",
             "cd_nombre": app.config["CD_NOMBRE"],
+            # El boton del asistente solo aparece si hay API key de Retell y
+            # un agente configurado para el rol de la sesion.
+            "asistente_disponible": (
+                current_user.is_authenticated
+                and agente_para(current_user.rol) is not None
+            ),
         }

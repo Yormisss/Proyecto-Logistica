@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   {% block cabecera %}{% endblock %}
 </head>
-<body class="{% block clase_body %}{% endblock %}">
+<body class="{% block clase_body %}{% endblock %}{{ ' con-asistente' if asistente_disponible }}">
 
 {% if current_user.is_authenticated %}
 <header class="barra-superior">
@@ -75,6 +75,25 @@
 
   {% block contenido %}{% endblock %}
 </main>
+
+{% if asistente_disponible %}
+{# Asistente de voz (Retell AI). Solo se muestra si el rol tiene agente configurado. #}
+<div class="asistente" id="asistente"
+     data-url="{{ url_for('asistente.llamada') }}" data-csrf="{{ csrf_token() }}">
+  <p class="asistente-estado" id="asistente-estado" role="status" aria-live="polite" hidden></p>
+  <button type="button" class="asistente-boton" id="asistente-boton"
+          aria-label="Hablar con el asistente de voz" aria-pressed="false">
+    <svg class="asistente-icono icono-microfono" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3"/>
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>
+    </svg>
+    <svg class="asistente-icono icono-colgar" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18"/>
+    </svg>
+  </button>
+</div>
+<script type="module" src="{{ url_for('static', filename='js/asistente.js') }}"></script>
+{% endif %}
 
 {% block scripts %}{% endblock %}
 </body>

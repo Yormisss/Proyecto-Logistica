@@ -543,3 +543,60 @@ body {
   color: var(--azul-500); font-size: inherit; font-family: inherit; font-weight: 600;
 }
 .boton-enlace:hover { text-decoration: underline; }
+
+/* ---------- Asistente de voz (Retell AI) ----------
+   Boton flotante en la esquina inferior derecha, al alcance del pulgar. El
+   margen inferior extra del contenido evita que tape la ultima accion de la
+   pagina (p. ej. "Registrar fallo" en el detalle de una parada). */
+.con-asistente .contenedor { padding-bottom: 6.5rem; }
+
+.asistente {
+  position: fixed; z-index: 900;
+  right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: .6rem;
+}
+.asistente-boton {
+  width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer;
+  display: grid; place-items: center; flex-shrink: 0;
+  background: var(--azul-500); color: var(--blanco);
+  box-shadow: 0 4px 14px rgba(15, 37, 64, .3);
+  transition: background .15s, transform .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.asistente-boton:hover { background: var(--azul-700); }
+.asistente-boton:active { transform: scale(.95); }
+.asistente-boton:focus-visible { outline: 3px solid var(--naranja); outline-offset: 3px; }
+.asistente-boton:disabled { cursor: wait; }
+
+.asistente-icono {
+  width: 26px; height: 26px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.icono-colgar { display: none; }
+
+.asistente-estado {
+  margin: 0; max-width: min(260px, calc(100vw - 6.5rem));
+  padding: .5rem .75rem; border-radius: var(--radio);
+  background: var(--blanco); color: var(--gris-900); box-shadow: var(--sombra);
+  border: 1px solid var(--gris-200); font-size: .85rem; font-weight: 600;
+}
+.asistente-estado[hidden] { display: none; }
+
+.asistente[data-estado="conectando"] .asistente-boton { background: var(--ambar); }
+.asistente[data-estado="escuchando"] .asistente-boton {
+  background: var(--rojo);
+  animation: asistente-pulso 1.6s ease-out infinite;
+}
+.asistente[data-estado="escuchando"] .icono-microfono { display: none; }
+.asistente[data-estado="escuchando"] .icono-colgar { display: block; }
+.asistente[data-estado="error"] .asistente-estado {
+  background: var(--rojo-claro); border-color: #f5c6c6; color: #932c2c;
+}
+
+@keyframes asistente-pulso {
+  0% { box-shadow: 0 0 0 0 rgba(214, 69, 69, .45); }
+  100% { box-shadow: 0 0 0 16px rgba(214, 69, 69, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asistente[data-estado="escuchando"] .asistente-boton { animation: none; }
+}
