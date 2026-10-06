@@ -1,16 +1,23 @@
-"""Avisos al cliente por correo a traves de un escenario de Make.
+"""Avisos salientes a un escenario de Make.
 
-Cuando un pedido pasa a EN_RUTA, ENTREGADO o FALLIDO se envia un POST con los
-datos del pedido a MAKE_WEBHOOK_URL, y el escenario de Make redacta y envia el
-correo. Tres garantias:
+Todo evento se envia como un POST JSON a MAKE_WEBHOOK_URL con un campo `tipo`,
+y el escenario de Make lo enruta segun ese campo:
 
-* Solo se avisa de lo que quedo confirmado: `cambiar_estado` encola el aviso en
-  la sesion y se despacha en `after_commit`; un rollback lo descarta. Asi un
-  cambio que se revierte nunca genera un correo.
-* El envio va en segundo plano con timeout corto: el conductor no espera a
+* `pedido_estado`: un pedido paso a EN_RUTA, ENTREGADO, FALLIDO o CANCELADO.
+  Va al cliente, asi que solo se envia si el cliente tiene correo.
+* `stock_bajo`: un movimiento dejo un producto en o por debajo de su stock
+  minimo, o por debajo de cero. Es un aviso interno: va a CORREO_OPERACIONES y
+  sin esa variable no se envia.
+
+Tres garantias, iguales para todos los tipos:
+
+* Solo se avisa de lo que quedo confirmado: el evento se encola en la sesion y
+  se despacha en `after_commit`; un rollback lo descarta. Asi un cambio que se
+  revierte nunca genera un correo.
+* El envio va en segundo plano con timeout corto: quien opera no espera a
   Make, y si Make falla o tarda, la operacion ya confirmada no se bloquea ni se
   revierte. El fallo queda solo en el log.
-* Sin correo del cliente (o sin URL de Make) no se envia nada.
+* Sin URL de Make no se envia nada.
 """
 
 import logging
@@ -24,7 +31,12 @@ from app.extensions import db
 from app.models import EstadoPedido
 from app.tiempo import ahora
 
-ESTADOS_AVISADOS = (EstadoPedido.EN_RUTA, EstadoPedido.ENTREGADO, EstadoPedido.FALLIDO)
+TIPO_PEDIDO_ESTADO = "pedido_estado"
+TIPO_STOCK_BAJO = "stock_bajo"
+
+ESTADOS_AVISADOS = (
+    EstadoPedido.EN_RUTA, EstadoPedido.ENTREGADO, EstadoPedido.FALLIDO, EstadoPedido.CANCELADO,
+)
 
 # (conexion, respuesta) en segundos. Make responde "Accepted" de inmediato; si
 # tarda mas, el aviso se pierde antes que retener un hilo.
@@ -40,12 +52,31 @@ _en_curso = set()
 registro = logging.getLogger(__name__)
 
 
-def encolar_aviso(pedido):
-    """Prepara el aviso del estado actual del pedido; sale tras el commit."""
-    if pedido.estado not in ESTADOS_AVISADOS:
-        return
-    url = current_app.config.get("MAKE_WEBHOOK_URL")
+def _hora():
+    return ahora().strftime("%Y-%m-%d %H:%M")
+
+
+def encolar_evento(tipo, datos):
+    """Encola un evento de `tipo` para Make; sale tras el commit.
+
+    La URL y la API key se leen aqui, con el contexto de la aplicacion: el hilo
+    que envia no lo tiene.
+    """
+    config = current_app.config
+    url = config.get("MAKE_WEBHOOK_URL")
     if not url:
+        return
+    cabeceras = {}
+    if config.get("MAKE_WEBHOOK_KEY"):
+        cabeceras["x-make-apikey"] = config["MAKE_WEBHOOK_KEY"]
+    db.session.info.setdefault(_CLAVE_PENDIENTES, []).append(
+        (url, cabeceras, {"tipo": tipo, **datos})
+    )
+
+
+def aviso_estado_pedido(pedido, motivo=None):
+    """Avisa al cliente del estado actual del pedido. `motivo` solo en CANCELADO."""
+    if pedido.estado not in ESTADOS_AVISADOS:
         return
     correo = ((pedido.cliente.correo if pedido.cliente else None) or "").strip()
     if not correo:
@@ -59,25 +90,60 @@ def encolar_aviso(pedido):
         "correo": correo,
         "direccion": direccion,
         "ventana": pedido.ventana_texto,
-        "hora": ahora().strftime("%Y-%m-%d %H:%M"),
+        "hora": _hora(),
     }
-    db.session.info.setdefault(_CLAVE_PENDIENTES, []).append((url, datos))
+    if pedido.estado == EstadoPedido.CANCELADO:
+        datos["motivo"] = motivo
+    encolar_evento(TIPO_PEDIDO_ESTADO, datos)
 
 
-def _enviar(url, datos):
+def aviso_stock(producto, stock_previo, pedido=None):
+    """Avisa a operaciones si el movimiento que acaba de aplicarse cruzo un umbral.
+
+    Hay dos umbrales y cada uno avisa una sola vez, al cruzarlo hacia abajo: el
+    stock minimo (previo > minimo >= nuevo) y el cero (previo >= 0 > nuevo, un
+    descuadre entre el inventario registrado y el fisico). Los movimientos
+    posteriores que siguen por debajo no repiten el aviso. Si un mismo
+    movimiento cruza ambos, sale un solo aviso con negativo=true.
+
+    `pedido` es el codigo del pedido cuya entrega desconto el stock, o None en
+    un movimiento manual.
+    """
+    nuevo = producto.stock_actual
+    cruza_minimo = stock_previo > producto.stock_minimo >= nuevo
+    cruza_cero = stock_previo >= 0 > nuevo
+    if not (cruza_minimo or cruza_cero) or not producto.activo:
+        return
+    correo = (current_app.config.get("CORREO_OPERACIONES") or "").strip()
+    if not correo:
+        return
+
+    encolar_evento(TIPO_STOCK_BAJO, {
+        "sku": producto.sku,
+        "producto": producto.nombre,
+        "stock_actual": nuevo,
+        "stock_minimo": producto.stock_minimo,
+        "negativo": nuevo < 0,
+        "pedido": pedido,
+        "correo_destino": correo,
+        "hora": _hora(),
+    })
+
+
+def _enviar(url, cabeceras, datos):
     try:
-        respuesta = requests.post(url, json=datos, timeout=TIMEOUT_MAKE)
+        respuesta = requests.post(url, json=datos, headers=cabeceras, timeout=TIMEOUT_MAKE)
         respuesta.raise_for_status()
     except Exception as error:
         registro.warning(
-            "No se pudo avisar a Make del pedido %s (%s): %s",
-            datos.get("codigo"), datos.get("estado"), error,
+            "No se pudo enviar a Make el aviso %s (%s): %s",
+            datos.get("tipo"), datos.get("codigo") or datos.get("sku"), error,
         )
 
 
 def _despachar(sesion):
-    for url, datos in sesion.info.pop(_CLAVE_PENDIENTES, []):
-        futuro = _ejecutor.submit(_enviar, url, datos)
+    for url, cabeceras, datos in sesion.info.pop(_CLAVE_PENDIENTES, []):
+        futuro = _ejecutor.submit(_enviar, url, cabeceras, datos)
         _en_curso.add(futuro)
         futuro.add_done_callback(_en_curso.discard)
 

@@ -14,6 +14,7 @@ from wtforms.validators import DataRequired, Length, NumberRange, Optional
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import MovimientoInventario, Producto, Rol, TipoMovimiento
+from app.services.notificaciones import aviso_stock
 
 inventario_bp = Blueprint("inventario", __name__)
 
@@ -62,6 +63,7 @@ def registrar_movimiento(producto, tipo, cantidad, usuario_id, motivo=None, pedi
         .with_for_update()
         .one()
     )
+    stock_previo = producto.stock_actual
 
     if tipo in (TipoMovimiento.ENTRADA, TipoMovimiento.REVERSION):
         producto.stock_actual += cantidad
@@ -82,6 +84,7 @@ def registrar_movimiento(producto, tipo, cantidad, usuario_id, motivo=None, pedi
         motivo=motivo,
     )
     db.session.add(movimiento)
+    aviso_stock(producto, stock_previo)
     return movimiento
 
 

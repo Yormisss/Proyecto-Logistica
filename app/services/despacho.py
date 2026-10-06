@@ -20,7 +20,7 @@ from app.models import (
     Ruta,
     TipoMovimiento,
 )
-from app.services.notificaciones import encolar_aviso
+from app.services.notificaciones import aviso_estado_pedido, aviso_stock
 from app.tiempo import ahora, hoy
 
 
@@ -123,6 +123,7 @@ def _descontar_inventario(pedido, usuario_id):
         )
         db.session.add(movimiento)
         movimientos.append(movimiento)
+        aviso_stock(producto, stock_previo, pedido=pedido.codigo)
 
         # Un stock negativo revela un descuadre entre el inventario registrado y
         # el fisico. No se bloquea la entrega (la mercancia ya salio), pero se
@@ -249,7 +250,7 @@ def cambiar_estado(
 
     # Aviso al cliente por Make (EN_RUTA, ENTREGADO, FALLIDO). Se envia solo
     # despues del commit del controlador, y en segundo plano.
-    encolar_aviso(pedido)
+    aviso_estado_pedido(pedido)
 
     _sincronizar_estado_ruta(pedido.ruta)
 
@@ -302,6 +303,7 @@ def anular_pedido(pedido, usuario_id, motivo):
             nota=f"Pedido anulado: {motivo}",
         )
     )
+    aviso_estado_pedido(pedido, motivo=motivo)
 
     _sincronizar_estado_ruta(pedido.ruta)
 

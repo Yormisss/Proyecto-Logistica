@@ -40,7 +40,8 @@ NOTA = "Registrado por el asistente de voz"
 
 app.config["WTF_CSRF_ENABLED"] = True
 # La configuracion se fija aqui para que el .env local no cambie el resultado.
-app.config.update(RETELL_API_KEY="", RETELL_AGENTE_CONDUCTOR_ID="", MAKE_WEBHOOK_URL="")
+app.config.update(RETELL_API_KEY="", RETELL_AGENTE_CONDUCTOR_ID="", MAKE_WEBHOOK_URL="",
+                  MAKE_WEBHOOK_KEY="", CORREO_OPERACIONES="")
 
 
 # ---- Retell simulado ----
@@ -70,8 +71,8 @@ class RespuestaMake:
     def raise_for_status(self): pass
 
 envios_make, modo_make = [], {"valor": "ok"}
-def post_make(url, json=None, timeout=None):
-    envios_make.append({"url": url, "json": json, "timeout": timeout})
+def post_make(url, json=None, timeout=None, headers=None):
+    envios_make.append({"url": url, "json": json, "timeout": timeout, "headers": headers})
     if modo_make["valor"] == "falla":
         raise ConnectionError("Make no responde")
     if modo_make["valor"] == "lento":
@@ -362,8 +363,9 @@ print("\n== 6. Avisos por Make ==")
 aviso = next((e for e in envios_make if e["json"]["codigo"] == "ASIS-001"), None)
 check(aviso is not None, "marcar-en-camino de El Portal envio un aviso a Make")
 if aviso:
-    check(set(aviso["json"]) == {"codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora"},
-          "el aviso lleva codigo, estado, cliente, correo, direccion, ventana y hora")
+    check(set(aviso["json"]) == {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora"},
+          "el aviso lleva tipo, codigo, estado, cliente, correo, direccion, ventana y hora")
+    check(aviso["json"]["tipo"] == "pedido_estado", "de tipo pedido_estado")
     check(aviso["json"]["estado"] == "EN_RUTA" and aviso["json"]["correo"] == "compras@portal.invalid"
           and aviso["json"]["ventana"] == "08:00 - 11:00", "con los datos del pedido")
     check(re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", aviso["json"]["hora"]) is not None, "hora AAAA-MM-DD HH:MM")
