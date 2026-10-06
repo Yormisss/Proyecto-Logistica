@@ -75,7 +75,10 @@ def migrar_asistente():
 
 
 @app.cli.command("sincronizar-asistentes")
-def sincronizar_asistentes():
+@click.option("--rol", "roles", multiple=True,
+              type=click.Choice(["conductor", "gestor", "admin", "cliente"]),
+              help="Solo este rol; se puede repetir. Sin la opcion, los cuatro.")
+def sincronizar_asistentes(roles):
     """Crea o actualiza en Retell el agente de voz de cada rol y lo publica.
 
     Requiere RETELL_API_KEY y URL_PUBLICA (la URL https de ngrok o Render). Al
@@ -94,7 +97,7 @@ def sincronizar_asistentes():
 
     click.echo(f"Sincronizando los asistentes con {url}")
     with app.app_context():
-        resultados = sincronizar(cliente_retell(), url, app.config)
+        resultados = sincronizar(cliente_retell(), url, app.config, roles=roles)
 
     faltantes = []
     for r in resultados:

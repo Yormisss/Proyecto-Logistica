@@ -482,13 +482,18 @@ repositorio (`app/asistentes/`), y un comando los aplica en Retell por API:
 3. Copie al `.env` (y a las variables del despliegue) los `agent_id` que imprime para
    los agentes nuevos.
 
-**Al cambiar la URL de ngrok basta con volver a ejecutar el comando.**
+**Al cambiar la URL de ngrok basta con volver a ejecutar el comando.** Con
+`--rol cliente` (repetible: `--rol gestor --rol admin`) sincroniza solo esos agentes.
 
 Detalles del versionado de Retell, que el comando respeta: una versión publicada no se
-puede editar y las llamadas web usan la última publicada. Por eso, si la última versión
-de un agente está publicada, el comando crea un borrador a partir de ella, le asigna un
-Retell LLM nuevo con la configuración del repositorio y lo publica. Las versiones
-anteriores conservan su LLM, así que se puede volver a ellas desde el panel. Si un agente
+puede editar, las llamadas web usan la última publicada, y **el agente y su Retell LLM
+comparten el número de versión** (la versión N del agente usa la versión N de su LLM).
+Por eso, si la última versión de un agente está publicada, el comando crea un borrador
+a partir de ella (Retell crea a la vez la misma versión de su LLM), actualiza ese LLM en
+la versión del borrador con la configuración del repositorio, y publica. Si la última
+versión ya es un borrador (por ejemplo, de un intento que falló), la reutiliza. Nunca
+crea un LLM nuevo para un agente existente, así que no deja LLM huérfanos, y las
+versiones anteriores quedan intactas para volver a ellas desde el panel. Si un agente
 existente usa un *conversation flow* en vez de un Retell LLM, el comando no lo toca y lo
 reporta: configúrelo a mano o vacíe su variable para crear uno nuevo.
 

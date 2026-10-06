@@ -1,20 +1,28 @@
 """Crea o actualiza en Retell el agente de voz de cada rol.
 
-Flujo por agente, siguiendo el versionado de Retell (las versiones publicadas
-son de solo lectura y las llamadas web usan la ultima publicada):
+Versionado de Retell: las versiones publicadas son de solo lectura, las
+llamadas web usan la ultima publicada, y el agente y su Retell LLM comparten
+el numero de version (la version N del agente usa la version N de su LLM).
+Al crear el borrador N+1 de un agente, Retell crea tambien la version N+1 de
+su LLM; apuntar el borrador a otro LLM, o a otra version, responde 400
+"Response engine version must match agent version".
+
+Flujo por agente:
 
 1. Si ya existe (por su variable en el .env o por su nombre), se lee su ultima
    version. Debe usar un Retell LLM: un *conversation flow* no se puede
-   reemplazar desde aqui. Si esa version esta publicada, se crea un borrador
-   nuevo a partir de ella.
-2. Se crea un Retell LLM nuevo con el prompt, la bienvenida y las funciones.
-   Crear uno nuevo, en vez de editar el anterior, evita depender de como
-   Retell versiona los LLM: las versiones publicadas anteriores conservan el
-   suyo y se puede volver a ellas desde el panel.
-3. Se apunta el agente (o el borrador) a ese LLM con idioma, duracion maxima
-   y fin por silencio, y se publica la version.
+   configurar desde aqui. Si esa version esta publicada, se crea un borrador
+   a partir de ella; si ya es un borrador (por ejemplo, de un intento que
+   fallo), se reutiliza.
+2. Se actualiza el LLM del borrador, en la version del borrador, con el
+   prompt, la bienvenida y las funciones; y el borrador con idioma, duracion
+   maxima y fin por silencio, sin tocar su response_engine.
+3. Se publica el borrador. Las versiones anteriores quedan intactas, con su
+   version del LLM, y se puede volver a ellas desde el panel.
 
-Al cambiar la URL de ngrok basta con volver a ejecutar el comando.
+Un agente nuevo se crea en la version 0 con un Retell LLM nuevo, tambien en la
+version 0. Al cambiar la URL de ngrok basta con volver a ejecutar el comando.
+
 """
 
 from dataclasses import dataclass
@@ -56,10 +64,10 @@ def _buscar_por_nombre(cliente, nombre):
         clave = pagina.pagination_key
 
 
-def _ajustes(definicion, llm, voz):
+def _ajustes(definicion, voz):
+    """Ajustes de llamada del agente (sin el response_engine)."""
     ajustes = {
         "agent_name": definicion.nombre,
-        "response_engine": {"type": "retell-llm", "llm_id": llm.llm_id, "version": llm.version},
         "language": conf.IDIOMA,
         "max_call_duration_ms": conf.DURACION_MAXIMA_MS,
         "end_call_after_silence_ms": conf.SILENCIO_MAXIMO_MS,
@@ -69,15 +77,14 @@ def _ajustes(definicion, llm, voz):
     return ajustes
 
 
-def _crear_llm(cliente, definicion, url_publica):
+def _configuracion_llm(definicion, url_publica):
     tools = conf.herramientas(definicion, url_publica)
-    llm = cliente.llm.create(
-        general_prompt=conf.prompt(definicion),
-        begin_message=conf.bienvenida(definicion),
-        general_tools=tools,
-        default_dynamic_variables=dict(conf.VARIABLES_DINAMICAS),
-    )
-    return llm, len(tools)
+    return {
+        "general_prompt": conf.prompt(definicion),
+        "begin_message": conf.bienvenida(definicion),
+        "general_tools": tools,
+        "default_dynamic_variables": dict(conf.VARIABLES_DINAMICAS),
+    }
 
 
 def sincronizar_agente(cliente, definicion, url_publica, config):
@@ -89,28 +96,40 @@ def sincronizar_agente(cliente, definicion, url_publica, config):
         agent_id = _buscar_por_nombre(cliente, definicion.nombre)
         resultado.accion = "encontrado por nombre" if agent_id else "creado"
 
+    llm = _configuracion_llm(definicion, url_publica)
+    resultado.funciones = len(llm["general_tools"])
+
     if agent_id:
         actual = cliente.agent.retrieve(agent_id)
         motor = getattr(actual.response_engine, "type", None)
         if motor != "retell-llm":
             raise ErrorSincronizacion(
                 f"el agente {agent_id} usa un motor '{motor}', no un Retell LLM; no se puede "
-                "reemplazar por API. Configúrelo a mano con docs/configuracion_retell.md o "
+                "configurar por API. Configúrelo a mano con docs/configuracion_retell.md o "
                 "cree uno nuevo vaciando su variable."
             )
-        version = actual.version
         if actual.is_published:
-            version = cliente.agent.create_version(agent_id, base_version=actual.version).version
-        llm, resultado.funciones = _crear_llm(cliente, definicion, url_publica)
-        cliente.agent.update(agent_id, **_ajustes(definicion, llm, voz))
+            borrador = cliente.agent.create_version(agent_id, base_version=actual.version)
+            actual = cliente.agent.retrieve(agent_id, version=borrador.version)
+        version = actual.version
+        # El borrador ya trae su propia version del LLM (la misma que la suya).
+        llm_id = actual.response_engine.llm_id
+        llm_version = actual.response_engine.version
+        llm_version = int(llm_version) if llm_version is not None else version
+        cliente.llm.update(llm_id, version=llm_version, **llm)
+        cliente.agent.update(agent_id, version=version, **_ajustes(definicion, voz))
     else:
         if not voz:
             raise ErrorSincronizacion(
                 "para crear el agente defina RETELL_VOZ_ID con una voz en español "
                 "(panel de Retell, Voices)."
             )
-        llm, resultado.funciones = _crear_llm(cliente, definicion, url_publica)
-        creado = cliente.agent.create(**_ajustes(definicion, llm, voz))
+        nuevo_llm = cliente.llm.create(**llm)
+        creado = cliente.agent.create(
+            response_engine={"type": "retell-llm", "llm_id": nuevo_llm.llm_id,
+                             "version": nuevo_llm.version},
+            **_ajustes(definicion, voz),
+        )
         agent_id, version = creado.agent_id, creado.version
 
     cliente.agent.publish(agent_id, version=version)
@@ -118,11 +137,16 @@ def sincronizar_agente(cliente, definicion, url_publica, config):
     return resultado
 
 
-def sincronizar_asistentes(cliente, url_publica, config):
-    """Sincroniza los cuatro agentes; un error en uno no detiene a los demas."""
+def sincronizar_asistentes(cliente, url_publica, config, roles=None):
+    """Sincroniza los agentes (todos, o solo los de `roles` por su clave).
+
+    Un error en uno no detiene a los demas.
+    """
     url = conf.normalizar_url_publica(url_publica)
     resultados = []
     for definicion in conf.AGENTES:
+        if roles and definicion.clave not in roles:
+            continue
         try:
             resultados.append(sincronizar_agente(cliente, definicion, url, config))
         except Exception as error:
