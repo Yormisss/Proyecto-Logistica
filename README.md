@@ -25,12 +25,12 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── __init__.py        Application factory
 │   ├── extensions.py      Instancias compartidas (db, login, csrf)
 │   ├── models/            MODELO   — Usuario, Cliente, Producto, Pedido, Ruta, Inventario
-│   ├── controllers/       CONTROLADOR — auth, admin, usuarios, pedidos, inventario, conductor, cliente, asistente
+│   ├── controllers/       CONTROLADOR — auth, admin, usuarios, pedidos, inventario, conductor, cliente, asistente, automatizacion
 │   ├── services/          Lógica de negocio — despacho, ruteo, analítica, importador, asistente, avisos
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               553 verificaciones automatizadas en 9 suites
+├── pruebas/               627 verificaciones automatizadas en 10 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -439,49 +439,9 @@ vez que se reinicia ngrok, y hay que actualizarla en Retell.
 
 ### 3. Make (avisos al cliente por correo)
 
-Cuando un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO**, desde cualquier origen (vista
-móvil, "Iniciar ruta" o asistente de voz), el servidor envía un `POST` a
-`MAKE_WEBHOOK_URL` con este cuerpo:
-
-```json
-{
-  "codigo": "PED-20261005-001",
-  "estado": "EN_RUTA",
-  "cliente": "Supermercado El Portal",
-  "correo": "compras@ejemplo.com",
-  "direccion": "Av. Cra 68 #75-50, Bogota",
-  "ventana": "08:00 - 11:00",
-  "hora": "2026-10-05 09:12"
-}
-```
-
-- Solo sale **después del commit**: un cambio revertido no genera correo.
-- Va en segundo plano, con un timeout de 3 s de conexión y 5 s de respuesta. **Si Make
-  falla o tarda, la operación del conductor no se bloquea ni se revierte**; el fallo
-  queda solo en el log.
-- Si el cliente no tiene correo, no se envía nada.
-
-Configuración del escenario:
-
-1. Cree un escenario con el disparador **Webhooks → Custom webhook** y copie su URL en
-   `MAKE_WEBHOOK_URL`.
-2. Pulse *Redetermine data structure* y provoque un cambio de estado en la aplicación
-   para que Make aprenda los campos.
-3. Agregue un módulo de correo (Gmail, Outlook o *Email → Send an email*) con
-   destinatario `{{correo}}`. Para un texto distinto por estado, use un *Router* con un
-   filtro por `estado` en cada rama.
-
-Para la demo, defina `SEMILLA_CORREO_CLIENTE` en `.env` antes de sembrar: `seed.py`
-asigna ese correo a **Supermercado El Portal**, cuyo pedido de hoy queda **asignado** en
-la ruta de `conductor1@sgds.com`. Los demás clientes sembrados no tienen correo, así que
-no reciben avisos. Sin pasos manuales:
-
-1. Inicie sesión como `conductor1@sgds.com` y abra la parada de Supermercado El Portal.
-2. Márquela en camino, con el botón o por voz ("marca en camino la parada N") → aviso
-   **EN_RUTA**.
-3. Confirme la entrega en pantalla → aviso **ENTREGADO**.
-
-Para repetir la demo, vuelva a sembrar con `reset-db` y `seed.py`.
+Cada cambio de estado que el conductor registra, también por voz, avisa al cliente a
+través de Make. La configuración del escenario y la demo están en
+[Automatizaciones con Make](#automatizaciones-con-make).
 
 ### SDK web: migración pendiente
 
@@ -498,13 +458,189 @@ transporte `gateway` con el `call_id`.
 Cambiar de página corta la llamada; el asistente está pensado para usarse desde la
 pantalla de la ruta sin navegar.
 
+## Automatizaciones con Make
+
+La aplicación se integra con [Make](https://www.make.com) en dos sentidos, ambos
+opcionales: **avisa** a un webhook de Make cuando ocurre algo (escenario 1) y **expone un
+resumen diario** que un escenario programado consulta y envía por correo (escenario 2).
+Sin las variables correspondientes, la aplicación funciona igual y no sale nada.
+
+### Variables
+
+| Variable | Para qué | Si está vacía |
+|---|---|---|
+| `MAKE_WEBHOOK_URL` | URL del *Custom webhook* que recibe los avisos | No se envía ningún aviso |
+| `MAKE_WEBHOOK_KEY` | API key del webhook; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
+| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
+| `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario | El endpoint del resumen responde **404** |
+
+Genere el token con `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
+### Eventos salientes
+
+Todo aviso es un `POST` JSON a `MAKE_WEBHOOK_URL` con un campo **`tipo`**, y todos usan
+el mismo mecanismo:
+
+- Solo sale **después del commit**: un cambio revertido no genera correo.
+- Va en segundo plano, con un timeout de 3 s de conexión y 5 s de respuesta. **Si Make
+  falla o tarda, la operación no se bloquea ni se revierte**; el fallo queda solo en el log.
+
+| `tipo` | Cuándo | Destinatario | Campos |
+|---|---|---|---|
+| `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`; en CANCELADO, además `motivo` |
+| `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora` |
+
+`stock_bajo` avisa **una vez por umbral, al cruzarlo hacia abajo**, y no en cada
+movimiento posterior:
+
+- **Mínimo**: el stock pasa de estar sobre el mínimo a quedar en o por debajo
+  (`previo > stock_minimo >= nuevo`), con `negativo: false`.
+- **Cero**: el stock pasa a ser negativo (`previo >= 0 > nuevo`), con `negativo: true`. Un
+  stock negativo revela un descuadre entre el inventario registrado y el físico.
+- Si un mismo movimiento cruza los dos, sale **un solo aviso** con `negativo: true`.
+- Tras reponer el stock por encima del umbral, un nuevo cruce vuelve a avisar.
+- Cambiar el `stock_minimo` de un producto no es un movimiento de stock, así que no avisa.
+
+```json
+{
+  "tipo": "pedido_estado",
+  "codigo": "PED-20261006-001",
+  "estado": "CANCELADO",
+  "cliente": "Supermercado El Portal",
+  "correo": "compras@ejemplo.com",
+  "direccion": "Av. Cra 68 #75-50, Bogota",
+  "ventana": "08:00 - 11:00",
+  "hora": "2026-10-06 09:12",
+  "motivo": "El cliente cancelo la compra"
+}
+```
+
+```json
+{
+  "tipo": "stock_bajo",
+  "sku": "SKU-1001",
+  "producto": "Caja bebidas 12 und",
+  "stock_actual": 60,
+  "stock_minimo": 60,
+  "negativo": false,
+  "pedido": null,
+  "correo_destino": "operaciones@ejemplo.com",
+  "hora": "2026-10-06 10:40"
+}
+```
+
+### Escenario 1: webhook con router
+
+1. Cree un escenario con el disparador **Webhooks → Custom webhook** y copie su URL en
+   `MAKE_WEBHOOK_URL`. Si le asigna una *API key* al webhook, cópiela en
+   `MAKE_WEBHOOK_KEY`: Make rechazará los avisos que no la traigan.
+2. Pulse *Redetermine data structure* y provoque un evento de cada tipo (ver la demo más
+   abajo) para que Make aprenda todos los campos.
+3. Agregue un **Router** con una ruta por tipo, cada una con un filtro sobre `tipo`:
+   - `tipo` = `pedido_estado` → módulo de correo (Gmail, Outlook o *Email → Send an
+     email*) para `{{correo}}`. Para un texto distinto por estado, anide otro Router con
+     un filtro por `estado`; en la rama de CANCELADO incluya `{{motivo}}`.
+   - `tipo` = `stock_bajo` → correo para `{{correo_destino}}`. Use `negativo` para
+     distinguir en el asunto un stock bajo de un descuadre.
+
+### Escenario 2: resumen diario programado
+
+`GET /api/automatizacion/resumen-diario` devuelve el estado del día (`hoy()` en hora de
+Bogotá):
+
+- Se autentica con el encabezado **`X-Automatizacion-Token`**, comparado en tiempo
+  constante contra `AUTOMATIZACION_TOKEN`. Responde **401** si falta o no coincide, y
+  **404** si la variable no está configurada.
+- `kpis` sale de las mismas funciones que el tablero y la analítica, así que el correo y
+  la pantalla siempre muestran las mismas cifras. `cumplimiento_ventana` es `null` si hoy
+  no hubo entregas con ventana horaria.
+- `fallidos_para_reprogramar` lista los pedidos FALLIDOS de hoy cuyo cliente tiene correo.
+- `resumen_html` es el correo ya armado en español, con estilos en línea y los datos de
+  clientes escapados.
+
+```json
+{
+  "fecha": "2026-10-06",
+  "correo_destino": "operaciones@ejemplo.com",
+  "kpis": {
+    "total": 17, "entregados": 7, "fallidos": 5, "cancelados": 2, "pendientes": 3,
+    "tasa_exito": 58.3, "cumplimiento_ventana": 100.0
+  },
+  "productos_bajo_minimo": [
+    {"sku": "SKU-1003", "producto": "Bolsa arroz 5 kg", "stock_actual": -92,
+     "stock_minimo": 40, "negativo": true}
+  ],
+  "fallidos_para_reprogramar": [
+    {"codigo": "PED-20261006-005", "cliente": "Supermercado El Portal",
+     "correo": "compras@ejemplo.com", "direccion": "Av. Cra 68 #75-50, Bogota",
+     "motivo": "Cliente ausente"}
+  ],
+  "resumen_html": "<div style=\"font-family:Arial…\">…</div>"
+}
+```
+
+Configuración del escenario:
+
+1. Disparador **Schedule** una vez al día, por ejemplo a las 18:00. Fije la zona horaria
+   del escenario en *America/Bogota*.
+2. Módulo **HTTP → Make a request**: método `GET`, URL
+   `https://<su-dominio>/api/automatizacion/resumen-diario`, encabezado
+   `X-Automatizacion-Token` con el valor de `AUTOMATIZACION_TOKEN` y *Parse response*
+   activado. En el plan gratuito de Render la instancia puede estar suspendida y tardar
+   ~30 s en responder; deje el timeout del módulo en 60 s o más.
+3. Módulo de correo para `{{data.correo_destino}}`, con el contenido en **HTML** y el
+   cuerpo `{{data.resumen_html}}`.
+4. Opcional: un **Iterator** sobre `fallidos_para_reprogramar` y un correo por pedido a
+   `{{correo}}`, para que el cliente coordine una nueva visita.
+
+### Demo con los datos sembrados
+
+Defina `MAKE_WEBHOOK_URL`, `CORREO_OPERACIONES` y `SEMILLA_CORREO_CLIENTE` en `.env`
+antes de sembrar. `seed.py` asigna ese correo a **Supermercado El Portal**, cuyo pedido
+de hoy queda **asignado** en la ruta de `conductor1@sgds.com`. Los demás clientes
+sembrados no tienen correo, así que no reciben avisos.
+
+**`pedido_estado`**:
+
+1. Inicie sesión como `conductor1@sgds.com` y abra la parada de Supermercado El Portal.
+2. Márquela en camino, con el botón o por voz ("marca en camino la parada N") → aviso
+   **EN_RUTA**.
+3. Confirme la entrega en pantalla → aviso **ENTREGADO**.
+
+Para ver un aviso **CANCELADO**, anule desde *Pedidos* (como `despachador@sgds.com`) un
+pedido pendiente o asignado de Supermercado El Portal, indicando el motivo.
+
+**`stock_bajo`**: use **SKU-1001 · Caja bebidas 12 und** (mínimo 60). Arranca con 240
+unidades y es el que termina el histórico sembrado sobre su mínimo; los demás quedan por
+debajo y no volverían a avisar hasta reponerse.
+
+1. Inicie sesión como `despachador@sgds.com` y abra *Inventario → SKU-1001*. Si ya
+   aparece en 60 o menos, registre antes una **Entrada** que lo deje sobre 60.
+2. Registre un **Ajuste por inventario físico** con cantidad **60** (o cualquier valor
+   de 1 a 60) → aviso **`stock_bajo`** con `negativo: false` y `pedido: null`.
+3. Para repetirlo, vuelva a subirlo con una Entrada y repita el paso 2.
+
+El formulario de movimientos manuales solo ofrece Entrada y Ajuste, y el ajuste no admite
+valores menores que 1. Por eso el aviso con `negativo: true` solo lo dispara una
+**entrega** que deja el stock por debajo de cero.
+
+**Resumen diario**: con `AUTOMATIZACION_TOKEN` definido, ejecute el escenario 2 con *Run
+once*, o pruébelo desde la terminal:
+
+```bash
+curl -H "X-Automatizacion-Token: $AUTOMATIZACION_TOKEN" \
+     http://localhost:5001/api/automatizacion/resumen-diario
+```
+
+Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
+
 ## Verificación
 
 ```bash
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**553 verificaciones en 9 suites**, todas pasando. Cada suite reinicia y resiembra la
+**627 verificaciones en 10 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
@@ -514,14 +650,17 @@ base, por lo que los resultados son reproducibles.
 | `prueba_03_ruteo.py` | RF3 · OSRM, ordenamientos, respaldo offline | 31 |
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
 | `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
-| `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 66 |
+| `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 67 |
 | `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 |
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
-| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 92 |
+| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 93 |
+| `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 72 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
 Make, y firma las peticiones con el propio SDK de Retell para probar la verificación real.
+La de automatizaciones también corre sin internet: simula Make y registra cada aviso con
+sus encabezados.
 
 ## Medición del RNF2
 
