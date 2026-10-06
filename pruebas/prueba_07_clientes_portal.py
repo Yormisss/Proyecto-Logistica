@@ -13,7 +13,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from run import app
 from app.extensions import db
 from app.models import (
-    Cliente, DireccionCliente, EstadoPedido, Pedido, Rol, Usuario, normalizar_texto,
+    Cliente, DireccionCliente, EstadoPedido, Pedido, PruebaEntrega, Rol, Usuario,
+    normalizar_texto,
 )
 
 fallos = []
@@ -136,21 +137,39 @@ check(NOMBRE_PORTAL in listado, "el listado identifica al cliente de la sesion")
 check(nombre_ajeno not in listado, f"el listado no menciona a otro cliente ({nombre_ajeno})")
 
 print("\n== 6. El portal no filtra datos de la ruta ni de terceros ==")
-detalle = cliente_c.get(f"/portal/pedido/{mio}").data.decode()
-check("RUT-" not in detalle, "no expone el codigo de la ruta")
+# Se revisan dos pedidos propios: uno en curso (el de hoy, asignado a la ruta) y
+# uno entregado, porque solo este ultimo muestra el bloque de prueba de entrega
+# y ese bloque tampoco debe revelar la ruta, el conductor ni notas internas.
 with app.app_context():
     conductores = [
         u.nombre for u in db.session.query(Usuario).filter_by(rol=Rol.CONDUCTOR).all()
     ]
-check(
-    all(nombre not in detalle for nombre in conductores),
-    "no expone el nombre del conductor asignado",
-)
-check("polyline" not in detalle and "geometria" not in detalle, "no expone la geometria del recorrido")
-check(
-    "Creado por importacion" not in detalle and "Carga inicial" not in detalle,
-    "la bitacora se traduce y omite las notas internas",
-)
+    entregado = (
+        db.session.query(Pedido)
+        .join(PruebaEntrega)
+        .filter(Pedido.cliente_id == ID_PORTAL, Pedido.estado == EstadoPedido.ENTREGADO,
+                Pedido.ruta_id.isnot(None))
+        .order_by(Pedido.id)
+        .first()
+        .id
+    )
+
+detalle_entregado = cliente_c.get(f"/portal/pedido/{entregado}").data.decode()
+check("Recibido por" in detalle_entregado, "el pedido entregado muestra su prueba de entrega")
+
+for etiqueta, pedido_id in (("en curso", mio), ("entregado", entregado)):
+    detalle = cliente_c.get(f"/portal/pedido/{pedido_id}").data.decode()
+    check("RUT-" not in detalle, f"no expone el codigo de la ruta ({etiqueta})")
+    check(
+        all(nombre not in detalle for nombre in conductores),
+        f"no expone el nombre del conductor asignado ({etiqueta})",
+    )
+    check("polyline" not in detalle and "geometria" not in detalle,
+          f"no expone la geometria del recorrido ({etiqueta})")
+    check(
+        "Creado por importacion" not in detalle and "Carga inicial" not in detalle,
+        f"la bitacora se traduce y omite las notas internas ({etiqueta})",
+    )
 
 print("\n== 7. Segregacion de funciones entre roles ==")
 for url in ("/admin/", "/pedidos/", "/rutas/", "/inventario/", "/conductor/"):

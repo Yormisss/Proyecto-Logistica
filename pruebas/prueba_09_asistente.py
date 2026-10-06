@@ -404,6 +404,40 @@ with app.app_context():
     check(aplicar(verboso=False) is False, "volver a ejecutarla tampoco")
 
 
+print("\n== 8. Demo de Make con la semilla ==")
+# Se vuelve a sembrar con SEMILLA_CORREO_CLIENTE, como lo haria la demo, y se
+# recorre el camino del conductor sin ningun paso manual.
+import os, subprocess
+from _preparar import PYTHON, RAIZ
+entorno = {**os.environ, "SEMILLA_CORREO_CLIENTE": "demo@portal.invalid"}
+subprocess.run([str(PYTHON), "-m", "flask", "--app", "run", "reset-db"], cwd=RAIZ,
+               capture_output=True, env=entorno)
+subprocess.run([str(PYTHON), "seed.py"], cwd=RAIZ, capture_output=True, env=entorno)
+with app.app_context():
+    db.session.remove()
+    portal = db.session.query(Cliente).filter_by(nombre="Supermercado El Portal").one()
+    check(portal.correo == "demo@portal.invalid", "seed.py asigna SEMILLA_CORREO_CLIENTE a El Portal")
+    check(db.session.query(Cliente).filter(Cliente.correo.isnot(None)).count() == 1,
+          "ningun otro cliente sembrado tiene correo")
+    conductor_demo = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").one()
+    ruta_demo = db.session.query(Ruta).filter_by(conductor_id=conductor_demo.id, fecha=hoy()).one()
+    pedido_demo = next(p for p in ruta_demo.pedidos if p.cliente_id == portal.id)
+    check(pedido_demo.estado == EstadoPedido.ASIGNADO,
+          "el pedido de hoy de El Portal queda ASIGNADO en la ruta de conductor1")
+    pid_demo, orden_demo = pedido_demo.id, pedido_demo.orden_en_ruta
+
+conductor1 = sesion("conductor1@sgds.com", "Conductor123*")
+call_demo = pedir_llamada(conductor1, "/conductor/").get_json()["call_id"]
+envios_antes = len(envios_make)
+funcion("marcar-en-camino", call_demo, {"orden": orden_demo})
+t = token_csrf(conductor1, f"/conductor/parada/{pid_demo}")
+conductor1.post(f"/conductor/parada/{pid_demo}/entregar", data={"csrf_token": t})
+notificaciones.esperar_envios()
+demo = [(e["json"]["estado"], e["json"]["correo"]) for e in envios_make[envios_antes:]]
+check(demo == [("EN_RUTA", "demo@portal.invalid"), ("ENTREGADO", "demo@portal.invalid")],
+      f"en camino por voz y entrega en pantalla generan los dos avisos {demo}")
+
+
 print("\n" + "=" * 55)
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS"))
 for f in fallos: print("   - " + f)

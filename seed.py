@@ -143,11 +143,15 @@ def sembrar_datos():
     db.session.flush()
 
     # Estados variados para que el tablero (RF6) muestre KPIs con datos reales.
+    # Supermercado El Portal (primera fila de DESTINOS) queda ASIGNADO a
+    # proposito: es el cliente que recibe SEMILLA_CORREO_CLIENTE, y asi el
+    # conductor puede marcarlo en camino y luego entregarlo para disparar los
+    # avisos de Make en la demo. Un pedido ya entregado no admite transiciones.
     plan = [
-        (EstadoPedido.ENTREGADO, ruta, 1),
+        (EstadoPedido.ASIGNADO, ruta, 1),
         (EstadoPedido.ENTREGADO, ruta, 2),
         (EstadoPedido.EN_RUTA, ruta, 3),
-        (EstadoPedido.ASIGNADO, ruta, 4),
+        (EstadoPedido.ENTREGADO, ruta, 4),
         (EstadoPedido.FALLIDO, ruta, 5),
         (EstadoPedido.PENDIENTE, None, None),
     ]

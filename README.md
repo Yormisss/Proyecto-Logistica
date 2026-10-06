@@ -30,7 +30,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               530 verificaciones automatizadas en 9 suites
+├── pruebas/               539 verificaciones automatizadas en 9 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -472,8 +472,16 @@ Configuración del escenario:
    filtro por `estado` en cada rama.
 
 Para la demo, defina `SEMILLA_CORREO_CLIENTE` en `.env` antes de sembrar: `seed.py`
-asigna ese correo a **Supermercado El Portal**. Los demás clientes sembrados no tienen
-correo, así que no reciben avisos.
+asigna ese correo a **Supermercado El Portal**, cuyo pedido de hoy queda **asignado** en
+la ruta de `conductor1@sgds.com`. Los demás clientes sembrados no tienen correo, así que
+no reciben avisos. Sin pasos manuales:
+
+1. Inicie sesión como `conductor1@sgds.com` y abra la parada de Supermercado El Portal.
+2. Márquela en camino, con el botón o por voz ("marca en camino la parada N") → aviso
+   **EN_RUTA**.
+3. Confirme la entrega en pantalla → aviso **ENTREGADO**.
+
+Para repetir la demo, vuelva a sembrar con `reset-db` y `seed.py`.
 
 ### SDK web: migración pendiente
 
@@ -496,7 +504,7 @@ pantalla de la ruta sin navegar.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**530 verificaciones en 9 suites**, todas pasando. Cada suite reinicia y resiembra la
+**539 verificaciones en 9 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
@@ -507,9 +515,9 @@ base, por lo que los resultados son reproducibles.
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
 | `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 66 |
-| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 63 |
+| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 |
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
-| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento) y avisos por Make | 74 |
+| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make y demo sembrada | 78 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
@@ -558,8 +566,8 @@ en tabla.
 ## MySQL y MySQL Workbench (fase piloto)
 
 El proyecto corre indistintamente sobre SQLite (desarrollo) o MySQL (piloto).
-**La migración está verificada:** las 13 tablas se crean correctamente y las 530
-pruebas (535 contra MySQL, que suma las verificaciones de claves ajenas propias
+**La migración está verificada:** las 13 tablas se crean correctamente y las 539
+pruebas (544 contra MySQL, que suma las verificaciones de claves ajenas propias
 de ese motor) pasan íntegras contra MySQL 8.0.46.
 
 `docker-compose.yml` no necesita cambios al evolucionar el esquema: solo provisiona
