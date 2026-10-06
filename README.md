@@ -30,7 +30,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               627 verificaciones automatizadas en 10 suites
+├── pruebas/               705 verificaciones automatizadas en 11 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -57,7 +57,7 @@ cp .env.example .env
 .venv/bin/flask --app run reset-db         # Borrar y recrear (solo desarrollo)
 .venv/bin/flask --app run sembrar          # Cargar datos de demostración
 .venv/bin/flask --app run migrar-clientes  # Normalizar clientes en una base con datos
-.venv/bin/flask --app run migrar-asistente # Crear la tabla del asistente de voz
+.venv/bin/flask --app run migrar-asistente # Crear o actualizar la tabla del asistente de voz
 ```
 
 ## Usuarios de demostración
@@ -355,20 +355,45 @@ camino o registra un intento fallido. **Es opcional:** sin `RETELL_API_KEY` y
    cómo habilitarlo y no se crea ninguna llamada.
 2. `POST /asistente/llamada` (sesión iniciada y token CSRF) elige el agente según el rol
    (403 si el rol no tiene), crea la llamada con `retell-sdk` en `/v3/create-web-call`
-   pasando el nombre del usuario como variable dinámica `nombre_usuario`, y guarda
-   `call_id → usuario` en `sesiones_asistente` con una vigencia de **10 minutos**.
+   pasando como variables dinámicas `nombre_usuario` y `fecha_hoy` (hora de Bogotá), y
+   guarda `call_id → usuario` y el rol en `sesiones_asistente` con una vigencia de
+   **10 minutos**.
 3. El navegador se une a la llamada con el SDK web. **La API key nunca sale del
    servidor:** el navegador solo recibe `access_token`, `call_id`, `transport` e
    `ice_servers`, que el transporte "gateway" de v3 necesita para conectarse.
-4. Durante la conversación, Retell invoca las *custom functions*. Cada petición:
+4. Durante la conversación, Retell invoca las *custom functions*, todas en
+   `/api/asistente/<espacio>/<función>`. Un único `before_request` las protege:
+   - la función debe existir en el registro → **404** si no;
    - verifica `X-Retell-Signature` sobre el cuerpo crudo con el método del SDK
      (HMAC con la API key, que además rechaza firmas de más de 5 minutos) → **401** si
      falla;
-   - identifica al conductor por `call.call_id` → **403** si no existe, venció, no es
-     de un conductor o la cuenta fue desactivada;
-   - opera solo sobre **la ruta de hoy de ese conductor**, con las mismas reglas de
-     `despacho.py` que la vista móvil, y deja en la bitácora la nota
-     *"Registrado por el asistente de voz"*.
+   - identifica al usuario por `call.call_id` → **403** si no existe, venció, la cuenta
+     fue desactivada o cambió de rol después de abrir la llamada;
+   - el rol de la sesión debe estar entre los que la función declara → **403** si no:
+     una sesión de un rol no puede llamar las funciones de otro.
+5. Las funciones del conductor operan solo sobre **la ruta de hoy de ese conductor**,
+   con las mismas reglas de `despacho.py` que la vista móvil, y dejan en la bitácora la
+   nota *"Registrado por el asistente de voz"*.
+
+Cada función se declara con `funcion_asistente` (`app/controllers/asistente_api/`),
+que registra sus roles permitidos, su descripción y sus parámetros.
+
+### Confirmación de acciones
+
+Toda función que modifica datos se ejecuta en **dos llamadas**, y la confirmación la
+controla el servidor, no el agente:
+
+1. Sin `confirmar=true`, la función valida, **no cambia nada** y responde un resumen que
+   termina en *"¿confirmas?"*. El servidor guarda en la sesión la huella de la función
+   y sus argumentos. Si la acción no es posible (una transición inválida, por ejemplo),
+   responde el motivo y no pide confirmación.
+2. Con `confirmar=true` solo ejecuta si **esa misma función con exactamente los mismos
+   argumentos** se resumió antes en **esta llamada**, hace **menos de 3 minutos**. La
+   confirmación se consume en la misma transacción que la acción, así que no sirve dos
+   veces. En cualquier otro caso vuelve a resumir sin ejecutar.
+
+Solo queda pendiente un resumen por llamada: pedir otra acción reemplaza el anterior.
+Así, que el LLM mande `confirmar=true` de entrada no basta para cambiar datos.
 
 No hay función para confirmar una entrega: esa acción exige la prueba de entrega (PoD)
 en pantalla y descuenta inventario (RF5).
@@ -384,16 +409,17 @@ en voz alta. Un error de negocio (parada inexistente, transición no permitida) 
 | `mi-ruta` | `/api/asistente/conductor/mi-ruta` | — | Resume la ruta de hoy: paradas entregadas, fallidas, pendientes y la siguiente. Si ya la terminó, el resumen de entregadas, fallidas y canceladas |
 | `siguiente-parada` | `/api/asistente/conductor/siguiente-parada` | — | Primera parada pendiente: cliente, dirección y ventana horaria |
 | `detalle-parada` | `/api/asistente/conductor/detalle-parada` | `orden` (entero) | Cliente, dirección, ventana, estado, unidades, teléfono y observaciones |
-| `marcar-en-camino` | `/api/asistente/conductor/marcar-en-camino` | `orden` (entero) | Pasa la parada a EN_RUTA (también sirve para reintentar una fallida) |
-| `registrar-fallo` | `/api/asistente/conductor/registrar-fallo` | `orden` (entero), `motivo` (texto) | Pasa la parada a FALLIDO con el motivo; no toca el inventario |
+| `marcar-en-camino` | `/api/asistente/conductor/marcar-en-camino` | `orden` (entero), `confirmar` (booleano) | Pasa la parada a EN_RUTA (también sirve para reintentar una fallida). Pide confirmación |
+| `registrar-fallo` | `/api/asistente/conductor/registrar-fallo` | `orden` (entero), `motivo` (texto), `confirmar` (booleano) | Pasa la parada a FALLIDO con el motivo; no toca el inventario. Pide confirmación |
 
 `orden` es el número de la parada en la ruta (el que muestra la vista "Mi ruta").
 
 ### 1. Retell
 
 1. En el panel de Retell, cree un agente en español. En el prompt puede saludar con
-   `{{nombre_usuario}}` y conviene indicarle que **confirme el número de parada antes de
-   marcarla en camino o registrar un fallo**.
+   `{{nombre_usuario}}`. Indíquele que, ante una respuesta que termine en
+   *"¿confirmas?"*, lea el resumen y **solo vuelva a llamar la función, con los mismos
+   argumentos y `confirmar: true`, si el usuario dice que sí**.
 2. En la configuración de la llamada, fije una **duración máxima de 5 minutos**. La
    sesión del lado del servidor dura 10: así una llamada nunca sobrevive a su sesión, y
    las funciones no empiezan a responder 403 a mitad de una conversación.
@@ -405,23 +431,26 @@ en voz alta. Un error de negocio (parada inexistente, transición no permitida) 
    {
      "type": "object",
      "properties": {
-       "orden":  { "type": "integer", "description": "Numero de la parada en la ruta" },
-       "motivo": { "type": "string",  "description": "Por que no se pudo entregar" }
+       "orden":     { "type": "integer", "description": "Numero de la parada en la ruta" },
+       "motivo":    { "type": "string",  "description": "Por que no se pudo entregar" },
+       "confirmar": { "type": "boolean", "description": "true solo si el usuario confirmo el resumen" }
      },
      "required": ["orden", "motivo"]
    }
    ```
 
-   (`detalle-parada` y `marcar-en-camino` solo llevan `orden`). Deje desactivada la
+   (`detalle-parada` solo lleva `orden`, y `marcar-en-camino`, `orden` y `confirmar`).
+   **Sin `confirmar` en el esquema, el agente no puede completar las acciones.** Deje desactivada la
    opción que envía únicamente los argumentos: el servidor necesita el objeto `call`
    del cuerpo para leer el `call_id`.
 4. En `.env`, defina `RETELL_API_KEY` con **la API key que tiene el distintivo de
    webhook** (es la que Retell usa para firmar) y `RETELL_AGENTE_CONDUCTOR_ID` con el
    `agent_id`.
 
-En una base que ya tiene datos, cree la tabla de sesiones con
-`.venv/bin/flask --app run migrar-asistente` (idempotente). `init-db` y `reset-db` la
-crean por su cuenta.
+En una base que ya tiene datos, cree o actualice la tabla de sesiones con
+`.venv/bin/flask --app run migrar-asistente` (idempotente): crea la tabla si falta y le
+agrega las columnas de la confirmación si es anterior. `init-db` y `reset-db` la crean
+completa por su cuenta.
 
 ### 2. ngrok
 
@@ -640,7 +669,7 @@ Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**627 verificaciones en 10 suites**, todas pasando. Cada suite reinicia y resiembra la
+**705 verificaciones en 11 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
@@ -653,8 +682,9 @@ base, por lo que los resultados son reproducibles.
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 67 |
 | `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 |
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
-| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 93 |
+| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 97 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 72 |
+| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, migración | 74 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
