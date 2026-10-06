@@ -173,32 +173,35 @@ with app.app_context():
         check(pedido.prueba_entrega is not None,
               f"{pedido.codigo}: tiene PruebaEntrega (su detalle la puede mostrar)")
 
-    print("\n== 10. seed.py: el historico no oculta el stock insuficiente ==")
-    negativos = db.session.query(Producto).filter(Producto.stock_actual < 0).count()
-    check(negativos > 0,
-          f"al menos un producto quedo con stock negativo en el historico, sin piso en 0 ({negativos})")
+    print("\n== 10. seed.py: inventario final sin negativos y con trazabilidad ==")
+    productos = {p.sku: p for p in db.session.query(Producto).all()}
+    check(all(p.stock_actual >= 0 for p in productos.values()),
+          f"ningun producto queda en negativo tras el historico "
+          f"({ {sku: p.stock_actual for sku, p in productos.items()} })")
+    bajo = sorted(sku for sku, p in productos.items() if p.stock_actual <= p.stock_minimo)
+    check(bajo == ["SKU-1004", "SKU-1006"], f"solo el aceite y el papel quedan bajo su minimo ({bajo})")
+    check(productos["SKU-1001"].stock_actual > productos["SKU-1001"].stock_minimo,
+          "las cajas de bebidas quedan sobre su minimo, para demostrar la alerta")
 
-    # Consistencia aritmetica: sin el `max(..., 0)`, cada SALIDA debe encadenar
-    # exactamente con la anterior (stock_resultante = resultado_previo - cantidad).
-    # Si algun movimiento siguiera forzando el piso en 0, esta cadena se rompe.
-    for producto in db.session.query(Producto).all():
+    # Trazabilidad: la entrada inicial menos las salidas, en orden cronologico,
+    # encadena cada stock_resultante y termina en el stock actual.
+    for producto in productos.values():
         movimientos = (
             db.session.query(MovimientoInventario)
-            .filter_by(producto_id=producto.id, tipo=TipoMovimiento.SALIDA)
-            .order_by(MovimientoInventario.id)
+            .filter_by(producto_id=producto.id)
+            .order_by(MovimientoInventario.registrado_en, MovimientoInventario.id)
             .all()
         )
-        if len(movimientos) < 2:
-            continue
-        inconsistentes = [
-            m for anterior, m in zip(movimientos, movimientos[1:])
-            if m.stock_resultante != anterior.stock_resultante - m.cantidad
-        ]
-        check(
-            not inconsistentes,
-            f"{producto.sku}: la cadena de movimientos de salida es consistente "
-            f"({len(movimientos)} movimientos, {len(inconsistentes)} rotos)",
-        )
+        inicial = movimientos[0] if movimientos else None
+        saldo, rotos = (inicial.cantidad if inicial else 0), 0
+        for m in movimientos[1:]:
+            saldo += m.cantidad if m.tipo == TipoMovimiento.ENTRADA else -m.cantidad
+            rotos += m.stock_resultante != saldo or saldo < 0
+        check(inicial is not None and inicial.tipo == TipoMovimiento.ENTRADA
+              and inicial.stock_resultante == inicial.cantidad and not rotos
+              and saldo == producto.stock_actual,
+              f"{producto.sku}: entrada inicial de {inicial.cantidad if inicial else '?'} y "
+              f"{len(movimientos) - 1} salidas que encadenan hasta {producto.stock_actual} ({rotos} rotos)")
 
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))

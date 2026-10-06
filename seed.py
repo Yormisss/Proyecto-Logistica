@@ -38,12 +38,16 @@ USUARIOS = [
     ("Marcela Rios", "cliente@sgds.com", Rol.CLIENTE, "Cliente123*"),
 ]
 
+# (sku, nombre, stock al terminar la siembra, stock minimo). El stock inicial
+# no es fijo: el historico consume una cantidad que depende de la fecha (salta
+# los domingos), asi que `_cuadrar_inventario` lo calcula para que, despues de
+# todas las entregas sembradas, cada producto quede exactamente en esta cifra.
 PRODUCTOS = [
-    ("SKU-1001", "Caja bebidas 12 und", 240, 60),
-    ("SKU-1002", "Paquete snacks 24 und", 180, 50),
-    ("SKU-1003", "Bolsa arroz 5 kg", 95, 40),
-    ("SKU-1004", "Aceite vegetal 1 L", 30, 45),   # Bajo minimo: alimenta la alerta
-    ("SKU-1005", "Detergente 2 kg", 120, 30),
+    ("SKU-1001", "Caja bebidas 12 und", 72, 60),   # Sobre el minimo: demo de la alerta
+    ("SKU-1002", "Paquete snacks 24 und", 120, 50),
+    ("SKU-1003", "Bolsa arroz 5 kg", 80, 40),
+    ("SKU-1004", "Aceite vegetal 1 L", 30, 45),    # Bajo minimo: alimenta la alerta
+    ("SKU-1005", "Detergente 2 kg", 90, 30),
     ("SKU-1006", "Papel higienico 12 rollos", 18, 25),  # Bajo minimo
 ]
 
@@ -121,8 +125,9 @@ def sembrar_datos():
 
     # --- Inventario ---
     productos = []
-    for sku, nombre, stock, minimo in PRODUCTOS:
-        producto = Producto(sku=sku, nombre=nombre, stock_actual=stock, stock_minimo=minimo)
+    # Nacen en cero: `_cuadrar_inventario` registra al final la entrada inicial.
+    for sku, nombre, _, minimo in PRODUCTOS:
+        producto = Producto(sku=sku, nombre=nombre, stock_actual=0, stock_minimo=minimo)
         productos.append(producto)
         db.session.add(producto)
     db.session.flush()
@@ -237,6 +242,7 @@ def sembrar_datos():
 
     # Historico de operacion, necesario para que la analitica tenga series.
     _generar_historico(usuarios, productos, resolutor, dias=21)
+    _cuadrar_inventario(productos, usuarios["despachador@sgds.com"], desde=hoy - timedelta(days=21))
 
     print("Datos de demostracion cargados.")
     print("-" * 58)
@@ -394,6 +400,39 @@ def _generar_historico(usuarios, productos, resolutor, dias=21):
     print(f"Historico generado: {total} pedidos en {dias} dias previos.")
     print(f"Clientes normalizados: {db.session.query(Cliente).count()}"
           f" (sin repetirse entre los {total} pedidos del historico).")
+
+
+def _cuadrar_inventario(productos, despachador, desde):
+    """Registra el inventario inicial para que el stock final sea el de PRODUCTOS.
+
+    Las entregas sembradas se descontaron partiendo de cero. Aqui se suma lo
+    consumido por cada producto al stock final deseado, se registra esa cifra
+    como la ENTRADA inicial (fechada antes del primer dia del historico) y se
+    recalcula el `stock_resultante` de cada salida en orden cronologico. Asi
+    el inventario nunca pasa por negativo y su trazabilidad cuadra: entrada
+    inicial menos salidas igual al stock actual.
+    """
+    finales = {sku: stock for sku, _, stock, _ in PRODUCTOS}
+    for producto in productos:
+        salidas = (
+            db.session.query(MovimientoInventario)
+            .filter_by(producto_id=producto.id, tipo=TipoMovimiento.SALIDA)
+            .order_by(MovimientoInventario.registrado_en, MovimientoInventario.id)
+            .all()
+        )
+        inicial = finales[producto.sku] + sum(m.cantidad for m in salidas)
+        db.session.add(MovimientoInventario(
+            producto_id=producto.id, usuario_id=despachador.id, tipo=TipoMovimiento.ENTRADA,
+            cantidad=inicial, stock_resultante=inicial,
+            motivo="Inventario inicial de demostracion",
+            registrado_en=datetime.combine(desde, time(5, 0)),
+        ))
+        saldo = inicial
+        for movimiento in salidas:
+            saldo -= movimiento.cantidad
+            movimiento.stock_resultante = saldo
+        producto.stock_actual = saldo
+    db.session.commit()
 
 
 def _trazar_ruta_demo(ruta):

@@ -661,8 +661,8 @@ Bogotá):
     "tasa_exito": 58.3, "cumplimiento_ventana": 100.0
   },
   "productos_bajo_minimo": [
-    {"sku": "SKU-1003", "producto": "Bolsa arroz 5 kg", "stock_actual": -92,
-     "stock_minimo": 40, "negativo": true}
+    {"sku": "SKU-1004", "producto": "Aceite vegetal 1 L", "stock_actual": 30,
+     "stock_minimo": 45, "negativo": false}
   ],
   "fallidos_para_reprogramar": [
     {"codigo": "PED-20261006-005", "cliente": "Supermercado El Portal",
@@ -704,12 +704,24 @@ sembrados no tienen correo, así que no reciben avisos.
 Para ver un aviso **CANCELADO**, anule desde *Pedidos* (como `despachador@sgds.com`) un
 pedido pendiente o asignado de Supermercado El Portal, indicando el motivo.
 
-**`stock_bajo`**: use **SKU-1001 · Caja bebidas 12 und** (mínimo 60). Arranca con 240
-unidades y es el que termina el histórico sembrado sobre su mínimo; los demás quedan por
-debajo y no volverían a avisar hasta reponerse.
+**`stock_bajo`**: la semilla deja el inventario así, sin ningún producto en negativo:
 
-1. Inicie sesión como `despachador@sgds.com` y abra *Inventario → SKU-1001*. Si ya
-   aparece en 60 o menos, registre antes una **Entrada** que lo deje sobre 60.
+| SKU | Producto | Stock | Mínimo |
+|---|---|---|---|
+| SKU-1001 | Caja bebidas 12 und | 72 | 60 |
+| SKU-1002 | Paquete snacks 24 und | 120 | 50 |
+| SKU-1003 | Bolsa arroz 5 kg | 80 | 40 |
+| SKU-1004 | Aceite vegetal 1 L | **30** | 45 |
+| SKU-1005 | Detergente 2 kg | 90 | 30 |
+| SKU-1006 | Papel higiénico 12 rollos | **18** | 25 |
+
+Solo el aceite y el papel quedan bajo su mínimo, para que el tablero tenga alertas. Las
+cifras finales son fijas: `seed.py` calcula el inventario inicial de cada producto a
+partir de lo que consume el histórico (que depende de la fecha) y lo registra como una
+entrada, de modo que la trazabilidad cuadra.
+
+1. Inicie sesión como `despachador@sgds.com` y abra *Inventario → SKU-1001*, que está en
+   72, sobre su mínimo de 60. Si ya bajó a 60 o menos, registre antes una **Entrada**.
 2. Registre un **Ajuste por inventario físico** con cantidad **60** (o cualquier valor
    de 1 a 60) → aviso **`stock_bajo`** con `negativo: false` y `pedido: null`.
 3. Para repetirlo, vuelva a subirlo con una Entrada y repita el paso 2.
