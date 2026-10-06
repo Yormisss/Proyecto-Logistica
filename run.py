@@ -4,6 +4,7 @@ Uso:
     flask --app run init-db          Crea el esquema de la base de datos
     flask --app run sembrar          Carga datos de demostracion
     flask --app run migrar-clientes  Normaliza clientes en una base con datos
+    flask --app run migrar-asistente Crea la tabla del asistente de voz
     python run.py                    Levanta el servidor de desarrollo
 """
 
@@ -55,6 +56,14 @@ def migrar_clientes():
     nuevas pero no columnas nuevas, y aqui `pedidos` gana dos claves ajenas.
     """
     from migraciones.m001_clientes_y_direcciones import aplicar
+
+    aplicar()
+
+
+@app.cli.command("migrar-asistente")
+def migrar_asistente():
+    """Crea la tabla de sesiones del asistente de voz en una base existente."""
+    from migraciones.m002_sesiones_asistente import aplicar
 
     aplicar()
 

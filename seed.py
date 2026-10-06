@@ -5,6 +5,7 @@ una flota reducida y pedidos de ultima milla con ventanas horarias comerciales
 (numeral 1.4 - Fase de implementacion piloto).
 """
 
+import os
 from datetime import datetime, time, timedelta
 
 from app.extensions import db
@@ -62,6 +63,9 @@ DESTINOS = [
 SEDE_ADICIONAL = ("Supermercado El Portal", "Sede Toberin", "Av. Cra 19 #166-30",
                   4.7398, -74.0301, time(9, 0), time(12, 0))
 
+# Cliente que recibe el correo de SEMILLA_CORREO_CLIENTE (demo de avisos por Make).
+CLIENTE_CORREO_DEMO = "Supermercado El Portal"
+
 
 def sembrar_datos():
     db.create_all()
@@ -106,6 +110,13 @@ def sembrar_datos():
 
     # Cuenta del portal: se vincula al primer cliente (relacion 1 a 0..1).
     resolutor.cliente(DESTINOS[0][0]).usuario_id = usuarios["cliente@sgds.com"].id
+
+    # Correo de la demo de avisos por Make. Se toma del entorno y no se fija
+    # aqui porque el escenario envia correos reales: sin la variable, ningun
+    # cliente sembrado tiene correo y no sale ningun aviso.
+    correo_demo = os.getenv("SEMILLA_CORREO_CLIENTE", "").strip()
+    if correo_demo:
+        resolutor.cliente(CLIENTE_CORREO_DEMO).correo = correo_demo
     db.session.flush()
 
     # --- Inventario ---

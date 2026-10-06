@@ -32,6 +32,17 @@ class ConfiguracionBase:
     CD_LAT = float(os.getenv("CD_LAT", "4.6482837"))
     CD_LNG = float(os.getenv("CD_LNG", "-74.2478938"))
 
+    # Asistente de voz (Retell AI). Sin la clave o sin el agente del rol, el
+    # boton del asistente no se muestra y el resto de la aplicacion no cambia.
+    # La clave solo se usa en el servidor: crea la llamada web y verifica la
+    # firma de las custom functions; nunca se envia al navegador.
+    RETELL_API_KEY = os.getenv("RETELL_API_KEY", "")
+    RETELL_AGENTE_CONDUCTOR_ID = os.getenv("RETELL_AGENTE_CONDUCTOR_ID", "")
+
+    # Avisos al cliente por correo a traves de un escenario de Make. Vacio = no
+    # se envia ningun aviso.
+    MAKE_WEBHOOK_URL = os.getenv("MAKE_WEBHOOK_URL", "")
+
 
 class ConfiguracionDesarrollo(ConfiguracionBase):
     DEBUG = True
