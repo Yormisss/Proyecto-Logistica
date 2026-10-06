@@ -19,6 +19,7 @@ from app.models import (
     EventoPedido,
     MedicionRendimiento,
     Pedido,
+    Producto,
     PruebaEntrega,
     Rol,
     Ruta,
@@ -29,6 +30,57 @@ from app.models import (
 # --------------------------------------------------------------------------
 # Operacion
 # --------------------------------------------------------------------------
+
+def kpis_del_dia(fecha=None):
+    """RF6 - Tablero de Control: KPIs fundamentales del prototipo.
+
+    1. Total de entregas del dia
+    2. Entregas pendientes
+    3. Porcentaje de exito de entrega
+
+    Es la unica definicion de estos indicadores: la usan el tablero y el
+    resumen diario que consulta Make.
+    """
+    fecha = fecha or hoy()
+
+    conteos = dict(
+        db.session.query(Pedido.estado, func.count(Pedido.id))
+        .filter(Pedido.fecha_despacho == fecha)
+        .group_by(Pedido.estado)
+        .all()
+    )
+
+    total = sum(conteos.values())
+    entregados = conteos.get(EstadoPedido.ENTREGADO, 0)
+    fallidos = conteos.get(EstadoPedido.FALLIDO, 0)
+    pendientes = sum(conteos.get(estado, 0) for estado in EstadoPedido.ABIERTOS)
+    cerrados = entregados + fallidos
+
+    return {
+        "fecha": fecha,
+        "total_dia": total,
+        "entregados": entregados,
+        "fallidos": fallidos,
+        "cancelados": conteos.get(EstadoPedido.CANCELADO, 0),
+        "pendientes": pendientes,
+        "en_ruta": conteos.get(EstadoPedido.EN_RUTA, 0),
+        "sin_asignar": conteos.get(EstadoPedido.PENDIENTE, 0),
+        "porcentaje_exito": round(entregados * 100 / cerrados, 1) if cerrados else 0.0,
+        "conteos": conteos,
+    }
+
+
+def productos_bajo_minimo(limite=None):
+    """Productos activos en o por debajo de su stock minimo, el mas critico primero."""
+    consulta = (
+        db.session.query(Producto)
+        .filter(Producto.activo.is_(True), Producto.stock_actual <= Producto.stock_minimo)
+        .order_by(Producto.stock_actual, Producto.sku)
+    )
+    if limite:
+        consulta = consulta.limit(limite)
+    return consulta.all()
+
 
 def serie_entregas(dias=14, hasta=None):
     """Entregas cerradas por dia, separadas en exitosas y fallidas."""

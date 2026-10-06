@@ -82,13 +82,12 @@ def aviso_estado_pedido(pedido, motivo=None):
     if not correo:
         return
 
-    direccion = f"{pedido.direccion}, {pedido.ciudad}" if pedido.ciudad else pedido.direccion
     datos = {
         "codigo": pedido.codigo,
         "estado": pedido.estado,
         "cliente": pedido.cliente_nombre,
         "correo": correo,
-        "direccion": direccion,
+        "direccion": pedido.direccion_completa,
         "ventana": pedido.ventana_texto,
         "hora": _hora(),
     }

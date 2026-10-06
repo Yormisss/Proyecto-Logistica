@@ -143,6 +143,7 @@ def _registrar_extensiones(app):
 def _registrar_controladores(app):
     from app.controllers.asistente import asistente_bp
     from app.controllers.asistente_api import asistente_api_bp
+    from app.controllers.automatizacion_api import automatizacion_api_bp
     from app.controllers.auth import auth_bp
     from app.controllers.admin import admin_bp
     from app.controllers.cliente import cliente_bp
@@ -171,6 +172,10 @@ def _registrar_controladores(app):
     # X-Retell-Signature y el call_id (ver app/controllers/asistente_api.py).
     csrf.exempt(asistente_api_bp)
     app.register_blueprint(asistente_api_bp, url_prefix="/api/asistente/conductor")
+    # Make consulta el resumen diario desde sus servidores; se autentica con
+    # X-Automatizacion-Token (ver app/controllers/automatizacion_api.py).
+    csrf.exempt(automatizacion_api_bp)
+    app.register_blueprint(automatizacion_api_bp, url_prefix="/api/automatizacion")
 
 
 def _registrar_errores(app):

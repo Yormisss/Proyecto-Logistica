@@ -135,6 +135,10 @@ class Pedido(db.Model):
             return f"{self.ventana_inicio.strftime('%H:%M')} - {self.ventana_fin.strftime('%H:%M')}"
         return "Sin restriccion"
 
+    @property
+    def direccion_completa(self):
+        return f"{self.direccion}, {self.ciudad}" if self.ciudad else self.direccion
+
     def __repr__(self):
         return f"<Pedido {self.codigo} {self.estado}>"
 

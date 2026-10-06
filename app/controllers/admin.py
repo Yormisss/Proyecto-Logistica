@@ -12,53 +12,17 @@ from flask import request
 
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
-from app.models import EstadoPedido, Pedido, Producto, Rol, Ruta, Usuario
+from app.models import Rol, Ruta, Usuario
 from app.services import analitica
-from app.tiempo import hoy
 
 admin_bp = Blueprint("admin", __name__)
-
-
-def calcular_kpis(fecha=None):
-    """RF6 - Tablero de Control: KPIs fundamentales del prototipo.
-
-    1. Total de entregas del dia
-    2. Entregas pendientes
-    3. Porcentaje de exito de entrega
-    """
-    fecha = fecha or hoy()
-
-    conteos = dict(
-        db.session.query(Pedido.estado, func.count(Pedido.id))
-        .filter(Pedido.fecha_despacho == fecha)
-        .group_by(Pedido.estado)
-        .all()
-    )
-
-    total = sum(conteos.values())
-    entregados = conteos.get(EstadoPedido.ENTREGADO, 0)
-    fallidos = conteos.get(EstadoPedido.FALLIDO, 0)
-    pendientes = sum(conteos.get(estado, 0) for estado in EstadoPedido.ABIERTOS)
-    cerrados = entregados + fallidos
-
-    return {
-        "fecha": fecha,
-        "total_dia": total,
-        "entregados": entregados,
-        "fallidos": fallidos,
-        "pendientes": pendientes,
-        "en_ruta": conteos.get(EstadoPedido.EN_RUTA, 0),
-        "sin_asignar": conteos.get(EstadoPedido.PENDIENTE, 0),
-        "porcentaje_exito": round(entregados * 100 / cerrados, 1) if cerrados else 0.0,
-        "conteos": conteos,
-    }
 
 
 @admin_bp.route("/")
 @login_required
 @requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
 def dashboard():
-    kpis = calcular_kpis()
+    kpis = analitica.kpis_del_dia()
 
     rutas_hoy = (
         db.session.query(Ruta)
@@ -66,13 +30,7 @@ def dashboard():
         .order_by(Ruta.codigo)
         .all()
     )
-    productos_criticos = (
-        db.session.query(Producto)
-        .filter(Producto.activo.is_(True), Producto.stock_actual <= Producto.stock_minimo)
-        .order_by(Producto.stock_actual)
-        .limit(8)
-        .all()
-    )
+    productos_criticos = analitica.productos_bajo_minimo(limite=8)
     conductores_activos = (
         db.session.query(func.count(Usuario.id))
         .filter(Usuario.rol == Rol.CONDUCTOR, Usuario.activo.is_(True))

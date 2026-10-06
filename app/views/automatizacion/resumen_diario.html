@@ -1,0 +1,68 @@
+{#- Cuerpo del correo del resumen diario. Make lo envia tal cual, asi que los
+    estilos van en linea (los clientes de correo ignoran las hojas de estilo).
+    Los datos de clientes y productos pasan por el autoescape de Jinja. -#}
+{%- set celda = "padding:6px 10px;border-bottom:1px solid #e3e7ee;text-align:left;" -%}
+{%- set encabezado = celda ~ "background:#f3f5f9;font-weight:600;" -%}
+<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2937;max-width:640px;">
+  <h2 style="margin:0 0 4px;font-size:20px;">Resumen de la operación del {{ fecha.strftime('%d/%m/%Y') }}</h2>
+  <p style="margin:0 0 16px;color:#4b5563;">Pedidos con fecha de despacho de hoy.</p>
+
+  <table style="border-collapse:collapse;width:100%;margin-bottom:20px;">
+    <tr><th style="{{ encabezado }}" colspan="2">Indicadores del día</th></tr>
+    <tr><td style="{{ celda }}">Pedidos del día</td><td style="{{ celda }}"><strong>{{ kpis.total }}</strong></td></tr>
+    <tr><td style="{{ celda }}">Entregados</td><td style="{{ celda }}">{{ kpis.entregados }}</td></tr>
+    <tr><td style="{{ celda }}">Fallidos</td><td style="{{ celda }}">{{ kpis.fallidos }}</td></tr>
+    <tr><td style="{{ celda }}">Cancelados</td><td style="{{ celda }}">{{ kpis.cancelados }}</td></tr>
+    <tr><td style="{{ celda }}">Pendientes</td><td style="{{ celda }}">{{ kpis.pendientes }}</td></tr>
+    <tr><td style="{{ celda }}">Tasa de éxito</td><td style="{{ celda }}">{{ kpis.tasa_exito }}%</td></tr>
+    <tr>
+      <td style="{{ celda }}">Cumplimiento de ventana horaria</td>
+      <td style="{{ celda }}">
+        {%- if kpis.cumplimiento_ventana is none %}Sin entregas con ventana horaria{% else %}{{ kpis.cumplimiento_ventana }}%{% endif -%}
+      </td>
+    </tr>
+  </table>
+
+  <h3 style="margin:0 0 8px;font-size:16px;">Productos bajo el stock mínimo</h3>
+  {% if productos %}
+  <table style="border-collapse:collapse;width:100%;margin-bottom:20px;">
+    <tr>
+      <th style="{{ encabezado }}">SKU</th><th style="{{ encabezado }}">Producto</th>
+      <th style="{{ encabezado }}">Stock</th><th style="{{ encabezado }}">Mínimo</th>
+    </tr>
+    {% for producto in productos %}
+    <tr>
+      <td style="{{ celda }}">{{ producto.sku }}</td>
+      <td style="{{ celda }}">{{ producto.producto }}</td>
+      <td style="{{ celda }}{{ 'color:#b91c1c;font-weight:600;' if producto.negativo }}">{{ producto.stock_actual }}</td>
+      <td style="{{ celda }}">{{ producto.stock_minimo }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if productos | selectattr('negativo') | list %}
+  <p style="margin:-12px 0 20px;color:#b91c1c;">Un stock negativo indica un descuadre entre el inventario registrado y el físico.</p>
+  {% endif %}
+  {% else %}
+  <p style="margin:0 0 20px;">Ningún producto está bajo el mínimo.</p>
+  {% endif %}
+
+  <h3 style="margin:0 0 8px;font-size:16px;">Entregas fallidas para reprogramar</h3>
+  {% if fallidos %}
+  <table style="border-collapse:collapse;width:100%;">
+    <tr>
+      <th style="{{ encabezado }}">Pedido</th><th style="{{ encabezado }}">Cliente</th>
+      <th style="{{ encabezado }}">Dirección</th><th style="{{ encabezado }}">Motivo</th>
+    </tr>
+    {% for pedido in fallidos %}
+    <tr>
+      <td style="{{ celda }}">{{ pedido.codigo }}</td>
+      <td style="{{ celda }}">{{ pedido.cliente }}<br><span style="color:#4b5563;">{{ pedido.correo }}</span></td>
+      <td style="{{ celda }}">{{ pedido.direccion }}</td>
+      <td style="{{ celda }}">{{ pedido.motivo or 'Sin motivo registrado' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p style="margin:0;">No hay entregas fallidas de hoy con clientes a quienes escribir.</p>
+  {% endif %}
+</div>

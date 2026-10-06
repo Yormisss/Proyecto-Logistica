@@ -189,7 +189,6 @@ with app.app_context():
 print("\n== 9. CANCELADO se excluye de la tasa de exito, pendientes y productividad ==")
 with app.app_context():
     from datetime import timedelta as td2
-    from app.controllers.admin import calcular_kpis
 
     dia_cancel = hoy() - td2(days=260)
     despachador = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").first()
@@ -209,7 +208,7 @@ with app.app_context():
         ))
     db.session.commit()
 
-    kpis = calcular_kpis(fecha=dia_cancel)
+    kpis = analitica.kpis_del_dia(fecha=dia_cancel)
     check(kpis["total_dia"] == 3, f"el dia cuenta los 3 pedidos, cancelado incluido ({kpis['total_dia']})")
     check(kpis["pendientes"] == 0, "el pedido cancelado no cuenta como pendiente")
     check(
