@@ -25,6 +25,10 @@ DURACION_MAXIMA_MS = 5 * 60 * 1000    # la sesion del servidor dura 10 minutos
 SILENCIO_MAXIMO_MS = 20 * 1000        # cuelga tras 20 s sin que el usuario hable
 TIEMPO_FUNCION_MS = 15 * 1000         # las funciones responden en milisegundos
 
+# "Talk While Waiting": mientras la funcion responde, el agente dice esta frase
+# tal cual (static_text), en vez de quedarse en silencio o improvisar una.
+FRASE_ESPERA = "Un momento, lo reviso."
+
 # Variables dinamicas que el servidor envia al crear la llamada.
 VARIABLES_DINAMICAS = {"nombre_usuario": "", "fecha_hoy": ""}
 
@@ -105,7 +109,9 @@ def herramientas(definicion, url_publica):
             "method": "POST",
             "parameters": parametros(funcion),
             "args_at_root": False,
-            "speak_during_execution": False,
+            "speak_during_execution": True,
+            "execution_message_type": "static_text",
+            "execution_message_description": FRASE_ESPERA,
             "speak_after_execution": True,
             "timeout_ms": TIEMPO_FUNCION_MS,
         }
@@ -151,6 +157,8 @@ def generar_documento():
         "- Funciones: método `POST`, URL `<URL_PUBLICA>` + la ruta indicada, con la opción de enviar",
         "  solo los argumentos **desactivada** (`args_at_root: false`): el servidor necesita el objeto",
         "  `call` del cuerpo para leer el `call_id`.",
+        f"- *Talk While Waiting* activado en todas las funciones, con el texto fijo \"{FRASE_ESPERA}\"",
+        "  (`speak_during_execution: true`, `execution_message_type: static_text`).",
         "- Después de cambiar un agente existente, publique la nueva versión: las llamadas web usan",
         "  la última versión publicada.",
         "",

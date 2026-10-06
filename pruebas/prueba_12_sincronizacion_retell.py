@@ -123,6 +123,9 @@ def llm_de(agent_id):
     return retell.llms[retell.publicada(agent_id)["response_engine"]["llm_id"]]
 
 
+from retell.types.llm_create_params import GeneralToolCustomTool
+CAMPOS_HERRAMIENTA = set(GeneralToolCustomTool.__annotations__)
+
 print("\n== 1. Configuracion de cada agente ==")
 ESPERADAS = {"conductor": 5, "gestor": 14, "admin": 20, "cliente": 8}
 with app.app_context():
@@ -137,6 +140,11 @@ with app.app_context():
                   for t in tools), f"{definicion.clave}: POST, sin 'args only' y con la URL publica")
         check(all(set(t["parameters"].get("required", [])) <= set(t["parameters"]["properties"]) for t in tools),
               f"{definicion.clave}: los parametros requeridos estan declarados")
+        check(all(t["speak_during_execution"] is True and t["execution_message_type"] == "static_text"
+                  and t["execution_message_description"] == "Un momento, lo reviso." for t in tools),
+              f"{definicion.clave}: Talk While Waiting con 'Un momento, lo reviso.' en todas las funciones")
+        check(all(set(t) <= CAMPOS_HERRAMIENTA for t in tools),
+              f"{definicion.clave}: solo usa campos que el SDK define para una herramienta custom")
         acciones = [t for t in tools if FUNCIONES[(t["url"].split("/")[-2], t["name"])].accion]
         check(acciones and all("confirmar" in t["parameters"]["properties"]
                                 and "confirmar" not in t["parameters"].get("required", []) for t in acciones),

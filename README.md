@@ -477,7 +477,8 @@ repositorio (`app/asistentes/`), y un comando los aplica en Retell por API:
    español latino (`es-419`), **duración máxima de 5 minutos** (la sesión del servidor dura
    10, así una llamada nunca sobrevive a su sesión) y **fin tras 20 segundos de
    silencio**, y con sus funciones en `POST`, sin la opción de enviar solo los argumentos
-   (el servidor necesita el objeto `call` para leer el `call_id`).
+   (el servidor necesita el objeto `call` para leer el `call_id`) y con *Talk While
+   Waiting*: mientras una función responde, el agente dice *"Un momento, lo reviso."*
 3. Copie al `.env` (y a las variables del despliegue) los `agent_id` que imprime para
    los agentes nuevos.
 

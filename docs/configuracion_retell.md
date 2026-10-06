@@ -15,6 +15,8 @@ Ajustes comunes de cada agente:
 - Funciones: método `POST`, URL `<URL_PUBLICA>` + la ruta indicada, con la opción de enviar
   solo los argumentos **desactivada** (`args_at_root: false`): el servidor necesita el objeto
   `call` del cuerpo para leer el `call_id`.
+- *Talk While Waiting* activado en todas las funciones, con el texto fijo "Un momento, lo reviso."
+  (`speak_during_execution: true`, `execution_message_type: static_text`).
 - Después de cambiar un agente existente, publique la nueva versión: las llamadas web usan
   la última versión publicada.
 
