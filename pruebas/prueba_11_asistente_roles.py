@@ -556,6 +556,84 @@ s = accion("gestor/crear-pedido", CALL_A, {**pedido_voz, "productos": [{"product
 check("creé el pedido" in mensaje(s), "el admin tambien puede usar las funciones del gestor")
 
 
+print("\n== 9. Admin: analitica ==")
+with app.app_context():
+    t14 = analitica.tiempo_promedio_entrega(14)
+    v30 = analitica.cumplimiento_ventana(30)
+    prod14 = analitica.productividad_conductores(14)
+    motivos14 = analitica.motivos_fallo(14)
+s = funcion("admin/tiempo-promedio-entrega", CALL_A)
+check(f"{t14['promedio_min']:.0f} minutos" in mensaje(s) and f"{t14['muestras']} entregas" in mensaje(s)
+      and "14 días" in mensaje(s), f"tiempo promedio con el periodo por defecto del panel: {mensaje(s)}")
+s = funcion("admin/cumplimiento-ventana", CALL_A, {"dias": 30})
+check(f"{v30['dentro']} de {v30['total']}" in mensaje(s) and "30 días" in mensaje(s),
+      f"cumplimiento de ventana a 30 dias: {mensaje(s)}")
+s = funcion("admin/cumplimiento-ventana", CALL_A, {"dias": 99})
+check("14 días" in mensaje(s), "un periodo que el panel no ofrece usa el de por defecto")
+s = funcion("admin/productividad-conductores", CALL_A)
+check(prod14 and prod14[0]["conductor"] in mensaje(s) and f"{prod14[0]['entregadas']} entregadas" in mensaje(s),
+      f"productividad por conductor: {mensaje(s)}")
+s = funcion("admin/causas-fallo", CALL_A)
+check(motivos14 and f"{motivos14[0]['motivo']}, {motivos14[0]['cantidad']}" in mensaje(s),
+      f"causas de fallo de la mas frecuente: {mensaje(s)}")
+with app.app_context():
+    from app.models import ENDPOINTS_CRITICOS, MedicionRendimiento, UMBRAL_MAXIMO_MS
+    critico = next(iter(ENDPOINTS_CRITICOS))
+    for ms in (120.0, 180.0, UMBRAL_MAXIMO_MS + 500):
+        db.session.add(MedicionRendimiento(endpoint=critico, metodo="GET", estado_http=200,
+                                           duracion_ms=ms, registrado_en=ahora()))
+    db.session.commit()
+    rend = analitica.rendimiento(24)
+s = funcion("admin/resumen-rendimiento", CALL_A)
+check(f"{rend['muestras']} mediciones" in mensaje(s) and "percentil 95" in mensaje(s)
+      and ENDPOINTS_CRITICOS[critico] in mensaje(s),
+      f"resumen del panel de rendimiento, con lo que supera el limite: {mensaje(s)}")
+
+
+print("\n== 10. Admin: ajuste de inventario ==")
+app.config["CORREO_OPERACIONES"] = "operaciones@sgds.invalid"
+with app.app_context():
+    sku = db.session.query(Producto).filter_by(sku="SKU-1001").one()
+    stock_antes, minimo = sku.stock_actual, sku.stock_minimo
+antes = huella()
+s = funcion("admin/ajustar-inventario", CALL_G, {"producto": "SKU-1001", "valor": 5, "motivo": "Conteo"})
+check(s[0] == 403, "un ajuste de inventario desde una sesion de gestor: 403")
+for args, esperado, que in (
+        ({"producto": "SKU-1001", "valor": 5, "motivo": ""}, "Necesito el motivo", "sin motivo"),
+        ({"producto": "SKU-1001", "valor": -1, "motivo": "Conteo"}, "mayor o igual a cero", "valor negativo"),
+        ({"producto": "SKU-1001", "valor": stock_antes, "motivo": "Conteo"}, "no hay nada que ajustar",
+         "al mismo valor"),
+        ({"producto": "galletas", "valor": 5, "motivo": "Conteo"}, "No encontré el producto", "producto inexistente")):
+    s = accion("admin/ajustar-inventario", CALL_A, args)
+    check(esperado in mensaje(s), f"rechaza un ajuste {que}")
+s = funcion("admin/ajustar-inventario", CALL_A, {"producto": "SKU-1001", "valor": minimo - 10,
+                                                "motivo": "Conteo fisico de octubre"})
+check(mensaje(s) == f"Voy a ajustar el inventario de SKU-1001, Caja bebidas 12 und: el stock pasa de "
+      f"{stock_antes} a {minimo - 10}, por: Conteo fisico de octubre. ¿confirmas?",
+      "la confirmacion lee el stock actual, el nuevo valor y el motivo")
+check(huella() == antes, "ni el 403, ni los rechazos, ni el resumen cambian datos")
+envios_antes = len(envios_make)
+s = funcion("admin/ajustar-inventario", CALL_A, {"producto": "SKU-1001", "valor": minimo - 10,
+                                                "motivo": "Conteo fisico de octubre", "confirmar": True})
+notificaciones.esperar_envios()
+with app.app_context():
+    from app.models import MovimientoInventario, TipoMovimiento
+    prod = db.session.query(Producto).filter_by(sku="SKU-1001").one()
+    mov = db.session.query(MovimientoInventario).order_by(MovimientoInventario.id.desc()).first()
+    check(prod.stock_actual == minimo - 10 and mov.tipo == TipoMovimiento.AJUSTE
+          and mov.motivo == f"Conteo fisico de octubre. {NOTA}", "registra el AJUSTE con el motivo y la nota")
+stock_bajo = [e for e in envios_make[envios_antes:] if e.get("tipo") == "stock_bajo"]
+check(len(stock_bajo) == 1 and stock_bajo[0]["sku"] == "SKU-1001" and stock_bajo[0]["pedido"] is None
+      and stock_bajo[0]["negativo"] is False,
+      "al cruzar el minimo envia el mismo aviso stock_bajo que la pantalla")
+
+nombres = [f"{f.espacio}/{f.nombre}" for f in FUNCIONES.values()]
+check(not [n for n in nombres if re.search(r"usuario|rol|contrasena|clave|activar|cuenta", n)],
+      "no hay ninguna funcion de voz sobre usuarios, roles, contrasenas o cuentas")
+check(not any(f.espacio == "admin" and Rol.DESPACHADOR in f.roles for f in FUNCIONES.values()),
+      "ninguna funcion del espacio admin admite al gestor")
+
+
 print("\n== Final. Migracion de las columnas de confirmacion ==")
 from migraciones.m003_confirmacion_asistente import aplicar
 with app.app_context():
