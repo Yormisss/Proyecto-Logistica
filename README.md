@@ -25,12 +25,12 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── __init__.py        Application factory
 │   ├── extensions.py      Instancias compartidas (db, login, csrf)
 │   ├── models/            MODELO   — Usuario, Cliente, Producto, Pedido, Ruta, Inventario
-│   ├── controllers/       CONTROLADOR — auth, admin, usuarios, pedidos, inventario, conductor, cliente
-│   ├── services/          Lógica de negocio — despacho, ruteo, analítica, importador
+│   ├── controllers/       CONTROLADOR — auth, admin, usuarios, pedidos, inventario, conductor, cliente, asistente
+│   ├── services/          Lógica de negocio — despacho, ruteo, analítica, importador, asistente, avisos
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               456 verificaciones automatizadas en 8 suites
+├── pruebas/               530 verificaciones automatizadas en 9 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -57,6 +57,7 @@ cp .env.example .env
 .venv/bin/flask --app run reset-db         # Borrar y recrear (solo desarrollo)
 .venv/bin/flask --app run sembrar          # Cargar datos de demostración
 .venv/bin/flask --app run migrar-clientes  # Normalizar clientes en una base con datos
+.venv/bin/flask --app run migrar-asistente # Crear la tabla del asistente de voz
 ```
 
 ## Usuarios de demostración
@@ -341,13 +342,161 @@ navegador para adjuntar las coordenadas a cada actualización de estado. **Si el
 niega el permiso o no hay señal, la acción se envía igual**: registrar el estado es lo
 crítico en terreno; la ubicación es complementaria.
 
+## Asistente de voz del conductor (Retell AI)
+
+El conductor abre un asistente de voz con el botón flotante del micrófono y, con las
+manos libres, consulta su ruta, pregunta por la siguiente parada, marca una parada en
+camino o registra un intento fallido. **Es opcional:** sin `RETELL_API_KEY` y
+`RETELL_AGENTE_CONDUCTOR_ID` el botón no aparece y la aplicación funciona igual.
+
+### Cómo funciona
+
+1. El navegador pide permiso para el micrófono. Si el conductor lo niega, se le explica
+   cómo habilitarlo y no se crea ninguna llamada.
+2. `POST /asistente/llamada` (sesión iniciada y token CSRF) elige el agente según el rol
+   (403 si el rol no tiene), crea la llamada con `retell-sdk` en `/v3/create-web-call`
+   pasando el nombre del usuario como variable dinámica `nombre_usuario`, y guarda
+   `call_id → usuario` en `sesiones_asistente` con una vigencia de **10 minutos**.
+3. El navegador se une a la llamada con el SDK web. **La API key nunca sale del
+   servidor:** el navegador solo recibe `access_token`, `call_id`, `transport` e
+   `ice_servers`, que el transporte "gateway" de v3 necesita para conectarse.
+4. Durante la conversación, Retell invoca las *custom functions*. Cada petición:
+   - verifica `X-Retell-Signature` sobre el cuerpo crudo con el método del SDK
+     (HMAC con la API key, que además rechaza firmas de más de 5 minutos) → **401** si
+     falla;
+   - identifica al conductor por `call.call_id` → **403** si no existe, venció, no es
+     de un conductor o la cuenta fue desactivada;
+   - opera solo sobre **la ruta de hoy de ese conductor**, con las mismas reglas de
+     `despacho.py` que la vista móvil, y deja en la bitácora la nota
+     *"Registrado por el asistente de voz"*.
+
+No hay función para confirmar una entrega: esa acción exige la prueba de entrega (PoD)
+en pantalla y descuenta inventario (RF5).
+
+### Custom functions
+
+Todas son `POST` y responden `{"mensaje": "..."}`: una frase breve en español para leer
+en voz alta. Un error de negocio (parada inexistente, transición no permitida) responde
+200 con la explicación, para que el agente se la diga al conductor.
+
+| Función | URL | Argumentos | Qué hace |
+|---|---|---|---|
+| `mi-ruta` | `/api/asistente/conductor/mi-ruta` | — | Resume la ruta de hoy: paradas entregadas, fallidas, pendientes y la siguiente |
+| `siguiente-parada` | `/api/asistente/conductor/siguiente-parada` | — | Primera parada pendiente: cliente, dirección y ventana horaria |
+| `detalle-parada` | `/api/asistente/conductor/detalle-parada` | `orden` (entero) | Cliente, dirección, ventana, estado, unidades, teléfono y observaciones |
+| `marcar-en-camino` | `/api/asistente/conductor/marcar-en-camino` | `orden` (entero) | Pasa la parada a EN_RUTA (también sirve para reintentar una fallida) |
+| `registrar-fallo` | `/api/asistente/conductor/registrar-fallo` | `orden` (entero), `motivo` (texto) | Pasa la parada a FALLIDO con el motivo; no toca el inventario |
+
+`orden` es el número de la parada en la ruta (el que muestra la vista "Mi ruta").
+
+### 1. Retell
+
+1. En el panel de Retell, cree un agente en español. En el prompt puede saludar con
+   `{{nombre_usuario}}` y conviene indicarle que **confirme el número de parada antes de
+   marcarla en camino o registrar un fallo**.
+2. En la configuración de la llamada, fije una **duración máxima de 5 minutos**. La
+   sesión del lado del servidor dura 10: así una llamada nunca sobrevive a su sesión, y
+   las funciones no empiezan a responder 403 a mitad de una conversación.
+3. Agregue las cinco funciones de la tabla anterior con método `POST` y URL
+   `https://<su-dominio-ngrok>/api/asistente/conductor/<función>`. Esquema de parámetros
+   de las que reciben argumentos:
+
+   ```json
+   {
+     "type": "object",
+     "properties": {
+       "orden":  { "type": "integer", "description": "Numero de la parada en la ruta" },
+       "motivo": { "type": "string",  "description": "Por que no se pudo entregar" }
+     },
+     "required": ["orden", "motivo"]
+   }
+   ```
+
+   (`detalle-parada` y `marcar-en-camino` solo llevan `orden`). Deje desactivada la
+   opción que envía únicamente los argumentos: el servidor necesita el objeto `call`
+   del cuerpo para leer el `call_id`.
+4. En `.env`, defina `RETELL_API_KEY` con **la API key que tiene el distintivo de
+   webhook** (es la que Retell usa para firmar) y `RETELL_AGENTE_CONDUCTOR_ID` con el
+   `agent_id`.
+
+En una base que ya tiene datos, cree la tabla de sesiones con
+`.venv/bin/flask --app run migrar-asistente` (idempotente). `init-db` y `reset-db` la
+crean por su cuenta.
+
+### 2. ngrok
+
+Retell debe poder llegar al servidor, y el navegador solo permite usar el micrófono en
+`https://` o en `localhost`:
+
+```bash
+.venv/bin/python run.py          # http://localhost:5001
+ngrok http 5001                  # en otra terminal
+```
+
+Use la URL `https://….ngrok-free.app` que muestra ngrok en las cinco funciones de Retell
+y ábrala también en el teléfono del conductor. En el plan gratuito esa URL cambia cada
+vez que se reinicia ngrok, y hay que actualizarla en Retell.
+
+### 3. Make (avisos al cliente por correo)
+
+Cuando un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO**, desde cualquier origen (vista
+móvil, "Iniciar ruta" o asistente de voz), el servidor envía un `POST` a
+`MAKE_WEBHOOK_URL` con este cuerpo:
+
+```json
+{
+  "codigo": "PED-20261005-001",
+  "estado": "EN_RUTA",
+  "cliente": "Supermercado El Portal",
+  "correo": "compras@ejemplo.com",
+  "direccion": "Av. Cra 68 #75-50, Bogota",
+  "ventana": "08:00 - 11:00",
+  "hora": "2026-10-05 09:12"
+}
+```
+
+- Solo sale **después del commit**: un cambio revertido no genera correo.
+- Va en segundo plano, con un timeout de 3 s de conexión y 5 s de respuesta. **Si Make
+  falla o tarda, la operación del conductor no se bloquea ni se revierte**; el fallo
+  queda solo en el log.
+- Si el cliente no tiene correo, no se envía nada.
+
+Configuración del escenario:
+
+1. Cree un escenario con el disparador **Webhooks → Custom webhook** y copie su URL en
+   `MAKE_WEBHOOK_URL`.
+2. Pulse *Redetermine data structure* y provoque un cambio de estado en la aplicación
+   para que Make aprenda los campos.
+3. Agregue un módulo de correo (Gmail, Outlook o *Email → Send an email*) con
+   destinatario `{{correo}}`. Para un texto distinto por estado, use un *Router* con un
+   filtro por `estado` en cada rama.
+
+Para la demo, defina `SEMILLA_CORREO_CLIENTE` en `.env` antes de sembrar: `seed.py`
+asigna ese correo a **Supermercado El Portal**. Los demás clientes sembrados no tienen
+correo, así que no reciben avisos.
+
+### SDK web: migración pendiente
+
+El botón usa `RetellWebClient` de `retell-client-js-sdk` **3.0.2** (fijado en
+`app/static/js/asistente.js`). Esa clase está marcada como obsoleta y **se elimina en la
+versión 4.0 del SDK web**, así que habrá que migrar antes de actualizarlo. Hoy es la única
+clase del SDK que se une a una llamada creada en el servidor: la nueva (`RetellClient`)
+crea la llamada desde el navegador con la API key, algo que este diseño descarta.
+
+El fin de `/v2/create-web-call` (18 de octubre de 2026) no afecta: `retell-sdk` 6.1.1 ya
+llama a `/v3/create-web-call`, y el SDK web acepta su token si se le indica el
+transporte `gateway` con el `call_id`.
+
+Cambiar de página corta la llamada; el asistente está pensado para usarse desde la
+pantalla de la ruta sin navegar.
+
 ## Verificación
 
 ```bash
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**456 verificaciones en 8 suites**, todas pasando. Cada suite reinicia y resiembra la
+**530 verificaciones en 9 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
@@ -360,9 +509,11 @@ base, por lo que los resultados son reproducibles.
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 66 |
 | `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 63 |
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
+| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento) y avisos por Make | 74 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
-el algoritmo local de respaldo.
+el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
+Make, y firma las peticiones con el propio SDK de Retell para probar la verificación real.
 
 ## Medición del RNF2
 
@@ -407,8 +558,8 @@ en tabla.
 ## MySQL y MySQL Workbench (fase piloto)
 
 El proyecto corre indistintamente sobre SQLite (desarrollo) o MySQL (piloto).
-**La migración está verificada:** las 12 tablas se crean correctamente y las 456
-pruebas (461 contra MySQL, que suma las verificaciones de claves ajenas propias
+**La migración está verificada:** las 13 tablas se crean correctamente y las 530
+pruebas (535 contra MySQL, que suma las verificaciones de claves ajenas propias
 de ese motor) pasan íntegras contra MySQL 8.0.46.
 
 `docker-compose.yml` no necesita cambios al evolucionar el esquema: solo provisiona
