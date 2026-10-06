@@ -69,6 +69,26 @@ class TransicionInvalida(Exception):
     """El cambio de estado solicitado no esta permitido para este pedido."""
 
 
+def validar_transicion(estado_anterior, nuevo_estado):
+    """Lanza TransicionInvalida si el pedido no puede pasar a `nuevo_estado`.
+
+    `cambiar_estado` la aplica sobre la fila bloqueada; el asistente de voz la
+    usa antes para no pedir confirmacion de algo que no se puede hacer.
+    """
+    if estado_anterior == nuevo_estado:
+        raise TransicionInvalida(
+            f"El pedido ya se encuentra en estado "
+            f"{EstadoPedido.ETIQUETAS.get(nuevo_estado, nuevo_estado)}."
+        )
+
+    if not EstadoPedido.puede_transicionar(estado_anterior, nuevo_estado):
+        raise TransicionInvalida(
+            f"No es posible pasar de "
+            f"{EstadoPedido.ETIQUETAS.get(estado_anterior, estado_anterior)} a "
+            f"{EstadoPedido.ETIQUETAS.get(nuevo_estado, nuevo_estado)}."
+        )
+
+
 class ResultadoTransicion:
     def __init__(self, pedido, estado_anterior, movimientos=None, advertencias=None):
         self.pedido = pedido
@@ -204,19 +224,7 @@ def cambiar_estado(
     )
 
     estado_anterior = pedido.estado
-
-    if estado_anterior == nuevo_estado:
-        raise TransicionInvalida(
-            f"El pedido ya se encuentra en estado "
-            f"{EstadoPedido.ETIQUETAS.get(nuevo_estado, nuevo_estado)}."
-        )
-
-    if not EstadoPedido.puede_transicionar(estado_anterior, nuevo_estado):
-        raise TransicionInvalida(
-            f"No es posible pasar de "
-            f"{EstadoPedido.ETIQUETAS.get(estado_anterior, estado_anterior)} a "
-            f"{EstadoPedido.ETIQUETAS.get(nuevo_estado, nuevo_estado)}."
-        )
+    validar_transicion(estado_anterior, nuevo_estado)
 
     pedido.estado = nuevo_estado
 

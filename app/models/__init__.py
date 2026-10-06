@@ -3,7 +3,7 @@
 Reexporta las entidades para que los controladores importen desde `app.models`.
 """
 
-from app.models.asistente import VIGENCIA_SESION, SesionAsistente
+from app.models.asistente import VIGENCIA_CONFIRMACION, VIGENCIA_SESION, SesionAsistente
 from app.models.cliente import Cliente, DireccionCliente, normalizar_texto
 from app.models.inventario import MovimientoInventario, Producto, TipoMovimiento
 from app.models.metrica import (
@@ -24,6 +24,7 @@ from app.models.usuario import Rol, Usuario
 
 __all__ = [
     "SesionAsistente",
+    "VIGENCIA_CONFIRMACION",
     "VIGENCIA_SESION",
     "Cliente",
     "DireccionCliente",

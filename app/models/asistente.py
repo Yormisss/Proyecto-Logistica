@@ -16,6 +16,9 @@ from app.tiempo import ahora
 # functions de la llamada responden 403 aunque la llamada siga abierta.
 VIGENCIA_SESION = timedelta(minutes=10)
 
+# Plazo para confirmar una accion despues de oir su resumen.
+VIGENCIA_CONFIRMACION = timedelta(minutes=3)
+
 
 class SesionAsistente(db.Model):
     __tablename__ = "sesiones_asistente"
@@ -28,6 +31,10 @@ class SesionAsistente(db.Model):
     rol = db.Column(db.String(20), nullable=False)
     creada_en = db.Column(db.DateTime, nullable=False, default=ahora)
     vence_en = db.Column(db.DateTime, nullable=False, index=True)
+    # Accion resumida y pendiente de confirmar en esta llamada: huella de la
+    # funcion y sus argumentos. Solo hay una a la vez; se consume al ejecutarse.
+    confirmacion_firma = db.Column(db.String(64))
+    confirmacion_vence_en = db.Column(db.DateTime)
 
     usuario = db.relationship("Usuario")
 

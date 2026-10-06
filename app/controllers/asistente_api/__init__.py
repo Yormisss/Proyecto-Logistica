@@ -24,11 +24,16 @@ Los errores de negocio responden 200 con el mensaje para que el agente se lo
 diga al usuario.
 """
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 
 from flask import Blueprint, g, jsonify, request
 
+from app.extensions import db
+from app.models import VIGENCIA_CONFIRMACION, SesionAsistente
 from app.services.asistente import firma_valida, sesion_vigente
+from app.tiempo import ahora
 
 asistente_api_bp = Blueprint("asistente_api", __name__)
 
@@ -61,7 +66,8 @@ def funcion_asistente(espacio, nombre, *, roles, descripcion, parametros=None,
 
     `parametros` son las propiedades JSON schema de los argumentos y
     `requeridos` los obligatorios. `accion=True` marca las funciones que
-    modifican datos: exigen confirmacion (ver `confirmacion.py`).
+    modifican datos: deben llamar a `exigir_confirmacion` antes de cambiar
+    nada, y la sincronizacion con Retell les agrega el parametro `confirmar`.
     """
     def registrar(vista):
         clave = (espacio, nombre)
@@ -127,6 +133,70 @@ def responder(mensaje):
 def cantidad(numero, singular, plural=None):
     """"1 parada", "3 paradas": el agente lee el texto tal cual."""
     return f"{numero} {singular if numero == 1 else (plural or singular + 's')}"
+
+
+# --------------------------------------------------------------------------
+# Confirmacion de acciones
+# --------------------------------------------------------------------------
+# Toda funcion que modifica datos se ejecuta en dos llamadas. La primera valida,
+# no cambia nada y devuelve un resumen que termina en "¿confirmas?"; el servidor
+# guarda en la sesion la huella de la funcion y sus argumentos. La segunda, con
+# confirmar=true, solo ejecuta si esa misma huella sigue pendiente y vigente, y
+# la consume en la misma transaccion que la accion. Asi no basta con que el LLM
+# envie confirmar=true: la accion tuvo que resumirse antes en esta llamada, con
+# exactamente los mismos argumentos, hace menos de VIGENCIA_CONFIRMACION, y una
+# confirmacion no sirve dos veces.
+
+def _firma_accion():
+    argumentos = {k: v for k, v in g.argumentos.items() if k != "confirmar"}
+    contenido = json.dumps(
+        {"funcion": f"{g.funcion.espacio}/{g.funcion.nombre}", "argumentos": argumentos},
+        sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+    )
+    return hashlib.sha256(contenido.encode("utf-8")).hexdigest()
+
+
+def _pide_confirmar():
+    valor = g.argumentos.get("confirmar")
+    return valor is True or (isinstance(valor, str) and valor.strip().lower() == "true")
+
+
+def exigir_confirmacion(resumen):
+    """None si la accion ya fue confirmada; si no, la respuesta con el resumen.
+
+    Uso en una funcion con accion=True, despues de validar y antes de cambiar
+    nada:
+
+        pendiente = exigir_confirmacion("Voy a ...")
+        if pendiente:
+            return pendiente
+
+    Al devolver None la confirmacion ya quedo consumida en la sesion de la base;
+    se confirma con el commit de la accion y se revierte con su rollback.
+    """
+    firma = _firma_accion()
+    if _pide_confirmar():
+        consumidas = (
+            db.session.query(SesionAsistente)
+            .filter(
+                SesionAsistente.id == g.sesion.id,
+                SesionAsistente.confirmacion_firma == firma,
+                SesionAsistente.confirmacion_vence_en > ahora(),
+            )
+            .update(
+                {"confirmacion_firma": None, "confirmacion_vence_en": None},
+                synchronize_session=False,
+            )
+        )
+        if consumidas == 1:
+            return None
+
+    # Sin confirmar, o con una confirmacion que no corresponde a lo resumido:
+    # se (re)emite el resumen y queda pendiente solo esta accion.
+    g.sesion.confirmacion_firma = firma
+    g.sesion.confirmacion_vence_en = ahora() + VIGENCIA_CONFIRMACION
+    db.session.commit()
+    return responder(f"{resumen} ¿confirmas?")
 
 
 # Registro de las funciones de cada rol (importan los decoradores de arriba).

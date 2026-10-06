@@ -8,12 +8,13 @@ funcion para confirmar entregas: esa requiere la prueba de entrega en pantalla.
 from flask import g
 
 from app.controllers.asistente_api import (
-    NOTA_ASISTENTE, cantidad, funcion_asistente, responder,
+    NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_asistente, responder,
 )
 from app.extensions import db
 from app.models import EstadoPedido, Rol
 from app.services.despacho import (
     TransicionInvalida, cambiar_estado, ruta_del_dia, ruta_finalizada_del_dia,
+    validar_transicion,
 )
 
 ESPACIO = "conductor"
@@ -156,6 +157,17 @@ def marcar_en_camino():
         return responder(error)
 
     try:
+        validar_transicion(pedido.estado, EstadoPedido.EN_RUTA)
+    except TransicionInvalida as motivo:
+        return responder(f"No pude marcar la parada {pedido.orden_en_ruta} en camino. {motivo}")
+
+    pendiente = exigir_confirmacion(
+        f"Voy a marcar en camino la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}."
+    )
+    if pendiente:
+        return pendiente
+
+    try:
         cambiar_estado(pedido, EstadoPedido.EN_RUTA, g.usuario.id, nota=NOTA_ASISTENTE)
     except TransicionInvalida as motivo:
         db.session.rollback()
@@ -187,6 +199,20 @@ def registrar_fallo():
     motivo = str(g.argumentos.get("motivo") or "").strip()[:LARGO_MAXIMO_MOTIVO]
     if not motivo:
         return responder("Necesito el motivo por el que no se pudo entregar.")
+
+    try:
+        validar_transicion(pedido.estado, EstadoPedido.FALLIDO)
+    except TransicionInvalida as causa:
+        return responder(
+            f"No pude registrar el fallo de la parada {pedido.orden_en_ruta}. {causa}"
+        )
+
+    pendiente = exigir_confirmacion(
+        f"Voy a registrar la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}, "
+        f"como no entregada por: {motivo}."
+    )
+    if pendiente:
+        return pendiente
 
     try:
         cambiar_estado(
