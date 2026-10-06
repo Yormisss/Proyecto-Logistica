@@ -9,14 +9,15 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
-from sqlalchemy.orm import joinedload
 from wtforms import HiddenField, StringField, TextAreaField
 from wtforms.validators import Length, Optional
 
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
-from app.models import EstadoPedido, EstadoRuta, Pedido, Rol, Ruta
-from app.services.despacho import TransicionInvalida, cambiar_estado, iniciar_ruta
+from app.models import EstadoPedido, Pedido, Rol, Ruta
+from app.services.despacho import (
+    TransicionInvalida, cambiar_estado, iniciar_ruta, ruta_del_dia,
+)
 from app.tiempo import hoy
 
 conductor_bp = Blueprint("conductor", __name__)
@@ -78,21 +79,6 @@ def _longitud(formulario):
     return _coordenada(formulario.longitud.data, 180)
 
 
-def _ruta_del_dia(fecha=None):
-    fecha = fecha or hoy()
-    return (
-        db.session.query(Ruta)
-        .options(joinedload(Ruta.pedidos))
-        .filter(
-            Ruta.conductor_id == current_user.id,
-            Ruta.fecha == fecha,
-            Ruta.estado.in_((EstadoRuta.PLANIFICADA, EstadoRuta.EN_CURSO)),
-        )
-        .order_by(Ruta.creada_en.desc())
-        .first()
-    )
-
-
 def _pedido_del_conductor(pedido_id):
     """Garantiza que el conductor solo opere sobre sus propias paradas (RNF5)."""
     pedido = db.session.get(Pedido, pedido_id)
@@ -112,7 +98,7 @@ def _pedido_del_conductor(pedido_id):
 @requiere_rol(Rol.CONDUCTOR)
 def mi_ruta():
     fecha_hoy = hoy()
-    ruta = _ruta_del_dia(fecha_hoy)
+    ruta = ruta_del_dia(current_user.id, fecha_hoy)
 
     return render_template(
         "conductor/mi_ruta.html",

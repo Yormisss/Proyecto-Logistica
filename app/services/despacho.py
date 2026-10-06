@@ -6,6 +6,8 @@ conecta la ultima milla con la bodega y elimina la descoordinacion entre el stoc
 real y las ordenes de despacho descrita en la cadena causal 2.3.2.
 """
 
+from sqlalchemy.orm import joinedload
+
 from app.extensions import db
 from app.models import (
     EstadoPedido,
@@ -15,9 +17,31 @@ from app.models import (
     Pedido,
     Producto,
     PruebaEntrega,
+    Ruta,
     TipoMovimiento,
 )
-from app.tiempo import ahora
+from app.tiempo import ahora, hoy
+
+
+def ruta_del_dia(conductor_id, fecha=None):
+    """Ruta activa (planificada o en curso) del conductor en la fecha dada.
+
+    Es la unica definicion de "la ruta de hoy" del conductor: la usan tanto la
+    vista movil como el asistente de voz, para que ambos operen siempre sobre
+    las mismas paradas.
+    """
+    fecha = fecha or hoy()
+    return (
+        db.session.query(Ruta)
+        .options(joinedload(Ruta.pedidos))
+        .filter(
+            Ruta.conductor_id == conductor_id,
+            Ruta.fecha == fecha,
+            Ruta.estado.in_((EstadoRuta.PLANIFICADA, EstadoRuta.EN_CURSO)),
+        )
+        .order_by(Ruta.creada_en.desc())
+        .first()
+    )
 
 
 class TransicionInvalida(Exception):
