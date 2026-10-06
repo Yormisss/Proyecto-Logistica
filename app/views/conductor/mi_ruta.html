@@ -59,6 +59,20 @@
     </li>
   {% endfor %}
   </ol>
+{% elif ruta_finalizada %}
+  <section class="tarjeta resumen-ruta">
+    <div class="resumen-fila">
+      <span class="mono">{{ ruta_finalizada.codigo }}</span>
+      <span class="etiqueta etiqueta-finalizada">{{ ruta_finalizada.estado_etiqueta }}</span>
+    </div>
+    <h2 class="titulo-seccion">Completaste tu ruta de hoy</h2>
+    <div class="resumen-metricas">
+      <div><strong>{{ ruta_finalizada.contar(EstadoPedido.ENTREGADO) }}</strong><span>Entregados</span></div>
+      <div><strong>{{ ruta_finalizada.contar(EstadoPedido.FALLIDO) }}</strong><span>Fallidos</span></div>
+      <div><strong>{{ ruta_finalizada.contar(EstadoPedido.CANCELADO) }}</strong><span>Cancelados</span></div>
+    </div>
+    <a class="boton boton-plano boton-bloque accion-bloque" href="{{ url_for('conductor.historial') }}">Ver historial de rutas</a>
+  </section>
 {% else %}
   <div class="tarjeta vacio-centrado">
     <p>No tiene una ruta asignada para hoy.</p>

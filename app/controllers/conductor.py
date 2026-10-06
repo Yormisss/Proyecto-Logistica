@@ -17,6 +17,7 @@ from app.extensions import db
 from app.models import EstadoPedido, Pedido, Rol, Ruta
 from app.services.despacho import (
     TransicionInvalida, cambiar_estado, iniciar_ruta, ruta_del_dia,
+    ruta_finalizada_del_dia,
 )
 from app.tiempo import hoy
 
@@ -99,10 +100,14 @@ def _pedido_del_conductor(pedido_id):
 def mi_ruta():
     fecha_hoy = hoy()
     ruta = ruta_del_dia(current_user.id, fecha_hoy)
+    ruta_finalizada = (
+        ruta_finalizada_del_dia(current_user.id, fecha_hoy) if ruta is None else None
+    )
 
     return render_template(
         "conductor/mi_ruta.html",
         ruta=ruta,
+        ruta_finalizada=ruta_finalizada,
         hoy=fecha_hoy,
         formulario=FormularioAccion(),
     )

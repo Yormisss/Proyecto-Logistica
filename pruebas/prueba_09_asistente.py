@@ -253,6 +253,14 @@ with app.app_context():
 s = funcion("mi-ruta", CALL_C2)
 check(s[0] == 200 and "No tienes una ruta activa" in mensaje(s),
       "conductor2 sin ruta hoy no recibe la ruta de conductor1")
+with app.app_context():
+    finalizadas_previas = db.session.query(Ruta).filter(
+        Ruta.conductor_id == c2_id, Ruta.estado == EstadoRuta.FINALIZADA, Ruta.fecha < hoy()).count()
+html = conductor2.get("/conductor/").data.decode()
+check(finalizadas_previas and "No tiene una ruta asignada para hoy" in html
+      and "Completaste tu ruta de hoy" not in html,
+      "las rutas finalizadas de dias anteriores no cuentan como la de hoy (vista)")
+check("Completaste" not in mensaje(s), "ni para el asistente")
 s = funcion("detalle-parada", CALL_C2, {"orden": 1})
 check(ruta1_codigo not in mensaje(s) and "No tienes una ruta activa" in mensaje(s),
       "ni puede consultar paradas de conductor1 por su numero")
@@ -397,14 +405,69 @@ check(envios_make[-1]["json"]["codigo"] == "ASIS-002", "el aviso salio en segund
 modo_make["valor"] = "ok"
 
 
-print("\n== 7. Migracion de la tabla ==")
+print("\n== 7. Ruta finalizada de hoy ==")
+# RUT-ASIS-02 tiene ASIS-001 entregado y ASIS-002 en reintento. Se agrega una
+# parada anulada y se registra el fallo de ASIS-002: todas quedan en estado
+# final y la ruta pasa a FINALIZADA.
+with app.app_context():
+    ruta2 = db.session.query(Ruta).filter_by(codigo="RUT-ASIS-02").one()
+    db.session.add(Pedido(codigo="ASIS-003", cliente_id=esquina_id, cliente_nombre="Tienda La Esquina",
+                          direccion="Calle 63 #24-18", ciudad="Bogota", fecha_despacho=hoy(),
+                          estado=EstadoPedido.CANCELADO, ruta_id=ruta2.id, orden_en_ruta=3,
+                          creado_por_id=desp_id))
+    db.session.commit()
+funcion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Establecimiento cerrado"})
+notificaciones.esperar_envios()
+with app.app_context():
+    check(db.session.query(Ruta).filter_by(codigo="RUT-ASIS-02").one().estado == EstadoRuta.FINALIZADA,
+          "con todas las paradas en estado final la ruta queda FINALIZADA")
+
+html = conductor2.get("/conductor/").data.decode()
+check("Completaste tu ruta de hoy" in html and "No tiene una ruta asignada" not in html,
+      "la vista muestra 'Completaste tu ruta de hoy' en lugar de 'sin ruta asignada'")
+check("RUT-ASIS-02" in html, "con el codigo de la ruta finalizada")
+resumen = {etiqueta: int(numero) for numero, etiqueta in
+           re.findall(r"<strong>(\d+)</strong><span>(Entregados|Fallidos|Cancelados)</span>", html)}
+check(resumen == {"Entregados": 1, "Fallidos": 1, "Cancelados": 1},
+      f"resume entregados, fallidos y cancelados {resumen}")
+check(re.search(r'href="/conductor/historial"[^>]*>Ver historial de rutas<', html) is not None,
+      "incluye un enlace al historial")
+check("Iniciar ruta" not in html and "parada-enlace" not in html, "sin boton de inicio ni lista de paradas")
+
+s = funcion("mi-ruta", CALL_C2)
+check(mensaje(s) == "Completaste tu ruta de hoy, la RUT-ASIS-02, con 3 paradas: 1 entregada, "
+      "1 fallida y 1 cancelada. Puedes ver el detalle en tu historial.",
+      f"mi-ruta responde lo mismo en voz ({mensaje(s)})")
+check(len(mensaje(s)) < 300, "la respuesta es breve")
+
+html = conductor1.get("/conductor/").data.decode()
+check("Completaste" not in html and ruta1_codigo in html, "conductor1, con ruta activa, sigue viendo sus paradas")
+check(ruta1_codigo in mensaje(funcion("mi-ruta", CALL_C1)), "y el asistente le resume su ruta activa")
+
+# Si el gestor le asigna otra ruta el mismo dia, la activa tiene prioridad.
+with app.app_context():
+    ruta3 = Ruta(codigo="RUT-ASIS-03", fecha=hoy(), estado=EstadoRuta.PLANIFICADA,
+                 conductor_id=c2_id, distancia_km=3, duracion_min=10)
+    db.session.add(ruta3); db.session.flush()
+    db.session.add(Pedido(codigo="ASIS-004", cliente_id=portal_id, cliente_nombre="Supermercado El Portal",
+                          direccion="Av. Cra 68 #75-50", ciudad="Bogota", fecha_despacho=hoy(),
+                          estado=EstadoPedido.ASIGNADO, ruta_id=ruta3.id, orden_en_ruta=1,
+                          creado_por_id=desp_id))
+    db.session.commit()
+html = conductor2.get("/conductor/").data.decode()
+check("RUT-ASIS-03" in html and "Completaste" not in html, "una ruta nueva del mismo dia reemplaza el resumen")
+s = funcion("mi-ruta", CALL_C2)
+check(mensaje(s).startswith("Tu ruta de hoy es la RUT-ASIS-03"), "tambien en el asistente")
+
+
+print("\n== 8. Migracion de la tabla ==")
 from migraciones.m002_sesiones_asistente import aplicar
 with app.app_context():
     check(aplicar(verboso=False) is False, "sobre una base que ya la tiene no crea nada")
     check(aplicar(verboso=False) is False, "volver a ejecutarla tampoco")
 
 
-print("\n== 8. Demo de Make con la semilla ==")
+print("\n== 9. Demo de Make con la semilla ==")
 # Se vuelve a sembrar con SEMILLA_CORREO_CLIENTE, como lo haria la demo, y se
 # recorre el camino del conductor sin ningun paso manual.
 import os, subprocess

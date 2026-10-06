@@ -30,7 +30,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               539 verificaciones automatizadas en 9 suites
+├── pruebas/               553 verificaciones automatizadas en 9 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -381,7 +381,7 @@ en voz alta. Un error de negocio (parada inexistente, transición no permitida) 
 
 | Función | URL | Argumentos | Qué hace |
 |---|---|---|---|
-| `mi-ruta` | `/api/asistente/conductor/mi-ruta` | — | Resume la ruta de hoy: paradas entregadas, fallidas, pendientes y la siguiente |
+| `mi-ruta` | `/api/asistente/conductor/mi-ruta` | — | Resume la ruta de hoy: paradas entregadas, fallidas, pendientes y la siguiente. Si ya la terminó, el resumen de entregadas, fallidas y canceladas |
 | `siguiente-parada` | `/api/asistente/conductor/siguiente-parada` | — | Primera parada pendiente: cliente, dirección y ventana horaria |
 | `detalle-parada` | `/api/asistente/conductor/detalle-parada` | `orden` (entero) | Cliente, dirección, ventana, estado, unidades, teléfono y observaciones |
 | `marcar-en-camino` | `/api/asistente/conductor/marcar-en-camino` | `orden` (entero) | Pasa la parada a EN_RUTA (también sirve para reintentar una fallida) |
@@ -504,7 +504,7 @@ pantalla de la ruta sin navegar.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**539 verificaciones en 9 suites**, todas pasando. Cada suite reinicia y resiembra la
+**553 verificaciones en 9 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
@@ -517,7 +517,7 @@ base, por lo que los resultados son reproducibles.
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 66 |
 | `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 |
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
-| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make y demo sembrada | 78 |
+| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 92 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y

@@ -24,7 +24,9 @@ from flask import Blueprint, g, jsonify, request
 from app.extensions import db
 from app.models import EstadoPedido, Rol
 from app.services.asistente import firma_valida, sesion_vigente
-from app.services.despacho import TransicionInvalida, cambiar_estado, ruta_del_dia
+from app.services.despacho import (
+    TransicionInvalida, cambiar_estado, ruta_del_dia, ruta_finalizada_del_dia,
+)
 
 asistente_api_bp = Blueprint("asistente_api", __name__)
 
@@ -97,18 +99,24 @@ SIN_RUTA = "No tienes una ruta activa para hoy."
 def mi_ruta():
     ruta = _ruta()
     if ruta is None:
-        return _responder(SIN_RUTA)
+        finalizada = ruta_finalizada_del_dia(g.conductor.id)
+        if finalizada is None:
+            return _responder(SIN_RUTA)
+        return _responder(
+            f"Completaste tu ruta de hoy, la {finalizada.codigo}, con "
+            f"{_cantidad(finalizada.total_paradas, 'parada')}: "
+            f"{_cantidad(finalizada.contar(EstadoPedido.ENTREGADO), 'entregada')}, "
+            f"{_cantidad(finalizada.contar(EstadoPedido.FALLIDO), 'fallida')} y "
+            f"{_cantidad(finalizada.contar(EstadoPedido.CANCELADO), 'cancelada')}. "
+            "Puedes ver el detalle en tu historial."
+        )
 
     pedidos = ruta.pedidos
-
-    def conteo(*estados):
-        return sum(1 for p in pedidos if p.estado in estados)
-
     partes = [
         f"Tu ruta de hoy es la {ruta.codigo}, con {_cantidad(len(pedidos), 'parada')}:",
-        f"{_cantidad(conteo(EstadoPedido.ENTREGADO), 'entregada')},",
-        f"{_cantidad(conteo(EstadoPedido.FALLIDO), 'fallida')} y",
-        f"{_cantidad(conteo(*PENDIENTES), 'pendiente')}.",
+        f"{_cantidad(ruta.contar(EstadoPedido.ENTREGADO), 'entregada')},",
+        f"{_cantidad(ruta.contar(EstadoPedido.FALLIDO), 'fallida')} y",
+        f"{_cantidad(ruta.contar(*PENDIENTES), 'pendiente')}.",
     ]
     siguiente = next((p for p in pedidos if p.estado in PENDIENTES), None)
     if siguiente is not None:

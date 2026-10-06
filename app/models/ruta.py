@@ -93,6 +93,10 @@ class Ruta(db.Model):
 
         return sum(1 for p in self.pedidos if p.estado in EstadoPedido.FINALES)
 
+    def contar(self, *estados):
+        """Numero de paradas de la ruta en alguno de los `estados`."""
+        return sum(1 for p in self.pedidos if p.estado in estados)
+
     @property
     def avance_porcentaje(self):
         if not self.total_paradas:

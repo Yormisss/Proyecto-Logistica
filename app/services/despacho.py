@@ -45,6 +45,26 @@ def ruta_del_dia(conductor_id, fecha=None):
     )
 
 
+def ruta_finalizada_del_dia(conductor_id, fecha=None):
+    """Ultima ruta FINALIZADA del conductor en la fecha dada, o None.
+
+    Solo se consulta cuando no hay ruta activa: permite decirle al conductor
+    que ya completo su jornada en vez de que no tiene ruta asignada.
+    """
+    fecha = fecha or hoy()
+    return (
+        db.session.query(Ruta)
+        .options(joinedload(Ruta.pedidos))
+        .filter(
+            Ruta.conductor_id == conductor_id,
+            Ruta.fecha == fecha,
+            Ruta.estado == EstadoRuta.FINALIZADA,
+        )
+        .order_by(Ruta.finalizada_en.desc(), Ruta.creada_en.desc())
+        .first()
+    )
+
+
 class TransicionInvalida(Exception):
     """El cambio de estado solicitado no esta permitido para este pedido."""
 
