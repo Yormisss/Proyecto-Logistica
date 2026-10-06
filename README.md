@@ -418,7 +418,7 @@ nuevos por su cuenta.
 ### Levantar la base (base vacía)
 
 ```bash
-docker compose up -d                    # MySQL 8 en el puerto 3306
+docker compose up -d                    # MySQL 8 en el puerto 3307
 .venv/bin/flask --app run init-db       # Crea el esquema
 .venv/bin/python seed.py                # Carga los datos de demostración
 ```
@@ -426,7 +426,7 @@ docker compose up -d                    # MySQL 8 en el puerto 3306
 En `.env`, la línea que selecciona el motor:
 
 ```
-DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3306/logistica
+DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica
 ```
 
 Comentarla devuelve el proyecto a SQLite sin ningún otro cambio.
@@ -457,7 +457,7 @@ esquema resultante es idéntico al que produce `init-db` sobre una base vacía.
 |---|---|
 | Connection Name | `SGDS Local` |
 | Hostname | `127.0.0.1` |
-| Port | `3306` |
+| Port | `3307` |
 | Username | `sgds` |
 | Password | `sgds_clave` |
 | Default Schema | `logistica` |

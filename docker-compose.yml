@@ -5,7 +5,7 @@
 #   docker compose down -v        La detiene y borra los datos
 #
 # Luego defina en .env:
-#   DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3306/logistica
+#   DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica
 # y ejecute:  .venv/bin/flask --app run init-db
 
 services:
@@ -25,7 +25,7 @@ services:
       # explicita para que el comportamiento no dependa de la version del cliente.
       - --default-authentication-plugin=caching_sha2_password
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - datos_mysql:/var/lib/mysql
     healthcheck:
