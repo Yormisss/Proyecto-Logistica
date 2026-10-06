@@ -35,3 +35,10 @@ def ahora():
 def hoy():
     """Fecha del dia de operacion en Bogota."""
     return ahora().date()
+
+
+# Nombres en espanol, sin depender del locale del servidor (en la nube suele
+# ser ingles). Los usan el asistente de voz para leer y entender fechas.
+DIAS_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+         "septiembre", "octubre", "noviembre", "diciembre")

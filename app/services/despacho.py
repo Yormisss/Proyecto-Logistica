@@ -65,6 +65,12 @@ def ruta_finalizada_del_dia(conductor_id, fecha=None):
     )
 
 
+# Nota de bitacora de toda accion hecha por el asistente de voz.
+NOTA_ASISTENTE = "Registrado por el asistente de voz"
+
+PREFIJO_ANULACION = "Pedido anulado: "
+
+
 class TransicionInvalida(Exception):
     """El cambio de estado solicitado no esta permitido para este pedido."""
 
@@ -306,7 +312,7 @@ def anular_pedido(pedido, usuario_id, motivo, origen=None):
             usuario_id=usuario_id,
             estado_anterior=estado_anterior,
             estado_nuevo=EstadoPedido.CANCELADO,
-            nota=f"Pedido anulado: {motivo}" + (f". {origen}" if origen else ""),
+            nota=f"{PREFIJO_ANULACION}{motivo}" + (f". {origen}" if origen else ""),
         )
     )
     aviso_estado_pedido(pedido, motivo=motivo)
@@ -314,6 +320,22 @@ def anular_pedido(pedido, usuario_id, motivo, origen=None):
     _sincronizar_estado_ruta(pedido.ruta)
 
     return pedido
+
+
+def motivo_anulacion(pedido):
+    """Motivo con el que se anulo el pedido, o None.
+
+    `anular_pedido` lo deja en la nota del evento CANCELADO, con el formato
+    "Pedido anulado: <motivo>" y, si la anulacion vino del asistente de voz,
+    ". Registrado por el asistente de voz" al final.
+    """
+    eventos = [e for e in pedido.eventos if e.estado_nuevo == EstadoPedido.CANCELADO
+               and (e.nota or "").startswith(PREFIJO_ANULACION)]
+    if not eventos:
+        return None
+    motivo = max(eventos, key=lambda e: e.id).nota[len(PREFIJO_ANULACION):]
+    sufijo = f". {NOTA_ASISTENTE}"
+    return (motivo[:-len(sufijo)] if motivo.endswith(sufijo) else motivo).strip() or None
 
 
 def verificar_anulacion(pedido):

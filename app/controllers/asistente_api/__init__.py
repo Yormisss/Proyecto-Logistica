@@ -33,11 +33,11 @@ from flask import Blueprint, g, jsonify, request
 from app.extensions import db
 from app.models import VIGENCIA_CONFIRMACION, SesionAsistente
 from app.services.asistente import firma_valida, sesion_vigente
+from app.services.despacho import NOTA_ASISTENTE  # noqa: F401 (la usan los modulos de cada rol)
 from app.tiempo import ahora
 
 asistente_api_bp = Blueprint("asistente_api", __name__)
 
-NOTA_ASISTENTE = "Registrado por el asistente de voz"
 
 
 @dataclass(frozen=True)

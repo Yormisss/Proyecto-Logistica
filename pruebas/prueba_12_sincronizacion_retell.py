@@ -124,7 +124,7 @@ def llm_de(agent_id):
 
 
 print("\n== 1. Configuracion de cada agente ==")
-ESPERADAS = {"conductor": 5, "gestor": 14, "admin": 20, "cliente": 7}
+ESPERADAS = {"conductor": 5, "gestor": 14, "admin": 20, "cliente": 8}
 with app.app_context():
     for definicion in conf.AGENTES:
         tools = conf.herramientas(definicion, URL)
@@ -200,7 +200,7 @@ check(set(por_nombre) == {"SGDS - Gestor logistico", "SGDS - Administrador", "SG
 check(all(retell.agentes[a][-1]["voice_id"] == "voz-es" and retell.agentes[a][-1]["publicada"] for a in creados),
       "con la voz de RETELL_VOZ_ID, y publicados")
 check([len(llm_de(por_nombre[n])["general_tools"]) for n in ("SGDS - Gestor logistico", "SGDS - Administrador", "SGDS - Cliente")]
-      == [14, 20, 7], "gestor con 14 funciones, admin con 20 (las del gestor y las suyas) y cliente con 7")
+      == [14, 20, 8], "gestor con 14 funciones, admin con 20 (las del gestor y las suyas) y cliente con 8")
 for nombre, variable in (("SGDS - Gestor logistico", "RETELL_AGENTE_GESTOR_ID"),
                          ("SGDS - Administrador", "RETELL_AGENTE_ADMIN_ID"), ("SGDS - Cliente", "RETELL_AGENTE_CLIENTE_ID")):
     check(f"{variable}={por_nombre[nombre]}" in r.output, f"imprime {variable} para el .env")

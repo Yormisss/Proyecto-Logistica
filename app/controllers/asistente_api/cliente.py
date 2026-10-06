@@ -12,27 +12,31 @@ pendiente). Cancelar solo desde PENDIENTE; de ASIGNADO en adelante se pide
 contacto con el gestor.
 """
 
+from datetime import timedelta
+
 from flask import g
 
 from app.controllers.asistente_api import (
     NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_asistente, responder,
 )
 from app.controllers.asistente_api.comun import (
-    LARGO_MAXIMO_MOTIVO, enumerar, fecha_voz, resolver, texto,
+    LARGO_MAXIMO_MOTIVO, enumerar, fecha_larga, fecha_voz, resolver, texto,
 )
 from app.extensions import db
 from app.models import EstadoPedido, Pedido, Rol
-from app.services.busqueda_voz import buscar_pedidos
-from app.services.despacho import TransicionInvalida, anular_pedido
+from app.services.busqueda_voz import ULTIMO, buscar_pedidos_cliente, referencia_temporal
+from app.services.despacho import TransicionInvalida, anular_pedido, motivo_anulacion
 from app.services.seguimiento import SEGUIMIENTO_PUBLICO, hitos_publicos
 from app.services.solicitudes import (
     SolicitudInvalida, SolicitudYaRegistrada, pendiente_de, registrar_solicitud,
 )
+from app.tiempo import hoy
 
 ESPACIO = "cliente"
 ROLES = (Rol.CLIENTE,)
 
 LIMITE_LISTA = 5
+DIAS_RECIENTES = 7
 
 NO_VINCULADO = (
     "Tu cuenta no está vinculada a un cliente activo. Comunícate con el gestor logístico."
@@ -44,7 +48,8 @@ YA_REGISTRADA = (
 
 PARAMETRO_PEDIDO = {
     "pedido": {"type": "string",
-               "description": "Codigo del pedido o su numero del dia (\"el 3 de hoy\")."},
+               "description": "Codigo del pedido, su numero del dia (\"el 3 de hoy\"), "
+                              "\"el de hoy\", \"el de ayer\", una fecha AAAA-MM-DD o \"el ultimo\"."},
 }
 
 
@@ -59,24 +64,58 @@ def _publico(pedido):
     return SEGUIMIENTO_PUBLICO.get(pedido.estado, pedido.estado).lower()
 
 
-def _pedido_propio(cliente):
-    """Pedido del cliente por el argumento `pedido`, o (None, mensaje)."""
-    buscado = texto("pedido")
-    if not buscado:
-        return None, "Necesito el código o el número del pedido."
-    return resolver(
-        buscar_pedidos(buscado, cliente_id=cliente.id),
-        lambda p: f"{p.codigo} del {fecha_voz(p.fecha_despacho)}",
-        "pedidos tuyos", NO_ENCONTRADO,
+def _resumen(pedido):
+    """"PED-..., del 05/10/2026, entrega no lograda, por Cliente ausente"."""
+    texto_pedido = f"{pedido.codigo}, del {fecha_voz(pedido.fecha_despacho)}, {_publico(pedido)}"
+    motivo = None
+    if pedido.estado == EstadoPedido.FALLIDO and pedido.prueba_entrega:
+        motivo = pedido.prueba_entrega.motivo_fallo
+    elif pedido.estado == EstadoPedido.CANCELADO:
+        motivo = motivo_anulacion(pedido)
+    return texto_pedido + (f", por {motivo}" if motivo else "")
+
+
+def _mas_reciente(cliente):
+    return (
+        db.session.query(Pedido)
+        .filter(Pedido.cliente_id == cliente.id)
+        .order_by(Pedido.fecha_despacho.desc(), Pedido.id.desc())
+        .first()
     )
 
 
-def _con_pedido(cuerpo):
+def _pedido_propio(cliente, estados_ultimo=None, sin_ultimo=None):
+    """Pedido del cliente por el argumento `pedido`, o (None, mensaje).
+
+    Acepta el codigo, el numero del dia, "el de hoy", "el de ayer", una fecha o
+    "el ultimo" (entre `estados_ultimo`, si se indican).
+    """
+    buscado = texto("pedido")
+    if not buscado:
+        return None, "Necesito el pedido: su código, su fecha o «el último»."
+    referencia = referencia_temporal(buscado)
+    coincidencias = buscar_pedidos_cliente(
+        buscado, cliente.id, estados=estados_ultimo if referencia == ULTIMO else None,
+    )
+    if referencia == ULTIMO:
+        no_encontrado = sin_ultimo or "No tienes pedidos registrados."
+    elif referencia is not None:
+        no_encontrado = f"No tienes pedidos para el {fecha_larga(referencia)}."
+    else:
+        no_encontrado = NO_ENCONTRADO
+    return resolver(
+        coincidencias,
+        lambda p: f"{p.codigo} del {fecha_voz(p.fecha_despacho)}",
+        "pedidos tuyos", no_encontrado,
+    )
+
+
+def _con_pedido(cuerpo, **opciones):
     """Resuelve cliente y pedido propio, y llama a `cuerpo(cliente, pedido)`."""
     cliente = _cliente()
     if cliente is None:
         return responder(NO_VINCULADO)
-    pedido, error = _pedido_propio(cliente)
+    pedido, error = _pedido_propio(cliente, **opciones)
     if pedido is None:
         return responder(error)
     return cuerpo(cliente, pedido)
@@ -97,13 +136,45 @@ def pedidos_en_curso():
         .all()
     )
     if not pedidos:
-        return responder("No tienes pedidos en curso.")
+        reciente = _mas_reciente(cliente)
+        if reciente is None:
+            return responder("No tienes pedidos en curso ni pedidos registrados.")
+        return responder(f"No tienes pedidos en curso. El más reciente es el {_resumen(reciente)}.")
     leidos = [f"{p.codigo}, {_publico(p)}, para el {fecha_voz(p.fecha_despacho)}"
               for p in pedidos[:LIMITE_LISTA]]
     sobrantes = len(pedidos) - len(leidos)
     return responder(
         f"Tienes {cantidad(len(pedidos), 'pedido')} en curso: {enumerar(leidos)}"
         + (f", y {sobrantes} más." if sobrantes else ".")
+    )
+
+
+@funcion_asistente(
+    ESPACIO, "pedidos-recientes", roles=ROLES,
+    descripcion="Como van los pedidos del cliente: los de los ultimos 7 dias en cualquier estado, "
+                "del mas reciente al mas antiguo, con el motivo si fallaron o se anularon. Usala "
+                "ante \"como van mis pedidos\" o \"que paso con mi pedido\".",
+)
+def pedidos_recientes():
+    cliente = _cliente()
+    if cliente is None:
+        return responder(NO_VINCULADO)
+    desde = hoy() - timedelta(days=DIAS_RECIENTES - 1)
+    pedidos = (
+        db.session.query(Pedido)
+        .filter(Pedido.cliente_id == cliente.id, Pedido.fecha_despacho >= desde)
+        .order_by(Pedido.fecha_despacho.desc(), Pedido.id.desc())
+        .limit(LIMITE_LISTA)
+        .all()
+    )
+    if not pedidos:
+        reciente = _mas_reciente(cliente)
+        if reciente is None:
+            return responder("No tienes pedidos registrados.")
+        return responder(f"No tienes pedidos de los últimos {DIAS_RECIENTES} días. "
+                         f"El más reciente es el {_resumen(reciente)}.")
+    return responder(
+        "Tus pedidos más recientes: " + "; ".join(_resumen(p) for p in pedidos) + "."
     )
 
 
@@ -160,7 +231,9 @@ def motivo_fallo():
             return responder(f"La entrega de tu pedido {pedido.codigo} no se logró y no hay "
                              "motivo registrado.")
         return responder(f"La entrega de tu pedido {pedido.codigo} no se logró por: {motivo}.")
-    return _con_pedido(cuerpo)
+    # "el ultimo" es la ultima entrega fallida, no el ultimo pedido.
+    return _con_pedido(cuerpo, estados_ultimo=(EstadoPedido.FALLIDO,),
+                       sin_ultimo="No tienes entregas fallidas registradas.")
 
 
 @funcion_asistente(

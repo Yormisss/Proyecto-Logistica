@@ -4,7 +4,7 @@ from datetime import date
 
 from flask import g
 
-from app.tiempo import hoy
+from app.tiempo import DIAS_SEMANA, MESES, hoy
 
 from app.services.busqueda_voz import describir, enumerar  # noqa: F401 (enumerar se reexporta)
 
@@ -44,12 +44,6 @@ def fecha_iso(valor, por_defecto):
 
 def fecha_voz(valor):
     return valor.strftime("%d/%m/%Y")
-
-
-# Sin depender del locale del servidor, que en la nube suele ser ingles.
-DIAS_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
-MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
-         "septiembre", "octubre", "noviembre", "diciembre")
 
 
 def fecha_larga(valor, referencia=None):

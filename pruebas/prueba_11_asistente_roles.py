@@ -792,6 +792,93 @@ filtrado = [(p, r) for r in respuestas_cliente for p in prohibidos if p.lower() 
 check(not filtrado, f"ninguna respuesta del cliente expone rutas, conductores, stock ni otros clientes {filtrado[:2]}")
 
 
+print("\n== 12b. Cliente: pedidos recientes y referencias por fecha ==")
+from app.models import DireccionCliente
+from app.services.busqueda_voz import ULTIMO, referencia_temporal
+from app.services.despacho import anular_pedido as _anular, motivo_anulacion
+from app.tiempo import MESES
+
+ref = date(2026, 10, 6)
+check(referencia_temporal("el de hoy", ref) == ref and referencia_temporal("el pedido de ayer", ref) == date(2026, 10, 5)
+      and referencia_temporal("antier", ref) == date(2026, 10, 4), "entiende hoy, ayer y antier")
+check(referencia_temporal("2026-09-30", ref) == date(2026, 9, 30) and referencia_temporal("el del 3/10", ref) == date(2026, 10, 3)
+      and referencia_temporal("el 5 de octubre", ref) == date(2026, 10, 5)
+      and referencia_temporal("1 de setiembre de 2025", ref) == date(2025, 9, 1), "y fechas ISO, DD/MM y '5 de octubre'")
+check(referencia_temporal("el último", ref) == ULTIMO and referencia_temporal("mi pedido más reciente", ref) == ULTIMO,
+      "y 'el ultimo'")
+check(referencia_temporal(f"PED-{D}-003", ref) is None and referencia_temporal("pedido 3", ref) is None
+      and referencia_temporal("31/02", ref) is None, "un codigo, el numero del dia o una fecha imposible no son referencias")
+
+ayer, hace3, hace5, hace10 = (hoy() - timedelta(days=n) for n in (1, 3, 5, 10))
+with app.app_context():
+    espiga = Cliente(nombre="Panaderia La Espiga", telefono="3007770000", correo="espiga@pan.invalid")
+    db.session.add(espiga); db.session.flush()
+    sede = DireccionCliente(cliente_id=espiga.id, etiqueta="Principal", direccion="Calle 45 #13-20")
+    usuario_espiga = Usuario(nombre="Rosa Espiga", correo="rosa@pan.invalid", rol=Rol.CLIENTE, activo=True)
+    usuario_espiga.establecer_contrasena("Cliente123*")
+    db.session.add_all([sede, usuario_espiga]); db.session.flush()
+    espiga.usuario_id = usuario_espiga.id
+    def pedido_espiga(codigo, fecha, estado):
+        p = Pedido(codigo=codigo, cliente_id=espiga.id, cliente_nombre="Panaderia La Espiga",
+                   direccion="Calle 45 #13-20", fecha_despacho=fecha, estado=estado, creado_por_id=c2_id)
+        db.session.add(p); db.session.flush()
+        return p
+    pedido_espiga("ESP-001", ayer, EstadoPedido.ENTREGADO)
+    fal = pedido_espiga("ESP-002", hace3, EstadoPedido.FALLIDO)
+    db.session.add(PruebaEntrega(pedido_id=fal.id, motivo_fallo="Cliente ausente", registrado_en=ahora()))
+    _anular(pedido_espiga("ESP-003", hace10, EstadoPedido.PENDIENTE), c2_id, "Error de digitacion")
+    _anular(pedido_espiga("ESP-004", hace5, EstadoPedido.PENDIENTE), c2_id, "Cambio de proveedor", origen=NOTA)
+    db.session.add(SesionAsistente(call_id="call_espiga", usuario_id=usuario_espiga.id, rol=Rol.CLIENTE,
+                                   vence_en=ahora() + timedelta(minutes=10)))
+    db.session.commit()
+    check(motivo_anulacion(db.session.query(Pedido).filter_by(codigo="ESP-004").one()) == "Cambio de proveedor"
+          and motivo_anulacion(db.session.query(Pedido).filter_by(codigo="ESP-003").one()) == "Error de digitacion",
+          "el motivo de anulacion se recupera con y sin la nota del asistente")
+
+def espiga_voz(nombre, args=None):
+    return mensaje(funcion(f"cliente/{nombre}", "call_espiga", args))
+
+s = espiga_voz("pedidos-en-curso")
+check(s == f"No tienes pedidos en curso. El más reciente es el ESP-001, del {ayer.strftime('%d/%m/%Y')}, entregado.",
+      f"sin pedidos en curso, resume el mas reciente: {s}")
+s = espiga_voz("pedidos-recientes")
+check(s == "Tus pedidos más recientes: "
+      f"ESP-001, del {ayer.strftime('%d/%m/%Y')}, entregado; "
+      f"ESP-002, del {hace3.strftime('%d/%m/%Y')}, entrega no lograda, por Cliente ausente; "
+      f"ESP-004, del {hace5.strftime('%d/%m/%Y')}, pedido anulado, por Cambio de proveedor.",
+      f"pedidos-recientes: ultimos 7 dias en cualquier estado, del mas reciente, con motivos: {s}")
+check("ESP-003" not in s, "sin los de hace mas de 7 dias")
+
+s = espiga_voz("estado-pedido", {"pedido": "el de ayer"})
+check(s.startswith("Tu pedido ESP-001: entregado."), f"estado de 'el de ayer': {s}")
+s = espiga_voz("estado-pedido", {"pedido": "el último"})
+check(s.startswith("Tu pedido ESP-001:"), "estado de 'el ultimo'")
+s = espiga_voz("estado-pedido", {"pedido": hace3.isoformat()})
+check(s.startswith("Tu pedido ESP-002: entrega no lograda."), "estado por fecha ISO")
+s = espiga_voz("estado-pedido", {"pedido": f"el del {hace3.day} de {MESES[hace3.month - 1]}"})
+check(s.startswith("Tu pedido ESP-002:"), "estado por fecha dicha con el mes")
+s = espiga_voz("estado-pedido", {"pedido": "el de hoy"})
+check(s.startswith("No tienes pedidos para el ") and "hoy" not in s.lower().split("para el")[0],
+      f"un dia sin pedidos se dice con la fecha: {s}")
+s = espiga_voz("motivo-fallo", {"pedido": "el último"})
+check(s == "La entrega de tu pedido ESP-002 no se logró por: Cliente ausente.",
+      "motivo-fallo de 'el ultimo' es la ultima entrega fallida")
+s = espiga_voz("motivo-fallo", {"pedido": "el de ayer"})
+check("no tiene una entrega fallida" in s, "motivo-fallo de un dia sin fallo lo explica")
+
+s = mensaje(cliente_voz("pedidos-recientes"))
+entradas = s[len("Tus pedidos más recientes: "):].rstrip(".").split("; ")
+check(len(entradas) == 5 and "ROLES-CLI-PEND" in entradas[0] and "pedido anulado, por Ya no lo necesito" in entradas[0]
+      and any("ROLES-CLI-FAL" in e and "por Establecimiento cerrado" in e for e in entradas),
+      f"El Portal ve como maximo 5, el mas reciente primero, con motivos: {s}")
+check("ESP-" not in s, "y nunca los de otro cliente")
+s = mensaje(cliente_voz("estado-pedido", {"pedido": "el último"}))
+check(s.startswith("Tu pedido ROLES-CLI-PEND:") and "ESP-" not in s, "'el ultimo' de El Portal es el suyo")
+s = mensaje(cliente_voz("estado-pedido", {"pedido": "el de hoy"}))
+check(s.startswith("Encontré") and s.endswith("¿Cuál?") and "ESP-" not in s,
+      "con varios pedidos hoy, los lista para que elija")
+
+
 print("\n== 13. Solicitudes de contacto: gestor y admin ==")
 s = funcion("gestor/solicitudes-contacto-pendientes", CALL_G)
 check(mensaje(s).startswith("Hay 1 solicitud de contacto pendiente: ") and "Cancelar el pedido de hoy" in mensaje(s)

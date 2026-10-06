@@ -15,13 +15,14 @@ Esquina 2".
 
 import re
 from dataclasses import dataclass
+from datetime import date, timedelta
 from difflib import SequenceMatcher
 
 from sqlalchemy import func, or_
 
 from app.extensions import db
 from app.models import Cliente, EstadoPedido, Pedido, Producto, Rol, Usuario, normalizar_texto
-from app.tiempo import hoy
+from app.tiempo import MESES, hoy
 
 # Opciones que se leen en voz alta cuando hay varias coincidencias.
 LIMITE_OPCIONES = 5
@@ -155,6 +156,73 @@ def buscar_pedidos(texto, cliente_id=None, fecha=None):
     for palabra in palabras:
         consulta = consulta.filter(Cliente.nombre_normalizado.like(f"%{palabra}%"))
     return Coincidencias(consulta.all())
+
+
+# Palabras que acompanan una referencia por fecha: "el pedido de ayer".
+_RELLENO_FECHA = {"el", "la", "lo", "de", "del", "mi", "mis", "pedido", "pedidos", "orden", "que",
+                  "llega", "llego", "para", "dia"}
+_MESES_NORMALIZADOS = {normalizar_texto(m): i for i, m in enumerate(MESES, start=1)}
+_MESES_NORMALIZADOS["setiembre"] = 9
+ULTIMO = "ultimo"
+
+
+def _fecha_valida(anio, mes, dia):
+    try:
+        return date(anio, mes, dia)
+    except ValueError:
+        return None
+
+
+def referencia_temporal(texto, referencia=None):
+    """Interpreta "el de hoy", "el de ayer", una fecha o "el ultimo".
+
+    Devuelve ULTIMO, una `date`, o None si el texto no es una referencia de
+    ese tipo (por ejemplo, un codigo de pedido). Acepta fechas AAAA-MM-DD,
+    DD/MM, DD/MM/AAAA y "5 de octubre"; sin año, el de `referencia` (hoy).
+    """
+    referencia = referencia or hoy()
+    crudo = (texto or "").strip()
+    iso = re.fullmatch(r"(?:\D*?)(\d{4})-(\d{1,2})-(\d{1,2})\D*", crudo)
+    if iso:
+        return _fecha_valida(int(iso[1]), int(iso[2]), int(iso[3]))
+    barra = re.fullmatch(r"(?:\D*?)(\d{1,2})/(\d{1,2})(?:/(\d{4}))?\D*", crudo)
+    if barra:
+        return _fecha_valida(int(barra[3] or referencia.year), int(barra[2]), int(barra[1]))
+
+    palabras = [p for p in normalizar_texto(crudo).split() if p not in _RELLENO_FECHA]
+    if palabras in (["ultimo"], ["mas", "reciente"], ["reciente"]):
+        return ULTIMO
+    if palabras == ["hoy"]:
+        return referencia
+    if palabras == ["ayer"]:
+        return referencia - timedelta(days=1)
+    if palabras in (["anteayer"], ["antier"]):
+        return referencia - timedelta(days=2)
+    if len(palabras) in (2, 3) and palabras[0].isdigit() and palabras[1] in _MESES_NORMALIZADOS:
+        anio = int(palabras[2]) if len(palabras) == 3 and palabras[2].isdigit() else referencia.year
+        return _fecha_valida(anio, _MESES_NORMALIZADOS[palabras[1]], int(palabras[0]))
+    return None
+
+
+def buscar_pedidos_cliente(texto, cliente_id, estados=None, fecha=None):
+    """Pedido de un cliente por referencia temporal, codigo o numero del dia.
+
+    "el ultimo" es el mas reciente por fecha de despacho (entre `estados`, si
+    se indican); "el de ayer" o una fecha, los de ese dia. Lo demas lo resuelve
+    `buscar_pedidos`, siempre filtrado por `cliente_id`.
+    """
+    fecha = fecha or hoy()
+    ref = referencia_temporal(texto, fecha)
+    if ref is None:
+        return buscar_pedidos(texto, cliente_id=cliente_id, fecha=fecha)
+
+    base = db.session.query(Pedido).filter(Pedido.cliente_id == cliente_id)
+    if estados:
+        base = base.filter(Pedido.estado.in_(estados))
+    if ref == ULTIMO:
+        ultimo = base.order_by(Pedido.fecha_despacho.desc(), Pedido.id.desc()).first()
+        return Coincidencias([ultimo] if ultimo else [])
+    return Coincidencias(base.filter(Pedido.fecha_despacho == ref).order_by(Pedido.codigo).all())
 
 
 # --------------------------------------------------------------------------
