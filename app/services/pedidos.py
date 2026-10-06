@@ -9,8 +9,8 @@ from app.extensions import db
 from app.models import EstadoPedido, EventoPedido, Pedido, PedidoItem, Producto
 from app.services.clientes import vincular_destino
 from app.services.codigos import generar_codigo_pedido
+from app.services.despacho import PRIORIDADES
 
-PRIORIDADES = {1: "Alta", 2: "Media", 3: "Baja"}
 PRIORIDAD_POR_DEFECTO = 3
 
 
