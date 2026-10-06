@@ -4,7 +4,8 @@ Todo evento se envia como un POST JSON a MAKE_WEBHOOK_URL con un campo `tipo`,
 y el escenario de Make lo enruta segun ese campo:
 
 * `pedido_estado`: un pedido paso a EN_RUTA, ENTREGADO, FALLIDO o CANCELADO.
-  Va al cliente, asi que solo se envia si el cliente tiene correo.
+  Va al cliente, asi que solo se envia si el cliente tiene correo. FALLIDO y
+  CANCELADO llevan ademas el motivo.
 * `stock_bajo`: un movimiento dejo un producto en o por debajo de su stock
   minimo, o por debajo de cero. Es un aviso interno: va a CORREO_OPERACIONES y
   sin esa variable no se envia.
@@ -78,7 +79,11 @@ def encolar_evento(tipo, datos):
 
 
 def aviso_estado_pedido(pedido, motivo=None):
-    """Avisa al cliente del estado actual del pedido. `motivo` solo en CANCELADO."""
+    """Avisa al cliente del estado actual del pedido.
+
+    En CANCELADO y FALLIDO el aviso lleva ademas `motivo`: el de la anulacion,
+    o el de la prueba de entrega (motivo_fallo) del intento fallido.
+    """
     if pedido.estado not in ESTADOS_AVISADOS:
         return
     correo = ((pedido.cliente.correo if pedido.cliente else None) or "").strip()
@@ -94,7 +99,7 @@ def aviso_estado_pedido(pedido, motivo=None):
         "ventana": pedido.ventana_texto,
         "hora": _hora(),
     }
-    if pedido.estado == EstadoPedido.CANCELADO:
+    if pedido.estado in (EstadoPedido.CANCELADO, EstadoPedido.FALLIDO):
         datos["motivo"] = motivo
     encolar_evento(TIPO_PEDIDO_ESTADO, datos)
 

@@ -566,7 +566,7 @@ el mismo mecanismo:
 
 | `tipo` | Cuándo | Destinatario | Campos |
 |---|---|---|---|
-| `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`; en CANCELADO, además `motivo` |
+| `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`; en FALLIDO (motivo de la prueba de entrega) y en CANCELADO (motivo de la anulación), además `motivo` |
 | `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora` |
 | `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `correo_destino` |
 
@@ -631,7 +631,7 @@ movimiento posterior:
 3. Agregue un **Router** con una ruta por tipo, cada una con un filtro sobre `tipo`:
    - `tipo` = `pedido_estado` → módulo de correo (Gmail, Outlook o *Email → Send an
      email*) para `{{correo}}`. Para un texto distinto por estado, anide otro Router con
-     un filtro por `estado`; en la rama de CANCELADO incluya `{{motivo}}`.
+     un filtro por `estado`; en las ramas de FALLIDO y CANCELADO incluya `{{motivo}}`.
    - `tipo` = `stock_bajo` → correo para `{{correo_destino}}`. Use `negativo` para
      distinguir en el asunto un stock bajo de un descuadre.
    - `tipo` = `solicitud_contacto` → correo para `{{correo_destino}}` con el cliente,

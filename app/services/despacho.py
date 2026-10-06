@@ -264,7 +264,9 @@ def cambiar_estado(
 
     # Aviso al cliente por Make (EN_RUTA, ENTREGADO, FALLIDO). Se envia solo
     # despues del commit del controlador, y en segundo plano.
-    aviso_estado_pedido(pedido)
+    aviso_estado_pedido(
+        pedido, motivo=motivo_fallo if nuevo_estado == EstadoPedido.FALLIDO else None,
+    )
 
     _sincronizar_estado_ruta(pedido.ruta)
 

@@ -269,6 +269,27 @@ with app.app_context():
 check(not avisos("pedido_estado", inicio), "un cliente sin correo no recibe aviso de anulacion")
 
 
+print("\n== 6b. pedido_estado FALLIDO con motivo ==")
+with app.app_context():
+    en_ruta = db.session.query(Pedido).filter(Pedido.fecha_despacho == hoy(),
+                                              Pedido.estado == EstadoPedido.EN_RUTA,
+                                              Pedido.codigo.like("PED-%")).first()
+    en_ruta.cliente.correo = "chapinero@tienda.invalid"
+    db.session.commit()
+    pid_fallo, codigo_fallo = en_ruta.id, en_ruta.codigo
+conductor1 = sesion("conductor1@sgds.com", "Conductor123*")
+inicio = len(envios_make)
+url = f"/conductor/parada/{pid_fallo}"
+r = conductor1.post(f"{url}/fallar", data={"csrf_token": token_csrf(conductor1, url),
+                                           "motivo_fallo": "Establecimiento cerrado"})
+recibidos = [a for a in avisos("pedido_estado", inicio) if a["codigo"] == codigo_fallo]
+check(r.status_code == 302 and len(recibidos) == 1 and recibidos[0]["estado"] == "FALLIDO",
+      f"registrar un fallo en pantalla envia el aviso FALLIDO ({len(recibidos)})")
+if recibidos:
+    check(set(recibidos[0]) == CAMPOS_PEDIDO | {"motivo"} and recibidos[0]["motivo"] == "Establecimiento cerrado",
+          "con el motivo de la prueba de entrega")
+
+
 print("\n== 7. GET /api/automatizacion/resumen-diario: autenticacion ==")
 cliente_make = app.test_client()
 def resumen(token=None):
