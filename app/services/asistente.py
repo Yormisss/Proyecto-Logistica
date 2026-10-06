@@ -12,12 +12,15 @@ from flask import current_app
 
 from app.extensions import db
 from app.models import VIGENCIA_SESION, Rol, SesionAsistente
-from app.tiempo import ahora
+from app.tiempo import ahora, hoy
 
 # Rol -> clave de configuracion con el agent_id de Retell que lo atiende. Un rol
 # fuera del mapa (o con la clave vacia) no tiene asistente.
 AGENTES_POR_ROL = {
     Rol.CONDUCTOR: "RETELL_AGENTE_CONDUCTOR_ID",
+    Rol.DESPACHADOR: "RETELL_AGENTE_GESTOR_ID",
+    Rol.ADMIN: "RETELL_AGENTE_ADMIN_ID",
+    Rol.CLIENTE: "RETELL_AGENTE_CLIENTE_ID",
 }
 
 # Las sesiones vencidas se conservan un dia para poder auditar llamadas
@@ -64,6 +67,9 @@ def iniciar_llamada(usuario):
     respuesta de /v3/create-web-call usa el transporte "gateway", que exige el
     call_id y los servidores ICE ademas del access_token; ninguno de los
     cuatro da acceso a la cuenta de Retell.
+
+    `fecha_hoy` (hora de Bogota) permite al agente convertir "manana" o "el
+    viernes" en la fecha ISO que esperan las funciones.
     """
     agent_id = agente_para(usuario.rol)
     if agent_id is None:
@@ -72,7 +78,10 @@ def iniciar_llamada(usuario):
     try:
         llamada = cliente_retell().call.create_web_call(
             agent_id=agent_id,
-            retell_llm_dynamic_variables={"nombre_usuario": usuario.nombre},
+            retell_llm_dynamic_variables={
+                "nombre_usuario": usuario.nombre,
+                "fecha_hoy": hoy().isoformat(),
+            },
         )
     except Exception as error:
         current_app.logger.warning("Retell no creo la llamada web: %s", error)
@@ -122,18 +131,19 @@ def firma_valida(cuerpo, firma):
         return False
 
 
-def sesion_vigente(call_id, rol):
+def sesion_vigente(call_id):
     """Sesion del asistente para `call_id`, o None si no autoriza la peticion.
 
-    Rechaza un call_id desconocido, una sesion vencida, una abierta con otro
-    rol o la de un usuario desactivado despues de iniciar la llamada.
+    Rechaza un call_id desconocido, una sesion vencida o la de un usuario
+    desactivado o cambiado de rol despues de iniciar la llamada. Que el rol de
+    la sesion pueda usar la funcion pedida lo decide el registro de funciones.
     """
     if not call_id or not isinstance(call_id, str):
         return None
     sesion = db.session.query(SesionAsistente).filter_by(call_id=call_id).first()
-    if sesion is None or not sesion.vigente or sesion.rol != rol:
+    if sesion is None or not sesion.vigente:
         return None
     usuario = sesion.usuario
-    if usuario is None or not usuario.activo or usuario.rol != rol:
+    if usuario is None or not usuario.activo or usuario.rol != sesion.rol:
         return None
     return sesion

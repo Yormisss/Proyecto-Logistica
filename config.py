@@ -37,7 +37,11 @@ class ConfiguracionBase:
     # La clave solo se usa en el servidor: crea la llamada web y verifica la
     # firma de las custom functions; nunca se envia al navegador.
     RETELL_API_KEY = os.getenv("RETELL_API_KEY", "")
+    # Un agente por rol; el boton aparece para cada rol que tenga el suyo.
     RETELL_AGENTE_CONDUCTOR_ID = os.getenv("RETELL_AGENTE_CONDUCTOR_ID", "")
+    RETELL_AGENTE_GESTOR_ID = os.getenv("RETELL_AGENTE_GESTOR_ID", "")
+    RETELL_AGENTE_ADMIN_ID = os.getenv("RETELL_AGENTE_ADMIN_ID", "")
+    RETELL_AGENTE_CLIENTE_ID = os.getenv("RETELL_AGENTE_CLIENTE_ID", "")
 
     # Avisos al cliente por correo a traves de un escenario de Make. Vacio = no
     # se envia ningun aviso.

@@ -23,6 +23,12 @@ services:
         sync: false
       - key: RETELL_AGENTE_CONDUCTOR_ID
         sync: false
+      - key: RETELL_AGENTE_GESTOR_ID
+        sync: false
+      - key: RETELL_AGENTE_ADMIN_ID
+        sync: false
+      - key: RETELL_AGENTE_CLIENTE_ID
+        sync: false
       - key: MAKE_WEBHOOK_URL
         sync: false
       - key: MAKE_WEBHOOK_KEY

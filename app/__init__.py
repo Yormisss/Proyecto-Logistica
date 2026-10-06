@@ -169,9 +169,9 @@ def _registrar_controladores(app):
 
     # Las custom functions las invoca Retell desde sus servidores, sin cookie
     # de sesion ni token CSRF: cada peticion se autentica con la firma
-    # X-Retell-Signature y el call_id (ver app/controllers/asistente_api.py).
+    # X-Retell-Signature y el call_id (ver app/controllers/asistente_api/).
     csrf.exempt(asistente_api_bp)
-    app.register_blueprint(asistente_api_bp, url_prefix="/api/asistente/conductor")
+    app.register_blueprint(asistente_api_bp, url_prefix="/api/asistente")
     # Make consulta el resumen diario desde sus servidores; se autentica con
     # X-Automatizacion-Token (ver app/controllers/automatizacion_api.py).
     csrf.exempt(automatizacion_api_bp)

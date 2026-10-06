@@ -40,7 +40,8 @@ NOTA = "Registrado por el asistente de voz"
 
 app.config["WTF_CSRF_ENABLED"] = True
 # La configuracion se fija aqui para que el .env local no cambie el resultado.
-app.config.update(RETELL_API_KEY="", RETELL_AGENTE_CONDUCTOR_ID="", MAKE_WEBHOOK_URL="",
+app.config.update(RETELL_API_KEY="", RETELL_AGENTE_CONDUCTOR_ID="", RETELL_AGENTE_GESTOR_ID="",
+                  RETELL_AGENTE_ADMIN_ID="", RETELL_AGENTE_CLIENTE_ID="", MAKE_WEBHOOK_URL="",
                   MAKE_WEBHOOK_KEY="", CORREO_OPERACIONES="")
 
 
@@ -180,8 +181,9 @@ check(set(datos) == {"access_token", "call_id", "transport", "ice_servers"},
 check(datos.get("transport") == "gateway" and datos.get("ice_servers"), "incluye transporte gateway y servidores ICE")
 check(CLAVE not in r.data.decode(), "la respuesta no contiene la API key")
 check(retell.llamadas[-1] == {"agent_id": "agent_conductor",
-                              "retell_llm_dynamic_variables": {"nombre_usuario": "Andres Molina"}},
-      "usa el agente del conductor y pasa su nombre como variable dinamica")
+                              "retell_llm_dynamic_variables": {"nombre_usuario": "Andres Molina",
+                                                               "fecha_hoy": hoy().isoformat()}},
+      "usa el agente del conductor y pasa su nombre y la fecha de hoy como variables dinamicas")
 CALL_C1 = datos.get("call_id")
 with app.app_context():
     s = db.session.query(SesionAsistente).filter_by(call_id=CALL_C1).one()
