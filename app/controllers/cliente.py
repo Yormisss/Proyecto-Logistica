@@ -15,20 +15,9 @@ from sqlalchemy import func
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import DireccionCliente, EstadoPedido, Pedido, Rol
+from app.services.seguimiento import SEGUIMIENTO_PUBLICO, hitos_publicos
 
 cliente_bp = Blueprint("cliente", __name__)
-
-# Texto que ve el cliente para cada estado interno. La bitacora se traduce en
-# vez de mostrarse cruda: notas como "Creado por importacion CSV" son de uso
-# interno y no aportan nada al destinatario.
-SEGUIMIENTO_PUBLICO = {
-    EstadoPedido.PENDIENTE: "Pedido recibido",
-    EstadoPedido.ASIGNADO: "Programado para despacho",
-    EstadoPedido.EN_RUTA: "En camino a su direccion",
-    EstadoPedido.ENTREGADO: "Entregado",
-    EstadoPedido.FALLIDO: "Entrega no lograda",
-    EstadoPedido.CANCELADO: "Pedido anulado",
-}
 
 FILTROS = {
     "abiertos": EstadoPedido.ABIERTOS,
@@ -123,15 +112,8 @@ def seguimiento(pedido_id):
     pedido = _pedido_del_cliente(pedido_id)
 
     # Bitacora depurada: solo el hito y el momento. Se omiten el usuario que lo
-    # registro y las notas internas.
-    hitos = [
-        {
-            "texto": SEGUIMIENTO_PUBLICO.get(evento.estado_nuevo, evento.estado_nuevo),
-            "estado": evento.estado_nuevo,
-            "momento": evento.registrado_en,
-        }
-        for evento in pedido.eventos
-    ]
+    # registro, las notas internas y los eventos sin cambio de estado.
+    hitos = hitos_publicos(pedido)
 
     return render_template(
         "cliente/seguimiento.html",

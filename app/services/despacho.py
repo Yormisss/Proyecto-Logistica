@@ -272,7 +272,7 @@ def cambiar_estado(
 ESTADOS_ANULABLES = (EstadoPedido.PENDIENTE, EstadoPedido.ASIGNADO, EstadoPedido.FALLIDO)
 
 
-def anular_pedido(pedido, usuario_id, motivo):
+def anular_pedido(pedido, usuario_id, motivo, origen=None):
     """Cancela un pedido que aun no fue entregado (RF4).
 
     A diferencia de `cambiar_estado`, anular NO es un intento de entrega: no
@@ -280,6 +280,9 @@ def anular_pedido(pedido, usuario_id, motivo):
     bitacora. El pedido conserva su ruta si tenia una asignada, de modo que el
     historico de la ruta y su avance reflejen la parada como resuelta (ver
     `_sincronizar_estado_ruta`, que trata CANCELADO como estado final).
+
+    `origen` se agrega a la nota de la bitacora (p. ej. "Registrado por el
+    asistente de voz").
     """
     # Igual que en cambiar_estado: bloquea la fila y la refresca (populate_existing)
     # para que una anulacion no se decida sobre un estado que otra peticion
@@ -293,12 +296,7 @@ def anular_pedido(pedido, usuario_id, motivo):
     )
 
     estado_anterior = pedido.estado
-
-    if estado_anterior not in ESTADOS_ANULABLES:
-        raise TransicionInvalida(
-            f"No se puede anular un pedido en estado "
-            f"{EstadoPedido.ETIQUETAS.get(estado_anterior, estado_anterior)}."
-        )
+    verificar_anulacion(pedido)
 
     pedido.estado = EstadoPedido.CANCELADO
 
@@ -308,7 +306,7 @@ def anular_pedido(pedido, usuario_id, motivo):
             usuario_id=usuario_id,
             estado_anterior=estado_anterior,
             estado_nuevo=EstadoPedido.CANCELADO,
-            nota=f"Pedido anulado: {motivo}",
+            nota=f"Pedido anulado: {motivo}" + (f". {origen}" if origen else ""),
         )
     )
     aviso_estado_pedido(pedido, motivo=motivo)
@@ -316,6 +314,83 @@ def anular_pedido(pedido, usuario_id, motivo):
     _sincronizar_estado_ruta(pedido.ruta)
 
     return pedido
+
+
+def verificar_anulacion(pedido):
+    """Lanza TransicionInvalida si el pedido no se puede anular (ver ESTADOS_ANULABLES)."""
+    if pedido.estado not in ESTADOS_ANULABLES:
+        raise TransicionInvalida(
+            f"No se puede anular un pedido en estado "
+            f"{EstadoPedido.ETIQUETAS.get(pedido.estado, pedido.estado)}."
+        )
+
+
+def verificar_reintento(pedido, fecha=None):
+    """Lanza TransicionInvalida si el gestor no puede reintentar este pedido.
+
+    Reintentar devuelve un FALLIDO a ASIGNADO en su misma ruta, para que el
+    conductor vuelva a salir. Solo aplica a una ruta del dia: un fallido de
+    otro dia no se reprograma por esta via.
+    """
+    fecha = fecha or hoy()
+    if pedido.estado != EstadoPedido.FALLIDO:
+        raise TransicionInvalida(
+            f"Solo se reintenta un pedido fallido; este está "
+            f"{EstadoPedido.ETIQUETAS.get(pedido.estado, pedido.estado).lower()}."
+        )
+    if pedido.ruta is None or pedido.ruta.fecha != fecha:
+        raise TransicionInvalida("Solo se reintentan los fallidos de una ruta de hoy.")
+
+
+def reintentar_entrega(pedido, usuario_id, nota=None):
+    """FALLIDO -> ASIGNADO en su ruta de hoy, con las reglas de `cambiar_estado`.
+
+    Si la ruta habia finalizado, `_sincronizar_estado_ruta` la vuelve a EN_CURSO,
+    igual que cuando el conductor reintenta desde su pantalla. No hace commit.
+    """
+    verificar_reintento(pedido)
+    return cambiar_estado(pedido, EstadoPedido.ASIGNADO, usuario_id, nota=nota)
+
+
+# La prioridad solo ordena la planificacion: una vez en camino ya no influye.
+ESTADOS_REPRIORIZABLES = (EstadoPedido.PENDIENTE, EstadoPedido.ASIGNADO)
+PRIORIDADES = {1: "Alta", 2: "Media", 3: "Baja"}
+
+
+def verificar_cambio_prioridad(pedido, prioridad):
+    """Lanza TransicionInvalida si no se puede poner esa prioridad al pedido."""
+    if prioridad not in PRIORIDADES:
+        raise TransicionInvalida("La prioridad debe ser 1 (alta), 2 (media) o 3 (baja).")
+    if pedido.estado not in ESTADOS_REPRIORIZABLES:
+        raise TransicionInvalida(
+            f"La prioridad solo se cambia en pedidos pendientes o asignados; este está "
+            f"{EstadoPedido.ETIQUETAS.get(pedido.estado, pedido.estado).lower()}."
+        )
+    if pedido.prioridad == prioridad:
+        raise TransicionInvalida(
+            f"El pedido ya tiene prioridad {PRIORIDADES[prioridad].lower()}."
+        )
+
+
+def cambiar_prioridad(pedido, prioridad, usuario_id, origen=None):
+    """Cambia la prioridad y lo deja en la bitacora. No hace commit.
+
+    El evento conserva el estado (anterior y nuevo iguales): es una nota de
+    gestion, no un hito, y el portal del cliente no lo muestra.
+    """
+    verificar_cambio_prioridad(pedido, prioridad)
+    anterior = PRIORIDADES.get(pedido.prioridad, str(pedido.prioridad))
+    pedido.prioridad = prioridad
+    nota = f"Prioridad cambiada de {anterior.lower()} a {PRIORIDADES[prioridad].lower()}"
+    db.session.add(
+        EventoPedido(
+            pedido_id=pedido.id,
+            usuario_id=usuario_id,
+            estado_anterior=pedido.estado,
+            estado_nuevo=pedido.estado,
+            nota=f"{nota}. {origen}" if origen else nota,
+        )
+    )
 
 
 def iniciar_ruta(ruta, usuario_id):
