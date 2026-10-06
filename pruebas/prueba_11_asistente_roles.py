@@ -20,8 +20,8 @@ from app.controllers.asistente_api import (
     FUNCIONES, exigir_confirmacion, funcion_asistente, funciones_de_rol, responder,
 )
 from app.extensions import db
-from app.models import (Cliente, EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, SesionAsistente,
-                        Usuario)
+from app.models import (Cliente, EstadoPedido, EstadoRuta, Pedido, Producto, Rol, Ruta,
+                        SesionAsistente, Usuario)
 from app.services import asistente as servicio_asistente
 from app.services import notificaciones
 from app.services.busqueda_voz import (buscar_clientes, buscar_pedidos, buscar_productos,
@@ -177,6 +177,7 @@ check(funcion("conductor/eco-prueba", llamadas[Rol.DESPACHADOR])[0] == 404,
 
 with app.app_context():
     despachador = db.session.query(Usuario).filter_by(correo="despachador@sgds.com").one()
+    despachador_id = despachador.id
     despachador.rol = Rol.ADMIN; db.session.commit()
 check(funcion("gestor/eco-prueba", llamadas[Rol.DESPACHADOR])[0] == 403,
       "si el usuario cambia de rol durante la llamada, su sesion deja de servir (403)")
@@ -328,7 +329,234 @@ with app.app_context():
     check(len(buscar_sedes(esquina).elementos) == 1, "un cliente con una sola sede la devuelve directa")
 
 
-print("\n== 6. Migracion de las columnas de confirmacion ==")
+print("\n== 6. Gestor: consultas ==")
+import requests as _requests
+from app.services import ruteo as _ruteo
+def _sin_red(*args, **kwargs):
+    raise _requests.ConnectionError("sin red en las pruebas")
+_ruteo._consultar_osrm = _sin_red
+
+def accion(ruta, call_id, args):
+    """Accion en dos pasos: resumen y confirmar=true. Un error de negocio vuelve tal cual."""
+    resumen = funcion(ruta, call_id, args)
+    if not mensaje(resumen).endswith("¿confirmas?"):
+        return resumen
+    return funcion(ruta, call_id, {**args, "confirmar": True})
+
+NOTA = "Registrado por el asistente de voz"
+D = hoy().strftime("%Y%m%d")
+with app.app_context():
+    from app.services import analitica
+    k = analitica.kpis_del_dia()
+s = funcion("gestor/resumen-dia", CALL_G)
+check(f"Hoy hay {k['total_dia']} pedidos" in mensaje(s) and f"{k['entregados']} entregado" in mensaje(s)
+      and f"{k['pendientes']} pendiente" in mensaje(s), f"resumen-dia con los KPIs del dia: {mensaje(s)}")
+s = funcion("gestor/pendientes-sin-ruta", CALL_G)
+check(f"PED-{D}-006 de Tienda Fontibon" in mensaje(s), "pendientes-sin-ruta lista los de hoy")
+s = funcion("gestor/avance-rutas", CALL_G)
+check("Andres Molina" in mensaje(s) and "RUT-ROLES-01" in mensaje(s) and "cerradas" in mensaje(s),
+      "avance-rutas por conductor")
+s = funcion("gestor/buscar-pedido", CALL_G, {"pedido": "pedido 3"})
+check(f"PED-{D}-003" in mensaje(s) and "Andres Molina" in mensaje(s) and "Últimos movimientos" in mensaje(s),
+      "buscar-pedido: estado, ruta, conductor y bitacora")
+s = funcion("gestor/buscar-pedido", CALL_G, {"pedido": "tienda"})
+check(mensaje(s).startswith("Encontré") and mensaje(s).endswith("¿Cuál?"),
+      "buscar-pedido con varias coincidencias las lista para preguntar cual")
+with app.app_context():
+    stock_1001 = db.session.query(Producto).filter_by(sku="SKU-1001").one().stock_actual
+s = funcion("gestor/stock-producto", CALL_G, {"producto": "caja de bebidas"})
+check("SKU-1001" in mensaje(s) and f"{stock_1001} unidades" in mensaje(s), "stock-producto por nombre")
+s = funcion("gestor/productos-bajo-minimo", CALL_G)
+check("bajo el mínimo" in mensaje(s) and "SKU-1006" in mensaje(s), "productos-bajo-minimo")
+s = funcion("gestor/fallidos-hoy", CALL_G)
+check(f"PED-{D}-005 de Autoservicio Kennedy, sin motivo registrado" in mensaje(s),
+      f"fallidos-hoy lista los de hoy, con su motivo o sin el: {mensaje(s)}")
+
+
+print("\n== 7. Gestor: crear pedido por voz ==")
+app.config["MAKE_WEBHOOK_URL"] = "https://hook.make.invalid/sgds"
+with app.app_context():
+    db.session.query(Cliente).filter_by(nombre="Supermercado El Portal").one().correo = "compras@portal.invalid"
+    db.session.commit()
+    pedidos_antes = db.session.query(Pedido).count()
+    clientes_antes = db.session.query(Cliente).count()
+
+pedido_voz = {"cliente": "supermercado el portal", "sede": "toberin",
+              "productos": [{"producto": "sku 1001", "cantidad": 3}, {"producto": "arroz", "cantidad": 2}],
+              "prioridad": 2}
+antes = huella()
+rechazos = [
+    ({**pedido_voz, "cliente": "tienda la esquina"}, "No encontré esa sede de Tienda La Esquina",
+     "una sede que no es del cliente"),
+    ({**pedido_voz, "productos": [{"producto": "galletas", "cantidad": 1}]}, "No encontré el producto galletas",
+     "un producto inexistente"),
+    ({**pedido_voz, "cliente": "Ferreteria Nueva"}, "solo se crean pedidos para clientes registrados",
+     "un cliente que no existe"),
+    ({**pedido_voz, "productos": [{"producto": "arroz", "cantidad": 0}]}, "entero mayor que cero", "cantidad cero"),
+    ({**pedido_voz, "productos": [{"producto": "arroz", "cantidad": 2.5}]}, "entero mayor que cero",
+     "cantidad no entera"),
+    ({**pedido_voz, "productos": [{"producto": "arroz", "cantidad": "dos"}]}, "entero mayor que cero",
+     "cantidad en palabras"),
+    ({**pedido_voz, "productos": []}, "al menos un producto", "sin productos"),
+    ({**pedido_voz, "fecha": "mañana"}, "No entendí la fecha", "una fecha que no es AAAA-MM-DD"),
+    ({**pedido_voz, "prioridad": 7}, "prioridad debe ser", "prioridad fuera de 1 a 3"),
+]
+for args, esperado, que in rechazos:
+    s = accion("gestor/crear-pedido", CALL_G, args)
+    check(esperado in mensaje(s) and not mensaje(s).endswith("¿confirmas?"), f"rechaza {que}: {mensaje(s)}")
+s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "cliente": "tienda"})
+check(mensaje(s).startswith("Encontré 3 clientes"), "un cliente ambiguo se pregunta")
+s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "sede": ""})
+check("Encontré 2 sedes de Supermercado El Portal" in mensaje(s), "sin sede y con dos sedes, pregunta cual")
+s = funcion("gestor/crear-pedido", CALL_G, pedido_voz)
+check(mensaje(s) == "Voy a crear un pedido para Supermercado El Portal, sede Sede Toberin, en "
+      f"Av. Cra 19 #166-30, para el {hoy().strftime('%d/%m/%Y')} con prioridad media: "
+      "3 de Caja bebidas 12 und y 2 de Bolsa arroz 5 kg. ¿confirmas?",
+      f"la confirmacion lee cliente, sede, fecha, prioridad y cada producto: {mensaje(s)}")
+check(huella() == antes, "ningun rechazo ni el resumen crean nada (tampoco clientes ni sedes)")
+
+s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "confirmar": True})
+creado = re.search(r"creé el pedido (\S+) para", mensaje(s))
+check(creado is not None, f"con confirmar=true crea el pedido: {mensaje(s)}")
+with app.app_context():
+    nuevo = db.session.query(Pedido).filter_by(codigo=creado[1] if creado else "").first()
+    portal_db = db.session.query(Cliente).filter_by(nombre="Supermercado El Portal").one()
+    portal_id = portal_db.id
+    sede_toberin = next(d for d in portal_db.direcciones if d.etiqueta == "Sede Toberin")
+    check(nuevo is not None and nuevo.estado == EstadoPedido.PENDIENTE and nuevo.prioridad == 2
+          and nuevo.fecha_despacho == hoy(), "PENDIENTE, prioridad media, fecha de hoy")
+    check(nuevo is not None and nuevo.cliente_id == portal_id and nuevo.direccion_id == sede_toberin.id
+          and nuevo.direccion == sede_toberin.direccion, "vinculado al cliente y a su sede registrada")
+    check(nuevo is not None and sorted((i.producto.sku, i.cantidad) for i in nuevo.items)
+          == [("SKU-1001", 3), ("SKU-1003", 2)], "con sus productos y cantidades")
+    check(nuevo is not None and nuevo.eventos[0].nota == NOTA
+          and nuevo.creado_por.correo == "despachador@sgds.com",
+          "la bitacora dice 'Registrado por el asistente de voz' y lo crea el gestor")
+    check(db.session.query(Pedido).count() == pedidos_antes + 1
+          and db.session.query(Cliente).count() == clientes_antes, "un solo pedido nuevo y ningun cliente nuevo")
+    pid_voz, codigo_voz = nuevo.id, nuevo.codigo
+funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "confirmar": True})
+with app.app_context():
+    check(db.session.query(Pedido).count() == pedidos_antes + 1, "repetir la confirmacion no crea otro")
+
+
+print("\n== 8. Gestor: demas acciones ==")
+# Prioridad
+s = accion("gestor/cambiar-prioridad", CALL_G, {"pedido": codigo_voz, "prioridad": 1})
+check("prioridad alta" in mensaje(s), f"cambiar-prioridad: {mensaje(s)}")
+with app.app_context():
+    p = db.session.get(Pedido, pid_voz)
+    ultimo = sorted(p.eventos, key=lambda e: e.id)[-1]
+    check(p.prioridad == 1 and ultimo.estado_anterior == ultimo.estado_nuevo == EstadoPedido.PENDIENTE
+          and "media a alta" in ultimo.nota and NOTA in ultimo.nota, "queda en la bitacora sin cambio de estado")
+html = clientes_web[Rol.CLIENTE].get(f"/portal/pedido/{pid_voz}").data.decode()
+linea = re.search(r'<ol class="linea-tiempo">(.*?)</ol>', html, re.S)
+check(linea is not None and linea.group(1).count("<li>") == 1 and "Prioridad cambiada" not in html,
+      "el portal del cliente no muestra el cambio de prioridad como hito")
+s = accion("gestor/cambiar-prioridad", CALL_G, {"pedido": f"PED-{D}-003", "prioridad": 1})
+check("pendientes o asignados" in mensaje(s), "no se cambia la prioridad de un pedido en ruta")
+s = accion("gestor/cambiar-prioridad", CALL_G, {"pedido": codigo_voz, "prioridad": 5})
+check("debe ser 1" in mensaje(s), "prioridad fuera de 1 a 3")
+
+# Agregar a ruta (OSRM sin red: respaldo local)
+with app.app_context():
+    c3 = Usuario(nombre="Sergio Vargas", correo="conductor3@sgds.com", rol=Rol.CONDUCTOR, activo=True)
+    c3.establecer_contrasena("Conductor123*")
+    db.session.add(c3); db.session.commit()
+s = accion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "sergio"})
+check("no tiene ruta hoy" in mensaje(s) and "pantalla" in mensaje(s), "un conductor sin ruta: se crea en pantalla")
+s = funcion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "diego"})
+check(mensaje(s) == f"Voy a agregar el pedido {codigo_voz} de Supermercado El Portal a la ruta RUT-ROLES-01 "
+      "de Diego Pardo y recalcular la secuencia. ¿confirmas?", "agregar-a-ruta resume antes")
+s = funcion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "diego", "confirmar": True})
+check("quedó como parada" in mensaje(s), f"y con confirmar lo agrega: {mensaje(s)}")
+with app.app_context():
+    p = db.session.get(Pedido, pid_voz)
+    ruta = db.session.query(Ruta).filter_by(codigo="RUT-ROLES-01").one()
+    ordenes = sorted(x.orden_en_ruta for x in ruta.pedidos)
+    check(p.estado == EstadoPedido.ASIGNADO and p.ruta_id == ruta.id, "el pedido queda ASIGNADO en la ruta")
+    check(ordenes == list(range(1, len(ruta.pedidos) + 1)), f"la secuencia se recalculo sin huecos {ordenes}")
+    check(sorted(p.eventos, key=lambda e: e.id)[-1].nota == f"Asignado a la ruta RUT-ROLES-01. {NOTA}",
+          "con su evento en la bitacora")
+s = accion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "diego"})
+check("solo se pueden agregar pedidos pendientes" in mensaje(s), "un pedido ya asignado no se agrega")
+
+# Ruta finalizada: no se reabre por voz.
+with app.app_context():
+    ruta = db.session.query(Ruta).filter_by(codigo="RUT-ROLES-01").one()
+    for x in ruta.pedidos:
+        x.estado = EstadoPedido.ENTREGADO
+    ruta.estado = EstadoRuta.FINALIZADA
+    esquina_id = db.session.query(Cliente).filter_by(nombre="Tienda La Esquina").one().id
+    c2_id = db.session.query(Usuario).filter_by(correo="conductor2@sgds.com").one().id
+    db.session.add(Pedido(codigo="ROLES-PEND", cliente_id=esquina_id, cliente_nombre="Tienda La Esquina",
+                          direccion="Calle 63 #24-18", fecha_despacho=hoy(), estado=EstadoPedido.PENDIENTE,
+                          creado_por_id=c2_id))
+    db.session.commit()
+antes = huella()
+s = accion("gestor/agregar-a-ruta", CALL_G, {"pedido": "ROLES-PEND", "conductor": "diego"})
+check("ya está finalizada y no se reabre" in mensaje(s) and huella() == antes,
+      "con la ruta de hoy finalizada responde que se hace en pantalla y no cambia nada")
+
+# Reintentar un fallido de hoy
+s = accion("gestor/reintentar-pedido", CALL_G, {"pedido": f"PED-{D}-005"})
+check("quedó asignado para un nuevo intento" in mensaje(s), f"reintentar-pedido: {mensaje(s)}")
+with app.app_context():
+    p = db.session.query(Pedido).filter_by(codigo=f"PED-{D}-005").one()
+    check(p.estado == EstadoPedido.ASIGNADO and sorted(p.eventos, key=lambda e: e.id)[-1].nota == NOTA,
+          "el fallido vuelve a ASIGNADO con la nota del asistente")
+    viejo = db.session.query(Pedido).filter(Pedido.estado == EstadoPedido.FALLIDO,
+                                            Pedido.fecha_despacho < hoy()).first().codigo
+s = accion("gestor/reintentar-pedido", CALL_G, {"pedido": viejo})
+check("ruta de hoy" in mensaje(s), "un fallido de otro dia no se reintenta por voz")
+s = accion("gestor/reintentar-pedido", CALL_G, {"pedido": codigo_voz})
+check("Solo se reintenta un pedido fallido" in mensaje(s), "ni un pedido que no esta fallido")
+
+# Entrada de inventario
+s = accion("gestor/registrar-entrada", CALL_G, {"producto": "SKU-1001", "cantidad": -3})
+check("mayor que cero" in mensaje(s), "una entrada negativa se rechaza")
+s = funcion("gestor/registrar-entrada", CALL_G, {"producto": "SKU-1001", "cantidad": 50, "motivo": "Remision 88"})
+check(f"pasa de {stock_1001} a {stock_1001 + 50}" in mensaje(s), "la confirmacion lee el stock antes y despues")
+funcion("gestor/registrar-entrada", CALL_G, {"producto": "SKU-1001", "cantidad": 50, "motivo": "Remision 88",
+                                            "confirmar": True})
+with app.app_context():
+    from app.models import MovimientoInventario, TipoMovimiento
+    prod = db.session.query(Producto).filter_by(sku="SKU-1001").one()
+    mov = db.session.query(MovimientoInventario).order_by(MovimientoInventario.id.desc()).first()
+    check(prod.stock_actual == stock_1001 + 50 and mov.tipo == TipoMovimiento.ENTRADA and mov.cantidad == 50
+          and mov.motivo == f"Remision 88. {NOTA}" and mov.usuario_id == despachador_id,
+          "registra la ENTRADA con su trazabilidad")
+
+# Anular: mismo aviso de Make que la pantalla
+with app.app_context():
+    db.session.add(Pedido(codigo="ROLES-ANULAR", cliente_id=portal_id, cliente_nombre="Supermercado El Portal",
+                          direccion="Av. Cra 68 #75-50", fecha_despacho=hoy(), estado=EstadoPedido.PENDIENTE,
+                          creado_por_id=c2_id))
+    db.session.commit()
+s = accion("gestor/anular-pedido", CALL_G, {"pedido": "ROLES-ANULAR", "motivo": ""})
+check("Necesito el motivo" in mensaje(s), "anular exige motivo")
+envios_antes = len(envios_make)
+funcion("gestor/anular-pedido", CALL_G, {"pedido": "ROLES-ANULAR", "motivo": "Duplicado"})
+notificaciones.esperar_envios()
+check(len(envios_make) == envios_antes, "el resumen de la anulacion no envia avisos")
+funcion("gestor/anular-pedido", CALL_G, {"pedido": "ROLES-ANULAR", "motivo": "Duplicado", "confirmar": True})
+notificaciones.esperar_envios()
+avisos = [e for e in envios_make[envios_antes:] if e.get("codigo") == "ROLES-ANULAR"]
+check(len(avisos) == 1 and avisos[0]["tipo"] == "pedido_estado" and avisos[0]["estado"] == "CANCELADO"
+      and avisos[0]["motivo"] == "Duplicado",
+      "anular por voz envia el mismo aviso pedido_estado CANCELADO con motivo que la pantalla")
+with app.app_context():
+    p = db.session.query(Pedido).filter_by(codigo="ROLES-ANULAR").one()
+    check(p.estado == EstadoPedido.CANCELADO
+          and sorted(p.eventos, key=lambda e: e.id)[-1].nota == f"Pedido anulado: Duplicado. {NOTA}",
+          "queda CANCELADO con la nota del asistente")
+s = accion("gestor/anular-pedido", CALL_G, {"pedido": f"PED-{D}-003", "motivo": "x"})
+check("No puedo anular" in mensaje(s), "las mismas reglas que la pantalla: un pedido en ruta no se anula")
+s = accion("gestor/crear-pedido", CALL_A, {**pedido_voz, "productos": [{"producto": "SKU-1002", "cantidad": 1}]})
+check("creé el pedido" in mensaje(s), "el admin tambien puede usar las funciones del gestor")
+
+
+print("\n== Final. Migracion de las columnas de confirmacion ==")
 from migraciones.m003_confirmacion_asistente import aplicar
 with app.app_context():
     check(aplicar(verboso=False) == [], "sobre una base al dia no agrega nada")

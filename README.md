@@ -30,7 +30,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               705 verificaciones automatizadas en 11 suites
+├── pruebas/               759 verificaciones automatizadas en 11 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -669,7 +669,7 @@ Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**705 verificaciones en 11 suites**, todas pasando. Cada suite reinicia y resiembra la
+**759 verificaciones en 11 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
@@ -684,7 +684,7 @@ base, por lo que los resultados son reproducibles.
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 97 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 72 |
-| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, migración | 74 |
+| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, migración | 128 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
