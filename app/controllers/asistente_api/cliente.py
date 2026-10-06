@@ -25,7 +25,9 @@ from app.models import EstadoPedido, Pedido, Rol
 from app.services.busqueda_voz import buscar_pedidos
 from app.services.despacho import TransicionInvalida, anular_pedido
 from app.services.seguimiento import SEGUIMIENTO_PUBLICO, hitos_publicos
-from app.services.solicitudes import SolicitudInvalida, registrar_solicitud
+from app.services.solicitudes import (
+    SolicitudInvalida, SolicitudYaRegistrada, pendiente_de, registrar_solicitud,
+)
 
 ESPACIO = "cliente"
 ROLES = (Rol.CLIENTE,)
@@ -36,6 +38,9 @@ NO_VINCULADO = (
     "Tu cuenta no está vinculada a un cliente activo. Comunícate con el gestor logístico."
 )
 NO_ENCONTRADO = "No encontré ese pedido entre los tuyos."
+YA_REGISTRADA = (
+    "Ya tienes una solicitud de contacto registrada; el gestor logístico se comunicará contigo."
+)
 
 PARAMETRO_PEDIDO = {
     "pedido": {"type": "string",
@@ -230,6 +235,8 @@ def solicitar_contacto():
     cliente = _cliente()
     if cliente is None:
         return responder(NO_VINCULADO)
+    if pendiente_de(cliente) is not None:
+        return responder(YA_REGISTRADA)
     motivo = texto("motivo")[:LARGO_MAXIMO_MOTIVO]
     if not motivo:
         return responder("Necesito el motivo por el que quieres que te contacten.")
@@ -245,6 +252,9 @@ def solicitar_contacto():
 
     try:
         registrar_solicitud(cliente, g.usuario.id, motivo)
+    except SolicitudYaRegistrada:
+        db.session.rollback()
+        return responder(YA_REGISTRADA)
     except SolicitudInvalida as causa:
         db.session.rollback()
         return responder(str(causa))

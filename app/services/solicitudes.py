@@ -14,11 +14,31 @@ class SolicitudInvalida(Exception):
     """La solicitud no se puede registrar o atender."""
 
 
+class SolicitudYaRegistrada(SolicitudInvalida):
+    """El cliente ya tiene una solicitud pendiente: no se registra otra."""
+
+
+def pendiente_de(cliente):
+    """Solicitud sin atender del cliente, o None."""
+    return (
+        db.session.query(SolicitudContacto)
+        .filter(SolicitudContacto.cliente_id == cliente.id, SolicitudContacto.atendida.is_(False))
+        .order_by(SolicitudContacto.creada_en)
+        .first()
+    )
+
+
 def registrar_solicitud(cliente, usuario_id, motivo):
-    """Registra la solicitud y encola el aviso a operaciones. No hace commit."""
+    """Registra la solicitud y encola el aviso a operaciones. No hace commit.
+
+    Un cliente tiene a lo sumo una solicitud pendiente: si ya hay una, lanza
+    SolicitudYaRegistrada sin crear otra ni avisar de nuevo a Make.
+    """
     motivo = (motivo or "").strip()
     if not motivo:
         raise SolicitudInvalida("Indique el motivo de la solicitud.")
+    if pendiente_de(cliente) is not None:
+        raise SolicitudYaRegistrada("El cliente ya tiene una solicitud de contacto pendiente.")
     solicitud = SolicitudContacto(
         cliente=cliente,
         usuario_id=usuario_id,

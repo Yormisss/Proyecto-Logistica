@@ -16,7 +16,7 @@ from app.controllers.asistente_api import (
     NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_asistente, responder,
 )
 from app.controllers.asistente_api.comun import (
-    LARGO_MAXIMO_MOTIVO, entero, enumerar, fecha_iso, fecha_voz, pedido_texto, porcentaje,
+    LARGO_MAXIMO_MOTIVO, entero, enumerar, fecha_iso, fecha_larga, fecha_voz, pedido_texto, porcentaje,
     resolver, texto,
 )
 from app.extensions import db
@@ -372,6 +372,11 @@ def crear_pedido_voz():
     fecha = fecha_iso(g.argumentos.get("fecha"), hoy())
     if fecha is None:
         return responder("No entendí la fecha; dímela como año, mes y día.")
+    if fecha < hoy():
+        return responder(
+            "No puedo crear pedidos con fecha pasada por voz; la fecha más temprana es hoy, "
+            f"{fecha_larga(hoy())}."
+        )
     prioridad = entero(g.argumentos.get("prioridad"))
     if g.argumentos.get("prioridad") in (None, ""):
         prioridad = PRIORIDAD_POR_DEFECTO
@@ -386,7 +391,7 @@ def crear_pedido_voz():
 
     pendiente = exigir_confirmacion(
         f"Voy a crear un pedido para {cliente.nombre}, sede {sede_texto(sede)}, para el "
-        f"{fecha_voz(fecha)} con prioridad {_prioridad_texto(prioridad)}: "
+        f"{fecha_larga(fecha)} con prioridad {_prioridad_texto(prioridad)}: "
         f"{enumerar(leidos)}."
     )
     if pendiente:
@@ -458,6 +463,8 @@ def reintentar_pedido():
     pendiente = exigir_confirmacion(
         f"Voy a devolver el pedido {pedido_texto(pedido)} a la ruta {pedido.ruta.codigo} "
         f"de {pedido.ruta.conductor.nombre} para un nuevo intento."
+        + (f" La ruta {pedido.ruta.codigo} está finalizada y se reabrirá."
+           if pedido.ruta.estado == EstadoRuta.FINALIZADA else "")
     )
     if pendiente:
         return pendiente
