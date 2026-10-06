@@ -131,6 +131,10 @@ def _registrar_extensiones(app):
     login_manager.init_app(app)
     csrf.init_app(app)
 
+    from app.services.notificaciones import registrar_avisos
+
+    registrar_avisos()
+
     # Importacion diferida: registra los modelos en el metadata de SQLAlchemy.
     with app.app_context():
         from app import models  # noqa: F401

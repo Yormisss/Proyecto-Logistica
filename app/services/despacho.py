@@ -20,6 +20,7 @@ from app.models import (
     Ruta,
     TipoMovimiento,
 )
+from app.services.notificaciones import encolar_aviso
 from app.tiempo import ahora, hoy
 
 
@@ -225,6 +226,10 @@ def cambiar_estado(
             longitud=longitud,
         )
     )
+
+    # Aviso al cliente por Make (EN_RUTA, ENTREGADO, FALLIDO). Se envia solo
+    # despues del commit del controlador, y en segundo plano.
+    encolar_aviso(pedido)
 
     _sincronizar_estado_ruta(pedido.ruta)
 
