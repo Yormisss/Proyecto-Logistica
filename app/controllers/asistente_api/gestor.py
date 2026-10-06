@@ -37,6 +37,7 @@ from app.services.pedidos import (
 from app.services.planificacion import (
     PlanificacionInvalida, agregar_a_ruta, verificar_agregar_a_ruta,
 )
+from app.services.solicitudes import pendientes as pendientes_de_contacto
 from app.tiempo import hoy
 
 ESPACIO = "gestor"
@@ -265,6 +266,27 @@ def fallidos_hoy():
     return responder(
         f"Hoy hay {cantidad(len(fallidos), 'entrega fallida', 'entregas fallidas')}: "
         + _lista(fallidos, describir_fallo) + "."
+    )
+
+
+@funcion_asistente(
+    ESPACIO, "solicitudes-contacto-pendientes", roles=ROLES,
+    descripcion="Clientes que pidieron por voz que el gestor los contacte y aun no han sido "
+                "atendidos, el mas antiguo primero.",
+)
+def solicitudes_contacto_pendientes():
+    solicitudes = pendientes_de_contacto()
+    if not solicitudes:
+        return responder("No hay solicitudes de contacto pendientes.")
+
+    def solicitud_texto(s):
+        medio = s.telefono or s.correo or "sin teléfono ni correo"
+        return f"{s.cliente.nombre}, el {s.creada_en.strftime('%d/%m a las %H:%M')}, por {s.motivo}, contacto {medio}"
+
+    return responder(
+        f"Hay {cantidad(len(solicitudes), 'solicitud de contacto pendiente', 'solicitudes de contacto pendientes')}: "
+        + _lista(solicitudes, solicitud_texto)
+        + ". Se marcan como atendidas en pantalla."
     )
 
 
