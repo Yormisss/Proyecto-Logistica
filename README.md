@@ -802,8 +802,8 @@ en tabla.
 ## MySQL y MySQL Workbench (fase piloto)
 
 El proyecto corre indistintamente sobre SQLite (desarrollo) o MySQL (piloto).
-**La migración está verificada:** las 13 tablas se crean correctamente y las 627
-pruebas (632 contra MySQL, que suma las verificaciones de claves ajenas propias
+**La migración está verificada:** las 14 tablas se crean correctamente y las 881
+pruebas (886 contra MySQL, que suma las verificaciones de claves ajenas propias
 de ese motor) pasan íntegras contra MySQL 8.0.46.
 
 `docker-compose.yml` no necesita cambios al evolucionar el esquema: solo provisiona
