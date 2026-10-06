@@ -42,6 +42,11 @@ class ConfiguracionBase:
     RETELL_AGENTE_GESTOR_ID = os.getenv("RETELL_AGENTE_GESTOR_ID", "")
     RETELL_AGENTE_ADMIN_ID = os.getenv("RETELL_AGENTE_ADMIN_ID", "")
     RETELL_AGENTE_CLIENTE_ID = os.getenv("RETELL_AGENTE_CLIENTE_ID", "")
+    # Solo para `flask sincronizar-asistentes`: URL https publica del servidor
+    # (ngrok o Render), a la que Retell llama las funciones, y la voz con la
+    # que se crean los agentes nuevos.
+    URL_PUBLICA = os.getenv("URL_PUBLICA", "")
+    RETELL_VOZ_ID = os.getenv("RETELL_VOZ_ID", "")
 
     # Avisos al cliente por correo a traves de un escenario de Make. Vacio = no
     # se envia ningun aviso.

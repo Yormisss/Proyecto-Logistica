@@ -5,6 +5,8 @@ Uso:
     flask --app run sembrar          Carga datos de demostracion
     flask --app run migrar-clientes  Normaliza clientes en una base con datos
     flask --app run migrar-asistente Crea o actualiza las tablas del asistente de voz
+    flask --app run sincronizar-asistentes  Crea o actualiza los agentes en Retell
+    flask --app run documentar-asistentes   Regenera docs/configuracion_retell.md
     python run.py                    Levanta el servidor de desarrollo
 """
 
@@ -70,6 +72,60 @@ def migrar_asistente():
     m002_sesiones_asistente.aplicar()
     m003_confirmacion_asistente.aplicar()
     m004_solicitudes_contacto.aplicar()
+
+
+@app.cli.command("sincronizar-asistentes")
+def sincronizar_asistentes():
+    """Crea o actualiza en Retell el agente de voz de cada rol y lo publica.
+
+    Requiere RETELL_API_KEY y URL_PUBLICA (la URL https de ngrok o Render). Al
+    cambiar la URL de ngrok basta con volver a ejecutarlo.
+    """
+    from app.asistentes.configuracion import normalizar_url_publica
+    from app.asistentes.sincronizacion import sincronizar_asistentes as sincronizar
+    from app.services.asistente import cliente_retell
+
+    if not app.config.get("RETELL_API_KEY"):
+        raise click.ClickException("Defina RETELL_API_KEY para sincronizar los asistentes.")
+    try:
+        url = normalizar_url_publica(app.config.get("URL_PUBLICA"))
+    except ValueError as error:
+        raise click.ClickException(str(error))
+
+    click.echo(f"Sincronizando los asistentes con {url}")
+    with app.app_context():
+        resultados = sincronizar(cliente_retell(), url, app.config)
+
+    faltantes = []
+    for r in resultados:
+        clave = r.definicion.clave
+        if r.error:
+            click.echo(f"  {clave}: ERROR, {r.error}")
+            continue
+        click.echo(f"  {clave}: {r.accion} {r.agent_id}, versión {r.version} publicada "
+                   f"({r.funciones} funciones)")
+        if r.falta_en_env:
+            faltantes.append(f"{r.definicion.variable}={r.agent_id}")
+
+    if faltantes:
+        click.echo("\nAgregue al .env (y a las variables del despliegue):")
+        for linea in faltantes:
+            click.echo(linea)
+    if any(r.error for r in resultados):
+        raise SystemExit(1)
+
+
+@app.cli.command("documentar-asistentes")
+def documentar_asistentes():
+    """Regenera docs/configuracion_retell.md con la configuracion de cada agente."""
+    from pathlib import Path
+
+    from app.asistentes.configuracion import generar_documento
+
+    destino = Path(__file__).resolve().parent / "docs" / "configuracion_retell.md"
+    destino.parent.mkdir(exist_ok=True)
+    destino.write_text(generar_documento(), encoding="utf-8")
+    click.echo(f"Escrito {destino}")
 
 
 if __name__ == "__main__":

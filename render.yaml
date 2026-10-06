@@ -29,6 +29,10 @@ services:
         sync: false
       - key: RETELL_AGENTE_CLIENTE_ID
         sync: false
+      - key: URL_PUBLICA
+        sync: false
+      - key: RETELL_VOZ_ID
+        sync: false
       - key: MAKE_WEBHOOK_URL
         sync: false
       - key: MAKE_WEBHOOK_KEY
