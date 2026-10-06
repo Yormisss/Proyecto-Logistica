@@ -42,6 +42,15 @@ class ConfiguracionBase:
     # Avisos al cliente por correo a traves de un escenario de Make. Vacio = no
     # se envia ningun aviso.
     MAKE_WEBHOOK_URL = os.getenv("MAKE_WEBHOOK_URL", "")
+    # API key del webhook de Make. Si se define, viaja en el encabezado
+    # x-make-apikey de cada aviso y Make rechaza los que no la traen.
+    MAKE_WEBHOOK_KEY = os.getenv("MAKE_WEBHOOK_KEY", "")
+    # Destino de los avisos internos (stock bajo) y del resumen diario. Vacio =
+    # no se envian avisos internos; los avisos al cliente no dependen de esto.
+    CORREO_OPERACIONES = os.getenv("CORREO_OPERACIONES", "")
+    # Token con el que Make consulta /api/automatizacion/resumen-diario en el
+    # encabezado X-Automatizacion-Token. Vacio = el endpoint responde 404.
+    AUTOMATIZACION_TOKEN = os.getenv("AUTOMATIZACION_TOKEN", "")
 
 
 class ConfiguracionDesarrollo(ConfiguracionBase):

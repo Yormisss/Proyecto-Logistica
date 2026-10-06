@@ -18,10 +18,16 @@ services:
       # DATABASE_URL debe apuntar a la base gestionada del piloto.
       - key: DATABASE_URL
         sync: false
-      # Opcionales: asistente de voz del conductor y avisos por Make.
+      # Opcionales: asistente de voz del conductor y automatizaciones con Make.
       - key: RETELL_API_KEY
         sync: false
       - key: RETELL_AGENTE_CONDUCTOR_ID
         sync: false
       - key: MAKE_WEBHOOK_URL
+        sync: false
+      - key: MAKE_WEBHOOK_KEY
+        sync: false
+      - key: CORREO_OPERACIONES
+        sync: false
+      - key: AUTOMATIZACION_TOKEN
         sync: false
