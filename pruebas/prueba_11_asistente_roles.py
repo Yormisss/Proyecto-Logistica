@@ -634,6 +634,171 @@ check(not any(f.espacio == "admin" and Rol.DESPACHADOR in f.roles for f in FUNCI
       "ninguna funcion del espacio admin admite al gestor")
 
 
+print("\n== 11. Cliente: consultas y aislamiento ==")
+CALL_CL = llamadas[Rol.CLIENTE]
+NO_ENCONTRADO = "No encontré ese pedido entre los tuyos."
+respuestas_cliente = []
+def cliente_voz(nombre, args=None):
+    s = funcion(f"cliente/{nombre}", CALL_CL, args)
+    respuestas_cliente.append(mensaje(s))
+    return s
+
+with app.app_context():
+    from app.models import PruebaEntrega
+    portal_db = db.session.query(Cliente).filter_by(nombre="Supermercado El Portal").one()
+    portal_id = portal_db.id
+    abiertos_portal = {p.codigo for p in db.session.query(Pedido).filter(
+        Pedido.cliente_id == portal_id, Pedido.estado.in_(EstadoPedido.ABIERTOS))}
+    ajeno_pendiente = db.session.query(Pedido).filter(
+        Pedido.cliente_id != portal_id, Pedido.estado == EstadoPedido.PENDIENTE).first().codigo
+    # Un fallido propio con motivo y un pendiente propio para cancelar.
+    fallido = Pedido(codigo="ROLES-CLI-FAL", cliente_id=portal_id, cliente_nombre="Supermercado El Portal",
+                     direccion="Av. Cra 68 #75-50", fecha_despacho=hoy(), estado=EstadoPedido.FALLIDO,
+                     creado_por_id=c2_id)
+    propio = Pedido(codigo="ROLES-CLI-PEND", cliente_id=portal_id, cliente_nombre="Supermercado El Portal",
+                    direccion="Av. Cra 68 #75-50", fecha_despacho=hoy(), estado=EstadoPedido.PENDIENTE,
+                    creado_por_id=c2_id)
+    db.session.add_all([fallido, propio]); db.session.flush()
+    db.session.add(PruebaEntrega(pedido_id=fallido.id, motivo_fallo="Establecimiento cerrado",
+                                 registrado_en=ahora()))
+    db.session.commit()
+    abiertos_portal.add("ROLES-CLI-PEND")
+
+s = cliente_voz("pedidos-en-curso")
+leidos = set(re.findall(r"\b(?:PED-\d{8}-\d{3}|ROLES-[A-Z-]+|AUTO-[A-Z0-9-]+)\b", mensaje(s)))
+check(leidos and leidos <= abiertos_portal, f"pedidos-en-curso solo lista pedidos abiertos propios {sorted(leidos)}")
+s = cliente_voz("estado-pedido", {"pedido": f"PED-{D}-001"})
+check(mensaje(s).startswith(f"Tu pedido PED-{D}-001: programado para despacho.") and "Historial:" in mensaje(s),
+      f"estado-pedido con la traduccion del portal: {mensaje(s)}")
+s = cliente_voz("ventana-entrega", {"pedido": f"PED-{D}-001"})
+check("ventana" in mensaje(s) and hoy().strftime("%d/%m/%Y") in mensaje(s), "ventana-entrega")
+s = cliente_voz("motivo-fallo", {"pedido": "ROLES-CLI-FAL"})
+check(mensaje(s) == "La entrega de tu pedido ROLES-CLI-FAL no se logró por: Establecimiento cerrado.",
+      "motivo-fallo de un pedido propio")
+s = cliente_voz("motivo-fallo", {"pedido": f"PED-{D}-001"})
+check("no tiene una entrega fallida" in mensaje(s), "motivo-fallo de un pedido que no fallo")
+s = cliente_voz("mis-sedes")
+check("Principal, en Av. Cra 68 #75-50" in mensaje(s) and "Sede Toberin" in mensaje(s), "mis-sedes")
+
+for nombre in ("estado-pedido", "ventana-entrega", "motivo-fallo"):
+    respuestas = {mensaje(cliente_voz(nombre, {"pedido": codigo}))
+                  for codigo in (f"PED-{D}-002", f"PED-{D}-999", "pedido 2", ajeno_pendiente)}
+    check(respuestas == {NO_ENCONTRADO},
+          f"{nombre}: un pedido ajeno se responde igual que uno inexistente ({respuestas})")
+
+
+print("\n== 12. Cliente: cancelar y solicitar contacto ==")
+antes = huella()
+for args in ({"pedido": ajeno_pendiente, "motivo": "x"}, {"pedido": ajeno_pendiente, "motivo": "x", "confirmar": True}):
+    s = cliente_voz("cancelar-pedido", args)
+    check(mensaje(s) == NO_ENCONTRADO, "cancelar un pedido ajeno: 'no encontrado', incluso con confirmar=true")
+s = cliente_voz("cancelar-pedido", {"pedido": f"PED-{D}-001", "motivo": "Ya no lo necesito"})
+check("debes contactar al gestor" in mensaje(s) and not mensaje(s).endswith("¿confirmas?"),
+      "un pedido propio ya programado: debe contactar al gestor")
+s = cliente_voz("cancelar-pedido", {"pedido": "ROLES-CLI-PEND", "motivo": ""})
+check("Necesito el motivo" in mensaje(s), "cancelar exige motivo")
+s = cliente_voz("cancelar-pedido", {"pedido": "ROLES-CLI-PEND", "motivo": "Ya no lo necesito"})
+check(mensaje(s) == f"Voy a cancelar tu pedido ROLES-CLI-PEND del {hoy().strftime('%d/%m/%Y')} por: "
+      "Ya no lo necesito. ¿confirmas?", "la cancelacion resume antes")
+check(huella() == antes, "nada de lo anterior cambia datos")
+envios_antes = len(envios_make)
+s = cliente_voz("cancelar-pedido", {"pedido": "ROLES-CLI-PEND", "motivo": "Ya no lo necesito", "confirmar": True})
+notificaciones.esperar_envios()
+with app.app_context():
+    p = db.session.query(Pedido).filter_by(codigo="ROLES-CLI-PEND").one()
+    check(p.estado == EstadoPedido.CANCELADO
+          and sorted(p.eventos, key=lambda e: e.id)[-1].nota == f"Pedido anulado: Ya no lo necesito. {NOTA}",
+          "con confirmar=true cancela su pedido pendiente, con la nota del asistente")
+avisos = [e for e in envios_make[envios_antes:] if e.get("codigo") == "ROLES-CLI-PEND"]
+check(len(avisos) == 1 and avisos[0]["estado"] == "CANCELADO" and avisos[0]["motivo"] == "Ya no lo necesito",
+      "y envia el mismo aviso pedido_estado CANCELADO")
+
+with app.app_context():
+    from app.models import SolicitudContacto
+    portal_db = db.session.get(Cliente, portal_id)
+    portal_db.telefono = "3115550111"
+    db.session.commit()
+s = cliente_voz("solicitar-contacto", {"motivo": "Cancelar el pedido de hoy"})
+check(mensaje(s) == "Voy a pedir que el gestor logístico te contacte por: Cancelar el pedido de hoy. "
+      "Te contactará por 3115550111 y compras@portal.invalid. ¿confirmas?", f"solicitar-contacto resume: {mensaje(s)}")
+with app.app_context():
+    check(db.session.query(SolicitudContacto).count() == 0, "el resumen no registra nada")
+envios_antes = len(envios_make)
+cliente_voz("solicitar-contacto", {"motivo": "Cancelar el pedido de hoy", "confirmar": True})
+notificaciones.esperar_envios()
+with app.app_context():
+    sol = db.session.query(SolicitudContacto).one()
+    check(sol.cliente_id == portal_id and sol.motivo == "Cancelar el pedido de hoy" and not sol.atendida
+          and sol.telefono == "3115550111" and sol.correo == "compras@portal.invalid",
+          "con confirmar=true registra la solicitud con el contacto del cliente")
+    sol_id = sol.id
+eventos = [e for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_contacto"]
+check(len(eventos) == 1 and set(eventos[0]) == {"tipo", "cliente", "correo", "telefono", "motivo", "hora",
+                                                 "correo_destino"}
+      and eventos[0]["correo_destino"] == "operaciones@sgds.invalid"
+      and eventos[0]["cliente"] == "Supermercado El Portal",
+      f"y envia a Make el evento solicitud_contacto {eventos[0] if eventos else None}")
+
+app.config["CORREO_OPERACIONES"] = ""
+envios_antes = len(envios_make)
+cliente_voz("solicitar-contacto", {"motivo": "Cambiar la ventana"})
+cliente_voz("solicitar-contacto", {"motivo": "Cambiar la ventana", "confirmar": True})
+notificaciones.esperar_envios()
+with app.app_context():
+    check(db.session.query(SolicitudContacto).count() == 2, "sin CORREO_OPERACIONES la solicitud se registra igual")
+check(not [e for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_contacto"],
+      "pero no se envia el aviso interno")
+
+prohibidos = ["RUT-", "Andres Molina", "Diego Pardo", "Sergio Vargas", "SKU-", "Tienda La Esquina",
+              "Tienda Fontibon", "Autoservicio Kennedy", "stock", "conductor", "ruta "]
+filtrado = [(p, r) for r in respuestas_cliente for p in prohibidos if p.lower() in r.lower()]
+check(not filtrado, f"ninguna respuesta del cliente expone rutas, conductores, stock ni otros clientes {filtrado[:2]}")
+
+
+print("\n== 13. Solicitudes de contacto: gestor y admin ==")
+s = funcion("gestor/solicitudes-contacto-pendientes", CALL_G)
+check("Hay 2 solicitudes de contacto pendientes" in mensaje(s) and "Cancelar el pedido de hoy" in mensaje(s)
+      and "3115550111" in mensaje(s), f"el gestor las consulta por voz: {mensaje(s)}")
+gestor_web = clientes_web[Rol.DESPACHADOR]
+html = gestor_web.get("/admin/solicitudes/").data.decode()
+check("Cancelar el pedido de hoy" in html and "Marcar atendida" in html, "y las ve en pantalla")
+check('href="/admin/solicitudes/"' in gestor_web.get("/admin/").data.decode(), "con su enlace en la navegacion")
+check(clientes_web[Rol.ADMIN].get("/admin/solicitudes/").status_code == 200, "el admin tambien")
+r = clientes_web[Rol.CLIENTE].get("/admin/solicitudes/")
+check(r.status_code in (302, 403), f"el cliente no puede verlas ({r.status_code})")
+r = clientes_web[Rol.CONDUCTOR].get("/admin/solicitudes/")
+check(r.status_code in (302, 403), f"ni el conductor ({r.status_code})")
+r = gestor_web.post(f"/admin/solicitudes/{sol_id}/atender", data={})
+with app.app_context():
+    check(not db.session.get(SolicitudContacto, sol_id).atendida, "marcar atendida sin token CSRF no hace nada")
+token = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html).group(1)
+r = gestor_web.post(f"/admin/solicitudes/{sol_id}/atender", data={"csrf_token": token}, follow_redirects=True)
+with app.app_context():
+    sol = db.session.get(SolicitudContacto, sol_id)
+    check(sol.atendida and sol.atendida_por.correo == "despachador@sgds.com" and sol.atendida_en is not None,
+          "el gestor la marca como atendida, con quien y cuando")
+s = funcion("gestor/solicitudes-contacto-pendientes", CALL_G)
+check(mensaje(s).startswith("Hay 1 solicitud de contacto pendiente: ") and "Cambiar la ventana" in mensaje(s)
+      and "Cancelar el pedido de hoy" not in mensaje(s), "y deja de figurar como pendiente")
+check("Atendida" in gestor_web.get("/admin/solicitudes/?estado=atendidas").data.decode(),
+      "el filtro de atendidas la muestra")
+
+with app.app_context():
+    huerfano = Usuario(nombre="Cuenta sin cliente", correo="sincliente@sgds.com", rol=Rol.CLIENTE, activo=True)
+    huerfano.establecer_contrasena("Cliente123*")
+    db.session.add(huerfano); db.session.flush()
+    db.session.add(SesionAsistente(call_id="call_sin_cliente", usuario_id=huerfano.id, rol=Rol.CLIENTE,
+                                   vence_en=ahora() + timedelta(minutes=10)))
+    db.session.commit()
+s = funcion("cliente/pedidos-en-curso", "call_sin_cliente")
+check(s[0] == 200 and "no está vinculada a un cliente" in mensaje(s),
+      "una cuenta de cliente sin cliente vinculado no ve nada")
+
+from migraciones.m004_solicitudes_contacto import aplicar as aplicar_m004
+with app.app_context():
+    check(aplicar_m004(verboso=False) is False, "m004 sobre una base que ya tiene la tabla no hace nada")
+
+
 print("\n== Final. Migracion de las columnas de confirmacion ==")
 from migraciones.m003_confirmacion_asistente import aplicar
 with app.app_context():
