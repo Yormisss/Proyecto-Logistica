@@ -25,12 +25,15 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── __init__.py        Application factory
 │   ├── extensions.py      Instancias compartidas (db, login, csrf)
 │   ├── models/            MODELO   — Usuario, Cliente, Producto, Pedido, Ruta, Inventario
-│   ├── controllers/       CONTROLADOR — auth, admin, usuarios, pedidos, inventario, conductor, cliente, asistente, automatizacion
-│   ├── services/          Lógica de negocio — despacho, ruteo, analítica, importador, asistente, avisos
+│   ├── controllers/       CONTROLADOR — auth, admin, usuarios, pedidos, inventario, conductor, cliente, solicitudes, asistente, automatizacion
+│   │   └── asistente_api/ Funciones de voz por rol: conductor, gestor, admin, cliente
+│   ├── services/          Lógica de negocio — despacho, pedidos, inventario, planificación, ruteo, analítica, importador, seguimiento, solicitudes, búsqueda para voz, asistente, avisos
+│   ├── asistentes/        Prompts de los agentes de Retell y su sincronización
 │   ├── views/             VISTA    — plantillas Jinja2
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
-├── pruebas/               812 verificaciones automatizadas en 11 suites
+├── docs/                  Configuración generada de los agentes de Retell
+├── pruebas/               881 verificaciones automatizadas en 12 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -57,7 +60,9 @@ cp .env.example .env
 .venv/bin/flask --app run reset-db         # Borrar y recrear (solo desarrollo)
 .venv/bin/flask --app run sembrar          # Cargar datos de demostración
 .venv/bin/flask --app run migrar-clientes  # Normalizar clientes en una base con datos
-.venv/bin/flask --app run migrar-asistente # Crear o actualizar la tabla del asistente de voz
+.venv/bin/flask --app run migrar-asistente # Crear o actualizar las tablas del asistente de voz
+.venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
+.venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
 
 ## Usuarios de demostración
@@ -342,16 +347,45 @@ navegador para adjuntar las coordenadas a cada actualización de estado. **Si el
 niega el permiso o no hay señal, la acción se envía igual**: registrar el estado es lo
 crítico en terreno; la ubicación es complementaria.
 
-## Asistente de voz del conductor (Retell AI)
+## Asistente de voz (Retell AI)
 
-El conductor abre un asistente de voz con el botón flotante del micrófono y, con las
-manos libres, consulta su ruta, pregunta por la siguiente parada, marca una parada en
-camino o registra un intento fallido. **Es opcional:** sin `RETELL_API_KEY` y
-`RETELL_AGENTE_CONDUCTOR_ID` el botón no aparece y la aplicación funciona igual.
+Cada rol (conductor, gestor logístico, administrador y cliente) puede abrir un asistente
+de voz con el botón flotante del micrófono y su propio agente de Retell. **Es opcional:**
+sin `RETELL_API_KEY`, o sin el agente de un rol, el botón no aparece para ese rol y la
+aplicación funciona igual.
+
+### Capacidades por rol
+
+| Rol | Consultas | Acciones (con confirmación) |
+|---|---|---|
+| **Conductor** | Su ruta de hoy (o el cierre si ya la terminó), la siguiente parada, el detalle de una parada | Marcar una parada en camino o reintentarla, registrar una entrega fallida con su motivo |
+| **Gestor logístico** | Resumen del día (KPIs), pendientes sin ruta, avance de las rutas por conductor, un pedido (estado, ruta, conductor, bitácora), stock de un producto, productos bajo mínimo, fallidos de hoy, solicitudes de contacto pendientes | Crear un pedido (cliente y sede registrados, productos existentes, fecha desde hoy), anular un pedido, reintentar un fallido de una ruta de hoy, registrar una entrada de mercancía, cambiar la prioridad, agregar un pedido pendiente a la ruta de hoy de un conductor (recalcula la secuencia) |
+| **Administrador** | Todo lo del gestor, más tiempo promedio de entrega, cumplimiento de ventana, productividad por conductor, causas de fallo (7, 14 o 30 días) y el resumen del panel de rendimiento | Todo lo del gestor, más ajustar el inventario de un producto a un valor exacto con motivo |
+| **Cliente** | Sus pedidos en curso, el estado e historial de un pedido (con la traducción del portal), su ventana de entrega, el motivo de un fallo, sus sedes | Cancelar un pedido propio que sigue PENDIENTE, solicitar que el gestor lo contacte (una solicitud pendiente a la vez) |
+
+Las acciones usan los mismos servicios que la pantalla (`despacho`, `pedidos`,
+`inventario`, `planificacion`, `solicitudes`), así que aplican las mismas reglas,
+disparan los mismos avisos de Make y dejan en la bitácora la nota *"Registrado por el
+asistente de voz"*. La lista completa de funciones, con sus parámetros, está en
+[docs/configuracion_retell.md](docs/configuracion_retell.md).
+
+### Lo que queda fuera de la voz, y por qué
+
+| Rol | Excluido | Por qué |
+|---|---|---|
+| Conductor | Confirmar una entrega | Exige la prueba de entrega (PoD) en pantalla y descuenta inventario (RF5) |
+| Gestor | Importar CSV, crear o eliminar rutas | Necesitan revisar una vista previa o un mapa; una ruta finalizada tampoco se reabre al agregarle paradas: se crea una nueva en pantalla |
+| Gestor | Ajustes de inventario | Fijan el stock a un valor absoluto: solo el administrador puede hacerlo |
+| Gestor y admin | Crear clientes o sedes | Por voz solo se usan los registrados, para no duplicarlos con otra escritura |
+| Gestor y admin | Marcar atendida una solicitud de contacto | Se hace en la pantalla *Solicitudes*, después de contactar al cliente |
+| Admin | Usuarios, roles, contraseñas y activación de cuentas | Afectan el acceso al sistema; no hay ninguna función de voz para eso y el agente indica que se hace en *Usuarios* |
+| Cliente | Crear pedidos | Depende de la fase del portal pendiente |
+| Cliente | Cancelar un pedido ya programado | Desde ASIGNADO ya hay una ruta planificada: el asistente ofrece solicitar contacto con el gestor |
+| Cliente | Rutas, conductores, stock, datos de otros clientes | El mismo aislamiento del portal: un pedido ajeno se responde igual que uno inexistente |
 
 ### Cómo funciona
 
-1. El navegador pide permiso para el micrófono. Si el conductor lo niega, se le explica
+1. El navegador pide permiso para el micrófono. Si el usuario lo niega, se le explica
    cómo habilitarlo y no se crea ninguna llamada.
 2. `POST /asistente/llamada` (sesión iniciada y token CSRF) elige el agente según el rol
    (403 si el rol no tiene), crea la llamada con `retell-sdk` en `/v3/create-web-call`
@@ -361,8 +395,9 @@ camino o registra un intento fallido. **Es opcional:** sin `RETELL_API_KEY` y
 3. El navegador se une a la llamada con el SDK web. **La API key nunca sale del
    servidor:** el navegador solo recibe `access_token`, `call_id`, `transport` e
    `ice_servers`, que el transporte "gateway" de v3 necesita para conectarse.
-4. Durante la conversación, Retell invoca las *custom functions*, todas en
-   `/api/asistente/<espacio>/<función>`. Un único `before_request` las protege:
+4. Durante la conversación, Retell invoca las *custom functions*, todas `POST` en
+   `/api/asistente/<espacio>/<función>` (`conductor`, `gestor`, `admin`, `cliente`). Un
+   único `before_request` las protege:
    - la función debe existir en el registro → **404** si no;
    - verifica `X-Retell-Signature` sobre el cuerpo crudo con el método del SDK
      (HMAC con la API key, que además rechaza firmas de más de 5 minutos) → **401** si
@@ -370,13 +405,15 @@ camino o registra un intento fallido. **Es opcional:** sin `RETELL_API_KEY` y
    - identifica al usuario por `call.call_id` → **403** si no existe, venció, la cuenta
      fue desactivada o cambió de rol después de abrir la llamada;
    - el rol de la sesión debe estar entre los que la función declara → **403** si no:
-     una sesión de un rol no puede llamar las funciones de otro.
-5. Las funciones del conductor operan solo sobre **la ruta de hoy de ese conductor**,
-   con las mismas reglas de `despacho.py` que la vista móvil, y dejan en la bitácora la
-   nota *"Registrado por el asistente de voz"*.
+     una sesión de un rol no puede llamar las funciones de otro. El administrador usa
+     las del gestor por su misma URL.
+5. Cada función responde `{"mensaje": "..."}`: una frase breve en español para leer en
+   voz alta. Un error de negocio (pedido inexistente, transición no permitida) responde
+   200 con la explicación, para que el agente se la diga al usuario.
 
-Cada función se declara con `funcion_asistente` (`app/controllers/asistente_api/`),
-que registra sus roles permitidos, su descripción y sus parámetros.
+Cada función se declara con `funcion_asistente` (`app/controllers/asistente_api/`), que
+registra sus roles permitidos, su descripción y sus parámetros. Ese registro es la única
+fuente de las herramientas que se configuran en Retell.
 
 ### Confirmación de acciones
 
@@ -393,66 +430,78 @@ controla el servidor, no el agente:
    veces. En cualquier otro caso vuelve a resumir sin ejecutar.
 
 Solo queda pendiente un resumen por llamada: pedir otra acción reemplaza el anterior.
-Así, que el LLM mande `confirmar=true` de entrada no basta para cambiar datos.
+Así, que el LLM mande `confirmar=true` de entrada no basta para cambiar datos. Los
+resúmenes leen lo que va a pasar: crear un pedido lee cliente, sede, fecha (*"martes 6
+de octubre"*), prioridad y cada producto con su cantidad; reintentar un fallido avisa si
+la ruta finalizada se va a reabrir.
 
-No hay función para confirmar una entrega: esa acción exige la prueba de entrega (PoD)
-en pantalla y descuenta inventario (RF5).
+### Búsqueda para voz
 
-### Custom functions
+`app/services/busqueda_voz.py` resuelve lo que el usuario dice, con la misma
+normalización que deduplica clientes: un pedido por su código dictado (con o sin guiones),
+por su número del día (*"el pedido 5 de hoy"*) o por el nombre del cliente; un producto
+por SKU o por nombre aproximado (*"arros"*, *"detergente dos kilos"*); un cliente, una
+sede o un conductor por nombre. Si hay varias coincidencias, la respuesta lista hasta
+cinco y termina en *"¿Cuál?"*, para que el agente pregunte.
 
-Todas son `POST` y responden `{"mensaje": "..."}`: una frase breve en español para leer
-en voz alta. Un error de negocio (parada inexistente, transición no permitida) responde
-200 con la explicación, para que el agente se la diga al conductor.
+### Solicitudes de contacto
 
-| Función | URL | Argumentos | Qué hace |
-|---|---|---|---|
-| `mi-ruta` | `/api/asistente/conductor/mi-ruta` | — | Resume la ruta de hoy: paradas entregadas, fallidas, pendientes y la siguiente. Si ya la terminó, el resumen de entregadas, fallidas y canceladas |
-| `siguiente-parada` | `/api/asistente/conductor/siguiente-parada` | — | Primera parada pendiente: cliente, dirección y ventana horaria |
-| `detalle-parada` | `/api/asistente/conductor/detalle-parada` | `orden` (entero) | Cliente, dirección, ventana, estado, unidades, teléfono y observaciones |
-| `marcar-en-camino` | `/api/asistente/conductor/marcar-en-camino` | `orden` (entero), `confirmar` (booleano) | Pasa la parada a EN_RUTA (también sirve para reintentar una fallida). Pide confirmación |
-| `registrar-fallo` | `/api/asistente/conductor/registrar-fallo` | `orden` (entero), `motivo` (texto), `confirmar` (booleano) | Pasa la parada a FALLIDO con el motivo; no toca el inventario. Pide confirmación |
+Un cliente puede pedir por voz que el gestor lo contacte. La solicitud queda en
+`solicitudes_contacto` con el teléfono y el correo del cliente, y se avisa a Make con el
+evento `solicitud_contacto` (ver [Automatizaciones con Make](#automatizaciones-con-make)).
+Mientras un cliente tenga una pendiente, no se registra otra ni se avisa de nuevo. El
+gestor y el administrador las ven en **Solicitudes** (`/admin/solicitudes/`) o las
+consultan por voz, y las marcan como atendidas en pantalla.
 
-`orden` es el número de la parada en la ruta (el que muestra la vista "Mi ruta").
+### Configurar los agentes en Retell: `sincronizar-asistentes`
 
-### 1. Retell
+Los prompts, los mensajes de bienvenida y las funciones de cada rol están en el
+repositorio (`app/asistentes/`), y un comando los aplica en Retell por API:
 
-1. En el panel de Retell, cree un agente en español. En el prompt puede saludar con
-   `{{nombre_usuario}}`. Indíquele que, ante una respuesta que termine en
-   *"¿confirmas?"*, lea el resumen y **solo vuelva a llamar la función, con los mismos
-   argumentos y `confirmar: true`, si el usuario dice que sí**.
-2. En la configuración de la llamada, fije una **duración máxima de 5 minutos**. La
-   sesión del lado del servidor dura 10: así una llamada nunca sobrevive a su sesión, y
-   las funciones no empiezan a responder 403 a mitad de una conversación.
-3. Agregue las cinco funciones de la tabla anterior con método `POST` y URL
-   `https://<su-dominio-ngrok>/api/asistente/conductor/<función>`. Esquema de parámetros
-   de las que reciben argumentos:
+1. En `.env`, defina:
+   - `RETELL_API_KEY`: **la API key que tiene el distintivo de webhook** en el panel de
+     Retell (es la que firma las funciones).
+   - `URL_PUBLICA`: la URL `https://` pública del servidor (ngrok o Render), sin barra
+     final.
+   - `RETELL_VOZ_ID`: una voz en español del panel de Retell (*Voices*). Solo se usa al
+     crear agentes nuevos; si se define, también se aplica a los existentes.
+   - `RETELL_AGENTE_CONDUCTOR_ID` y los demás `RETELL_AGENTE_*_ID`, si ya existen.
+2. Ejecute:
 
-   ```json
-   {
-     "type": "object",
-     "properties": {
-       "orden":     { "type": "integer", "description": "Numero de la parada en la ruta" },
-       "motivo":    { "type": "string",  "description": "Por que no se pudo entregar" },
-       "confirmar": { "type": "boolean", "description": "true solo si el usuario confirmo el resumen" }
-     },
-     "required": ["orden", "motivo"]
-   }
+   ```bash
+   .venv/bin/flask --app run sincronizar-asistentes
    ```
 
-   (`detalle-parada` solo lleva `orden`, y `marcar-en-camino`, `orden` y `confirmar`).
-   **Sin `confirmar` en el esquema, el agente no puede completar las acciones.** Deje desactivada la
-   opción que envía únicamente los argumentos: el servidor necesita el objeto `call`
-   del cuerpo para leer el `call_id`.
-4. En `.env`, defina `RETELL_API_KEY` con **la API key que tiene el distintivo de
-   webhook** (es la que Retell usa para firmar) y `RETELL_AGENTE_CONDUCTOR_ID` con el
-   `agent_id`.
+   Para cada rol crea el agente, o lo actualiza si ya existe (por su variable o por su
+   nombre, *SGDS - Gestor logistico* por ejemplo, para no duplicarlo). Lo deja con
+   español latino (`es-419`), **duración máxima de 5 minutos** (la sesión del servidor dura
+   10, así una llamada nunca sobrevive a su sesión) y **fin tras 20 segundos de
+   silencio**, y con sus funciones en `POST`, sin la opción de enviar solo los argumentos
+   (el servidor necesita el objeto `call` para leer el `call_id`).
+3. Copie al `.env` (y a las variables del despliegue) los `agent_id` que imprime para
+   los agentes nuevos.
 
-En una base que ya tiene datos, cree o actualice la tabla de sesiones con
-`.venv/bin/flask --app run migrar-asistente` (idempotente): crea la tabla si falta y le
-agrega las columnas de la confirmación si es anterior. `init-db` y `reset-db` la crean
-completa por su cuenta.
+**Al cambiar la URL de ngrok basta con volver a ejecutar el comando.**
 
-### 2. ngrok
+Detalles del versionado de Retell, que el comando respeta: una versión publicada no se
+puede editar y las llamadas web usan la última publicada. Por eso, si la última versión
+de un agente está publicada, el comando crea un borrador a partir de ella, le asigna un
+Retell LLM nuevo con la configuración del repositorio y lo publica. Las versiones
+anteriores conservan su LLM, así que se puede volver a ellas desde el panel. Si un agente
+existente usa un *conversation flow* en vez de un Retell LLM, el comando no lo toca y lo
+reporta: configúrelo a mano o vacíe su variable para crear uno nuevo.
+
+`flask --app run documentar-asistentes` regenera
+[docs/configuracion_retell.md](docs/configuracion_retell.md), con el prompt, la
+bienvenida y cada función (ruta y JSON de parámetros) de los cuatro agentes, para
+revisarla o cargarla a mano en el panel. Una prueba verifica que esté al día.
+
+En una base que ya tiene datos, cree o actualice las tablas del asistente con
+`.venv/bin/flask --app run migrar-asistente` (idempotente): crea `sesiones_asistente` y
+`solicitudes_contacto` si faltan y agrega las columnas de la confirmación a una tabla de
+sesiones anterior. `init-db` y `reset-db` las crean completas por su cuenta.
+
+### ngrok
 
 Retell debe poder llegar al servidor, y el navegador solo permite usar el micrófono en
 `https://` o en `localhost`:
@@ -462,14 +511,15 @@ Retell debe poder llegar al servidor, y el navegador solo permite usar el micró
 ngrok http 5001                  # en otra terminal
 ```
 
-Use la URL `https://….ngrok-free.app` que muestra ngrok en las cinco funciones de Retell
-y ábrala también en el teléfono del conductor. En el plan gratuito esa URL cambia cada
-vez que se reinicia ngrok, y hay que actualizarla en Retell.
+Ponga la URL `https://….ngrok-free.app` en `URL_PUBLICA`, ejecute
+`sincronizar-asistentes` y ábrala también en el teléfono del conductor. En el plan
+gratuito esa URL cambia cada vez que se reinicia ngrok.
 
-### 3. Make (avisos al cliente por correo)
+### Make
 
-Cada cambio de estado que el conductor registra, también por voz, avisa al cliente a
-través de Make. La configuración del escenario y la demo están en
+Las acciones por voz disparan los mismos avisos que la pantalla (`pedido_estado`,
+`stock_bajo`), y las solicitudes de contacto el evento `solicitud_contacto`. La
+configuración de los escenarios y la demo están en
 [Automatizaciones con Make](#automatizaciones-con-make).
 
 ### SDK web: migración pendiente
@@ -484,8 +534,8 @@ El fin de `/v2/create-web-call` (18 de octubre de 2026) no afecta: `retell-sdk` 
 llama a `/v3/create-web-call`, y el SDK web acepta su token si se le indica el
 transporte `gateway` con el `call_id`.
 
-Cambiar de página corta la llamada; el asistente está pensado para usarse desde la
-pantalla de la ruta sin navegar.
+Cambiar de página corta la llamada; el asistente está pensado para usarse desde una
+misma pantalla sin navegar.
 
 ## Automatizaciones con Make
 
@@ -500,7 +550,7 @@ Sin las variables correspondientes, la aplicación funciona igual y no sale nada
 |---|---|---|
 | `MAKE_WEBHOOK_URL` | URL del *Custom webhook* que recibe los avisos | No se envía ningún aviso |
 | `MAKE_WEBHOOK_KEY` | API key del webhook; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
-| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
+| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
 | `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario | El endpoint del resumen responde **404** |
 
 Genere el token con `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
@@ -518,6 +568,7 @@ el mismo mecanismo:
 |---|---|---|---|
 | `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`; en CANCELADO, además `motivo` |
 | `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora` |
+| `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `correo_destino` |
 
 `stock_bajo` avisa **una vez por umbral, al cruzarlo hacia abajo**, y no en cada
 movimiento posterior:
@@ -558,6 +609,18 @@ movimiento posterior:
 }
 ```
 
+```json
+{
+  "tipo": "solicitud_contacto",
+  "cliente": "Supermercado El Portal",
+  "correo": "compras@ejemplo.com",
+  "telefono": "3115550111",
+  "motivo": "Cancelar el pedido de hoy",
+  "hora": "2026-10-06 11:05",
+  "correo_destino": "operaciones@ejemplo.com"
+}
+```
+
 ### Escenario 1: webhook con router
 
 1. Cree un escenario con el disparador **Webhooks → Custom webhook** y copie su URL en
@@ -571,6 +634,8 @@ movimiento posterior:
      un filtro por `estado`; en la rama de CANCELADO incluya `{{motivo}}`.
    - `tipo` = `stock_bajo` → correo para `{{correo_destino}}`. Use `negativo` para
      distinguir en el asunto un stock bajo de un descuadre.
+   - `tipo` = `solicitud_contacto` → correo para `{{correo_destino}}` con el cliente,
+     su teléfono, su correo y el motivo, para que el gestor lo llame.
 
 ### Escenario 2: resumen diario programado
 
@@ -669,7 +734,7 @@ Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**812 verificaciones en 11 suites**, todas pasando. Cada suite reinicia y resiembra la
+**881 verificaciones en 12 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 | Suite | Cubre | Pruebas |
@@ -684,13 +749,15 @@ base, por lo que los resultados son reproducibles.
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 97 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 72 |
-| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, migraciones | 181 |
+| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, migraciones | 192 |
+| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con versionado | 58 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
 Make, y firma las peticiones con el propio SDK de Retell para probar la verificación real.
 La de automatizaciones también corre sin internet: simula Make y registra cada aviso con
-sus encabezados.
+sus encabezados. La del asistente por rol simula además el ruteo sin red, y la de
+sincronización usa un Retell simulado que valida cada llamada contra la firma real del SDK.
 
 ## Medición del RNF2
 
