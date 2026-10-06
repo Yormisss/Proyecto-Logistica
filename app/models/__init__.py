@@ -20,10 +20,12 @@ from app.models.pedido import (
     PruebaEntrega,
 )
 from app.models.ruta import EstadoRuta, Ruta, Vehiculo
+from app.models.solicitud import SolicitudContacto
 from app.models.usuario import Rol, Usuario
 
 __all__ = [
     "SesionAsistente",
+    "SolicitudContacto",
     "VIGENCIA_CONFIRMACION",
     "VIGENCIA_SESION",
     "Cliente",

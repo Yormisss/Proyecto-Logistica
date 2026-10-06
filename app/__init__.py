@@ -142,6 +142,7 @@ def _registrar_extensiones(app):
 
 def _registrar_controladores(app):
     from app.controllers.asistente import asistente_bp
+    from app.controllers.solicitudes import solicitudes_bp
     from app.controllers.asistente_api import asistente_api_bp
     from app.controllers.automatizacion_api import automatizacion_api_bp
     from app.controllers.auth import auth_bp
@@ -166,6 +167,7 @@ def _registrar_controladores(app):
     app.register_blueprint(usuarios_bp, url_prefix="/admin/usuarios")
     app.register_blueprint(clientes_admin_bp, url_prefix="/admin/clientes")
     app.register_blueprint(asistente_bp, url_prefix="/asistente")
+    app.register_blueprint(solicitudes_bp, url_prefix="/admin/solicitudes")
 
     # Las custom functions las invoca Retell desde sus servidores, sin cookie
     # de sesion ni token CSRF: cada peticion se autentica con la firma

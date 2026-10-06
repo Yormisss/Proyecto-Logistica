@@ -8,6 +8,8 @@ y el escenario de Make lo enruta segun ese campo:
 * `stock_bajo`: un movimiento dejo un producto en o por debajo de su stock
   minimo, o por debajo de cero. Es un aviso interno: va a CORREO_OPERACIONES y
   sin esa variable no se envia.
+* `solicitud_contacto`: un cliente pidio que el gestor lo contacte. Tambien es
+  interno, con la misma regla.
 
 Tres garantias, iguales para todos los tipos:
 
@@ -33,6 +35,7 @@ from app.tiempo import ahora
 
 TIPO_PEDIDO_ESTADO = "pedido_estado"
 TIPO_STOCK_BAJO = "stock_bajo"
+TIPO_SOLICITUD_CONTACTO = "solicitud_contacto"
 
 ESTADOS_AVISADOS = (
     EstadoPedido.EN_RUTA, EstadoPedido.ENTREGADO, EstadoPedido.FALLIDO, EstadoPedido.CANCELADO,
@@ -129,6 +132,21 @@ def aviso_stock(producto, stock_previo, pedido=None):
     })
 
 
+def aviso_solicitud_contacto(solicitud):
+    """Avisa a operaciones que un cliente pidio contacto con el gestor."""
+    correo_destino = (current_app.config.get("CORREO_OPERACIONES") or "").strip()
+    if not correo_destino:
+        return
+    encolar_evento(TIPO_SOLICITUD_CONTACTO, {
+        "cliente": solicitud.cliente.nombre,
+        "correo": solicitud.correo,
+        "telefono": solicitud.telefono,
+        "motivo": solicitud.motivo,
+        "hora": _hora(),
+        "correo_destino": correo_destino,
+    })
+
+
 def _enviar(url, cabeceras, datos):
     try:
         respuesta = requests.post(url, json=datos, headers=cabeceras, timeout=TIMEOUT_MAKE)
@@ -136,7 +154,7 @@ def _enviar(url, cabeceras, datos):
     except Exception as error:
         registro.warning(
             "No se pudo enviar a Make el aviso %s (%s): %s",
-            datos.get("tipo"), datos.get("codigo") or datos.get("sku"), error,
+            datos.get("tipo"), datos.get("codigo") or datos.get("sku") or datos.get("cliente"), error,
         )
 
 

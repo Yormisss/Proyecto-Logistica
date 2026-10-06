@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Solicitudes de contacto | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Solicitudes de contacto</h1>
+  <p class="subtitulo-pagina">Clientes que pidieron por el asistente de voz que el gestor los contacte.</p>
+</div>
+
+<section class="tarjeta">
+  <form method="get" class="barra-filtros">
+    <select name="estado">
+      <option value="pendientes" {{ 'selected' if filtro == 'pendientes' }}>Pendientes</option>
+      <option value="atendidas" {{ 'selected' if filtro == 'atendidas' }}>Atendidas</option>
+      <option value="todas" {{ 'selected' if filtro == 'todas' }}>Todas</option>
+    </select>
+    <button type="submit" class="boton boton-secundario">Filtrar</button>
+  </form>
+
+  {% if solicitudes %}
+  <table class="tabla">
+    <thead>
+      <tr><th>Recibida</th><th>Cliente</th><th>Contacto</th><th>Motivo</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+    {% for solicitud in solicitudes %}
+      <tr>
+        <td>{{ solicitud.creada_en.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ solicitud.cliente.nombre }}</td>
+        <td>{{ solicitud.telefono or '—' }}<br><small>{{ solicitud.correo or '—' }}</small></td>
+        <td>{{ solicitud.motivo }}</td>
+        <td>
+          {% if solicitud.atendida %}
+            <span class="etiqueta etiqueta-entregado">Atendida</span>
+            <br><small>{{ solicitud.atendida_por.nombre if solicitud.atendida_por }}
+              &middot; {{ solicitud.atendida_en.strftime('%d/%m %H:%M') if solicitud.atendida_en }}</small>
+          {% else %}
+            <form method="post" action="{{ url_for('solicitudes.atender', solicitud_id=solicitud.id) }}">
+              {{ formulario.hidden_tag() }}
+              <button type="submit" class="boton boton-primario">Marcar atendida</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="vacio">
+      {% if filtro == 'pendientes' %}No hay solicitudes pendientes.{% else %}No hay solicitudes.{% endif %}
+    </p>
+  {% endif %}
+</section>
+{% endblock %}
