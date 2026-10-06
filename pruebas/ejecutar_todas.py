@@ -25,6 +25,7 @@ SUITES = [
     ("prueba_07_clientes_portal.py", "RF1/RF2 · Clientes normalizados y portal"),
     ("prueba_08_administracion.py", "RF1 · Administracion de cuentas y clientes"),
     ("prueba_09_asistente.py", "RF4 · Asistente de voz y avisos por Make"),
+    ("prueba_10_automatizaciones.py", "RF4/RF6 · Automatizaciones con Make"),
 ]
 
 

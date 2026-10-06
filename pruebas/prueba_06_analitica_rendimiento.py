@@ -211,6 +211,7 @@ with app.app_context():
     kpis = analitica.kpis_del_dia(fecha=dia_cancel)
     check(kpis["total_dia"] == 3, f"el dia cuenta los 3 pedidos, cancelado incluido ({kpis['total_dia']})")
     check(kpis["pendientes"] == 0, "el pedido cancelado no cuenta como pendiente")
+    check(kpis["cancelados"] == 1, f"y se cuenta aparte como cancelado ({kpis['cancelados']})")
     check(
         kpis["porcentaje_exito"] == 50.0,
         f"tasa de exito 1 entregado / (1 entregado + 1 fallido) = 50%, sin contar el cancelado ({kpis['porcentaje_exito']})",
