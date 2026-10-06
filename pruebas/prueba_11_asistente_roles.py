@@ -8,7 +8,7 @@ import json
 import pathlib
 import re
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -16,6 +16,7 @@ from retell.lib.webhook_auth import symmetric
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
 
 from run import app
+from app.controllers.asistente_api.comun import fecha_larga
 from app.controllers.asistente_api import (
     FUNCIONES, exigir_confirmacion, funcion_asistente, funciones_de_rol, responder,
 )
@@ -400,6 +401,8 @@ rechazos = [
     ({**pedido_voz, "productos": []}, "al menos un producto", "sin productos"),
     ({**pedido_voz, "fecha": "mañana"}, "No entendí la fecha", "una fecha que no es AAAA-MM-DD"),
     ({**pedido_voz, "prioridad": 7}, "prioridad debe ser", "prioridad fuera de 1 a 3"),
+    ({**pedido_voz, "fecha": (hoy() - timedelta(days=1)).isoformat()}, "No puedo crear pedidos con fecha pasada",
+     "una fecha anterior a hoy"),
 ]
 for args, esperado, que in rechazos:
     s = accion("gestor/crear-pedido", CALL_G, args)
@@ -410,9 +413,17 @@ s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "sede": ""})
 check("Encontré 2 sedes de Supermercado El Portal" in mensaje(s), "sin sede y con dos sedes, pregunta cual")
 s = funcion("gestor/crear-pedido", CALL_G, pedido_voz)
 check(mensaje(s) == "Voy a crear un pedido para Supermercado El Portal, sede Sede Toberin, en "
-      f"Av. Cra 19 #166-30, para el {hoy().strftime('%d/%m/%Y')} con prioridad media: "
+      f"Av. Cra 19 #166-30, para el {fecha_larga(hoy())} con prioridad media: "
       "3 de Caja bebidas 12 und y 2 de Bolsa arroz 5 kg. ¿confirmas?",
       f"la confirmacion lee cliente, sede, fecha, prioridad y cada producto: {mensaje(s)}")
+check(fecha_larga(date(2026, 10, 6), date(2026, 10, 6)) == "martes 6 de octubre"
+      and fecha_larga(date(2027, 1, 4), date(2026, 10, 6)) == "lunes 4 de enero de 2027",
+      "las fechas se leen con el dia de la semana, y el año solo si no es el actual")
+manana = hoy() + timedelta(days=1)
+s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "fecha": manana.isoformat()})
+check(f"para el {fecha_larga(manana)} con prioridad" in mensaje(s), "una fecha futura se acepta y se lee larga")
+# Ese resumen reemplazo al de hoy: se vuelve a pedir antes de confirmar.
+funcion("gestor/crear-pedido", CALL_G, pedido_voz)
 check(huella() == antes, "ningun rechazo ni el resumen crean nada (tampoco clientes ni sedes)")
 
 s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "confirmar": True})
@@ -497,6 +508,22 @@ antes = huella()
 s = accion("gestor/agregar-a-ruta", CALL_G, {"pedido": "ROLES-PEND", "conductor": "diego"})
 check("ya está finalizada y no se reabre" in mensaje(s) and huella() == antes,
       "con la ruta de hoy finalizada responde que se hace en pantalla y no cambia nada")
+
+# Reintentar un fallido de una ruta de hoy ya finalizada: la reabre y lo avisa.
+with app.app_context():
+    ruta = db.session.query(Ruta).filter_by(codigo="RUT-ROLES-01").one()
+    reabrir = next(x for x in ruta.pedidos if x.codigo == "ROLES-001")
+    reabrir.estado = EstadoPedido.FALLIDO
+    db.session.commit()
+s = funcion("gestor/reintentar-pedido", CALL_G, {"pedido": "ROLES-001"})
+check(mensaje(s).endswith("La ruta RUT-ROLES-01 está finalizada y se reabrirá. ¿confirmas?"),
+      f"el resumen avisa que la ruta finalizada se reabrira: {mensaje(s)}")
+funcion("gestor/reintentar-pedido", CALL_G, {"pedido": "ROLES-001", "confirmar": True})
+with app.app_context():
+    ruta = db.session.query(Ruta).filter_by(codigo="RUT-ROLES-01").one()
+    check(ruta.estado == EstadoRuta.EN_CURSO
+          and next(x for x in ruta.pedidos if x.codigo == "ROLES-001").estado == EstadoPedido.ASIGNADO,
+          "y al confirmar la ruta vuelve a EN_CURSO, igual que con la pantalla del conductor")
 
 # Reintentar un fallido de hoy
 s = accion("gestor/reintentar-pedido", CALL_G, {"pedido": f"PED-{D}-005"})
@@ -739,15 +766,25 @@ check(len(eventos) == 1 and set(eventos[0]) == {"tipo", "cliente", "correo", "te
       and eventos[0]["cliente"] == "Supermercado El Portal",
       f"y envia a Make el evento solicitud_contacto {eventos[0] if eventos else None}")
 
-app.config["CORREO_OPERACIONES"] = ""
+YA_REGISTRADA = ("Ya tienes una solicitud de contacto registrada; el gestor logístico se comunicará "
+                 "contigo.")
 envios_antes = len(envios_make)
-cliente_voz("solicitar-contacto", {"motivo": "Cambiar la ventana"})
-cliente_voz("solicitar-contacto", {"motivo": "Cambiar la ventana", "confirmar": True})
+for args in ({"motivo": "Cambiar la ventana"}, {"motivo": "Cambiar la ventana", "confirmar": True}):
+    s = cliente_voz("solicitar-contacto", args)
+    check(mensaje(s) == YA_REGISTRADA, "con una solicitud pendiente no pide confirmar otra: ya esta registrada")
 notificaciones.esperar_envios()
 with app.app_context():
-    check(db.session.query(SolicitudContacto).count() == 2, "sin CORREO_OPERACIONES la solicitud se registra igual")
+    check(db.session.query(SolicitudContacto).count() == 1, "no se crea una segunda solicitud")
+    from app.services.solicitudes import SolicitudYaRegistrada, registrar_solicitud
+    try:
+        registrar_solicitud(db.session.get(Cliente, portal_id), sol_id, "Otra")
+        rechazada = False
+    except SolicitudYaRegistrada:
+        rechazada = True
+    db.session.rollback()
+    check(rechazada, "el servicio tambien la rechaza")
 check(not [e for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_contacto"],
-      "pero no se envia el aviso interno")
+      "ni se envia otro aviso a Make")
 
 prohibidos = ["RUT-", "Andres Molina", "Diego Pardo", "Sergio Vargas", "SKU-", "Tienda La Esquina",
               "Tienda Fontibon", "Autoservicio Kennedy", "stock", "conductor", "ruta "]
@@ -757,7 +794,7 @@ check(not filtrado, f"ninguna respuesta del cliente expone rutas, conductores, s
 
 print("\n== 13. Solicitudes de contacto: gestor y admin ==")
 s = funcion("gestor/solicitudes-contacto-pendientes", CALL_G)
-check("Hay 2 solicitudes de contacto pendientes" in mensaje(s) and "Cancelar el pedido de hoy" in mensaje(s)
+check(mensaje(s).startswith("Hay 1 solicitud de contacto pendiente: ") and "Cancelar el pedido de hoy" in mensaje(s)
       and "3115550111" in mensaje(s), f"el gestor las consulta por voz: {mensaje(s)}")
 gestor_web = clientes_web[Rol.DESPACHADOR]
 html = gestor_web.get("/admin/solicitudes/").data.decode()
@@ -778,10 +815,25 @@ with app.app_context():
     check(sol.atendida and sol.atendida_por.correo == "despachador@sgds.com" and sol.atendida_en is not None,
           "el gestor la marca como atendida, con quien y cuando")
 s = funcion("gestor/solicitudes-contacto-pendientes", CALL_G)
-check(mensaje(s).startswith("Hay 1 solicitud de contacto pendiente: ") and "Cambiar la ventana" in mensaje(s)
-      and "Cancelar el pedido de hoy" not in mensaje(s), "y deja de figurar como pendiente")
+check(mensaje(s) == "No hay solicitudes de contacto pendientes.", "y deja de figurar como pendiente")
 check("Atendida" in gestor_web.get("/admin/solicitudes/?estado=atendidas").data.decode(),
       "el filtro de atendidas la muestra")
+
+# Atendida la anterior, el cliente puede pedir contacto otra vez. Sin
+# CORREO_OPERACIONES se registra igual, pero sin aviso interno.
+app.config["CORREO_OPERACIONES"] = ""
+envios_antes = len(envios_make)
+cliente_voz("solicitar-contacto", {"motivo": "Cambiar la ventana"})
+s = cliente_voz("solicitar-contacto", {"motivo": "Cambiar la ventana", "confirmar": True})
+notificaciones.esperar_envios()
+with app.app_context():
+    check(db.session.query(SolicitudContacto).count() == 2 and "registré tu solicitud" in mensaje(s),
+          "atendida la anterior, puede registrar otra; sin CORREO_OPERACIONES se registra igual")
+check(not [e for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_contacto"],
+      "pero no se envia el aviso interno")
+s = funcion("gestor/solicitudes-contacto-pendientes", CALL_G)
+check(mensaje(s).startswith("Hay 1 solicitud de contacto pendiente: ") and "Cambiar la ventana" in mensaje(s),
+      "y vuelve a figurar como pendiente")
 
 with app.app_context():
     huerfano = Usuario(nombre="Cuenta sin cliente", correo="sincliente@sgds.com", rol=Rol.CLIENTE, activo=True)
