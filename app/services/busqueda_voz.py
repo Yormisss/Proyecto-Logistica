@@ -20,7 +20,7 @@ from difflib import SequenceMatcher
 from sqlalchemy import func, or_
 
 from app.extensions import db
-from app.models import Cliente, EstadoPedido, Pedido, Producto, normalizar_texto
+from app.models import Cliente, EstadoPedido, Pedido, Producto, Rol, Usuario, normalizar_texto
 from app.tiempo import hoy
 
 # Opciones que se leen en voz alta cuando hay varias coincidencias.
@@ -247,10 +247,38 @@ def buscar_sedes(cliente, texto=None):
 
 
 # --------------------------------------------------------------------------
+# Conductores
+# --------------------------------------------------------------------------
+
+def buscar_conductores(texto):
+    """Conductor activo por nombre: identico, que contenga las palabras o parecido."""
+    buscado = normalizar_texto(texto)
+    if not buscado:
+        return Coincidencias([])
+
+    conductores = (
+        db.session.query(Usuario)
+        .filter(Usuario.rol == Rol.CONDUCTOR, Usuario.activo.is_(True))
+        .order_by(Usuario.nombre)
+        .all()
+    )
+    identicos = [c for c in conductores if normalizar_texto(c.nombre) == buscado]
+    if identicos:
+        return Coincidencias(identicos)
+
+    contienen = [c for c in conductores
+                 if _contiene_palabras(buscado.split(), normalizar_texto(c.nombre))]
+    if contienen:
+        return Coincidencias(contienen)
+
+    return Coincidencias(_por_parecido(conductores, texto, lambda c: normalizar_texto(c.nombre)))
+
+
+# --------------------------------------------------------------------------
 # Respuesta en voz
 # --------------------------------------------------------------------------
 
-def _enumerar(textos):
+def enumerar(textos):
     if len(textos) == 1:
         return textos[0]
     return ", ".join(textos[:-1]) + " y " + textos[-1]
@@ -265,5 +293,5 @@ def describir(coincidencias, como_texto, que):
     elementos = coincidencias.elementos
     leidos = [como_texto(e) for e in elementos[:LIMITE_OPCIONES]]
     sobrantes = len(elementos) - len(leidos)
-    lista = _enumerar(leidos) + (f", y {sobrantes} más" if sobrantes else "")
+    lista = enumerar(leidos) + (f", y {sobrantes} más" if sobrantes else "")
     return f"Encontré {len(elementos)} {que}: {lista}. ¿Cuál?"

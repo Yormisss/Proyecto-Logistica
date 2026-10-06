@@ -200,4 +200,4 @@ def exigir_confirmacion(resumen):
 
 
 # Registro de las funciones de cada rol (importan los decoradores de arriba).
-from app.controllers.asistente_api import conductor  # noqa: E402,F401
+from app.controllers.asistente_api import conductor, gestor  # noqa: E402,F401
