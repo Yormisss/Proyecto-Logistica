@@ -2,7 +2,8 @@ import pathlib
 import json, sys
 from datetime import date, time
 from unittest.mock import patch
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 import requests
 from run import app
 from app.services import ruteo
@@ -43,25 +44,40 @@ mixto = PEDIDOS + [P(4, 4.65,-74.10, None, 1)]
 orden = ruteo._ordenar_por_ventana(mixto)
 check(orden[-1].id == 4, "los pedidos sin ventana quedan al final")
 
-print("\n== 4. OSRM en vivo (optimizacion por distancia) ==")
-with app.app_context():
-    r = ruteo.calcular_ruta(ORIGEN, PEDIDOS, ruteo.ESTRATEGIA_DISTANCIA)
-check(r.proveedor == "OSRM", f"uso OSRM (proveedor={r.proveedor})")
-check(len(r.orden) == 3, f"secuencia completa: {r.orden}")
-check(r.distancia_km > 0 and r.duracion_min > 0, f"{r.distancia_km} km / {r.duracion_min} min")
-check(r.geometria is not None, "devuelve geometria para el mapa")
-if r.geometria:
-    g = json.loads(r.geometria)
-    check(len(g) > 10 and len(g[0]) == 2, f"geometria con {len(g)} puntos [lat,lng]")
-    check(-5 < g[0][0] < 15 and -80 < g[0][1] < -70, f"coordenadas en orden [lat,lng]: {g[0]}")
-check(not r.advertencias, f"sin advertencias: {r.advertencias}")
+def osrm_en_vivo():
+    print("\n== 4. OSRM en vivo (optimizacion por distancia) ==")
+    with app.app_context():
+        r = ruteo.calcular_ruta(ORIGEN, PEDIDOS, ruteo.ESTRATEGIA_DISTANCIA)
+    check(r.proveedor == "OSRM", f"uso OSRM (proveedor={r.proveedor})")
+    check(len(r.orden) == 3, f"secuencia completa: {r.orden}")
+    check(r.distancia_km > 0 and r.duracion_min > 0, f"{r.distancia_km} km / {r.duracion_min} min")
+    check(r.geometria is not None, "devuelve geometria para el mapa")
+    if r.geometria:
+        g = json.loads(r.geometria)
+        check(len(g) > 10 and len(g[0]) == 2, f"geometria con {len(g)} puntos [lat,lng]")
+        check(-5 < g[0][0] < 15 and -80 < g[0][1] < -70, f"coordenadas en orden [lat,lng]: {g[0]}")
+    check(not r.advertencias, f"sin advertencias: {r.advertencias}")
 
-print("\n== 5. OSRM en vivo (orden fijo por ventana) ==")
+    print("\n== 5. OSRM en vivo (orden fijo por ventana) ==")
+    with app.app_context():
+        r2 = ruteo.calcular_ruta(ORIGEN, PEDIDOS, ruteo.ESTRATEGIA_VENTANA)
+    check(r2.orden == [3,1,2], f"respeta el orden por ventana: {r2.orden}")
+    check(r2.proveedor == "OSRM" and r2.distancia_km > 0, f"calcula distancia real: {r2.distancia_km} km")
+    check(r2.distancia_km >= r.distancia_km, f"la ruta por ventana no es mas corta que la optimizada ({r2.distancia_km} vs {r.distancia_km} km)")
+
+
+# OSRM en vivo es la unica parte de las pruebas que sale a internet, y solo con
+# --externas. Sin la opcion, el resto de la suite verifica el respaldo local.
+if _preparar.EXTERNAS:
+    with _preparar.red_externa():
+        osrm_en_vivo()
+else:
+    print("\n== 4-5. OSRM en vivo: se omite (corra con --externas) ==")
+
+print("\n== 5b. Sin --externas la red queda cerrada y se usa el respaldo local ==")
 with app.app_context():
-    r2 = ruteo.calcular_ruta(ORIGEN, PEDIDOS, ruteo.ESTRATEGIA_VENTANA)
-check(r2.orden == [3,1,2], f"respeta el orden por ventana: {r2.orden}")
-check(r2.proveedor == "OSRM" and r2.distancia_km > 0, f"calcula distancia real: {r2.distancia_km} km")
-check(r2.distancia_km >= r.distancia_km, f"la ruta por ventana no es mas corta que la optimizada ({r2.distancia_km} vs {r.distancia_km} km)")
+    rl = ruteo.calcular_ruta(ORIGEN, PEDIDOS, ruteo.ESTRATEGIA_DISTANCIA)
+check(rl.proveedor == "LOCAL" and len(rl.orden) == 3, f"sin red externa: respaldo local ({rl.proveedor})")
 
 print("\n== 6. Degradacion sin conexion ==")
 with patch("app.services.ruteo.requests.get", side_effect=requests.ConnectionError("sin red")):

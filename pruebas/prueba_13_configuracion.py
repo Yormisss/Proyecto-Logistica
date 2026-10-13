@@ -12,7 +12,8 @@ import sys
 from datetime import timedelta
 from types import SimpleNamespace
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 import requests
 from retell.lib.webhook_auth import symmetric
 from sqlalchemy import inspect, text
@@ -31,9 +32,7 @@ def check(c, m):
     print(("  OK   " if c else "  FALLA") + f" {m}")
     if not c: fallos.append(m)
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 CLAVE = "clave-retell-prueba"
 app.config["WTF_CSRF_ENABLED"] = True

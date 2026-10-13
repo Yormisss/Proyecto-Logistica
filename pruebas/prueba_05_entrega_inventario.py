@@ -1,7 +1,8 @@
 import pathlib
 import re, sys
 from datetime import date, time
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 from run import app
 from app.extensions import db
 from app.models import (Pedido, PedidoItem, Producto, Ruta, Usuario, Rol, EstadoPedido,
@@ -13,10 +14,7 @@ def check(c,m):
     if not c: fallos.append(m)
 app.config["WTF_CSRF_ENABLED"]=True
 
-# Base limpia en cada corrida, sea SQLite o MySQL.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 def sesion(correo, clave):
     c = app.test_client()

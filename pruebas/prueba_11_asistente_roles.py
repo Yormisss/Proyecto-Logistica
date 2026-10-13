@@ -11,7 +11,8 @@ import sys
 from datetime import date, timedelta
 from types import SimpleNamespace
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 from retell.lib.webhook_auth import symmetric
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
 
@@ -34,9 +35,7 @@ def check(c, m):
     print(("  OK   " if c else "  FALLA") + f" {m}")
     if not c: fallos.append(m)
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 CLAVE = "clave-retell-prueba"
 AGENTES = {"RETELL_AGENTE_CONDUCTOR_ID": "agent_conductor", "RETELL_AGENTE_GESTOR_ID": "agent_gestor",

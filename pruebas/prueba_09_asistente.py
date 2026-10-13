@@ -13,7 +13,8 @@ import time as reloj
 from datetime import time, timedelta
 from types import SimpleNamespace
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 from retell.lib.webhook_auth import symmetric
 
 from run import app
@@ -30,9 +31,7 @@ def check(c, m):
     print(("  OK   " if c else "  FALLA") + f" {m}")
     if not c: fallos.append(m)
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 CLAVE = "clave-retell-prueba"
 API = "/api/asistente/conductor"
@@ -506,12 +505,7 @@ with app.app_context():
 print("\n== 9. Demo de Make con la semilla ==")
 # Se vuelve a sembrar con SEMILLA_CORREO_CLIENTE, como lo haria la demo, y se
 # recorre el camino del conductor sin ningun paso manual.
-import os, subprocess
-from _preparar import PYTHON, RAIZ
-entorno = {**os.environ, "SEMILLA_CORREO_CLIENTE": "demo@portal.invalid"}
-subprocess.run([str(PYTHON), "-m", "flask", "--app", "run", "reset-db"], cwd=RAIZ,
-               capture_output=True, env=entorno)
-subprocess.run([str(PYTHON), "seed.py"], cwd=RAIZ, capture_output=True, env=entorno)
+_preparar.reiniciar_base(SEMILLA_CORREO_CLIENTE="demo@portal.invalid")
 with app.app_context():
     db.session.remove()
     portal = db.session.query(Cliente).filter_by(nombre="Supermercado El Portal").one()

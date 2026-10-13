@@ -1,7 +1,9 @@
 import pathlib
 import json, re, sys
 from datetime import date, time
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
+_preparar.reiniciar_base()
 from run import app
 from app.extensions import db
 from app.models import Pedido, Ruta, Usuario, Rol, EstadoPedido, EstadoRuta, EventoPedido
@@ -11,6 +13,11 @@ def check(c,m):
     print(("  OK   " if c else "  FALLA")+f" {m}")
     if not c: fallos.append(m)
 app.config["WTF_CSRF_ENABLED"]=True   # se prueba con CSRF activo
+
+# OSRM simulado (sin internet): la suite prueba lo que la pantalla hace con la
+# respuesta del proveedor; el servicio real se prueba en la suite 03 con --externas.
+from unittest.mock import patch
+patch("app.services.ruteo.requests.get", _preparar.osrm_simulado).start()
 
 def sesion(correo, clave):
     c = app.test_client()

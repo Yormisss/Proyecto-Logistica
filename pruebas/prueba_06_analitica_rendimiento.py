@@ -1,15 +1,13 @@
 import pathlib
 import re, sys, subprocess, os
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 fallos=[]
 def check(c,m):
     print(("  OK   " if c else "  FALLA")+f" {m}")
     if not c: fallos.append(m)
 
-# Base limpia en cada corrida, sea SQLite o MySQL.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 from run import app
 from app.extensions import db

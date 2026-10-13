@@ -1,6 +1,8 @@
 import pathlib
 import re, sys
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
+_preparar.reiniciar_base()
 from run import app
 
 fallos = []
@@ -90,8 +92,6 @@ check(
     "crear_app() crea la carpeta instance/ si no existia (clon nuevo, .gitignore)",
 )
 
-sys.path.insert(0, str(raiz_proyecto / "pruebas"))
-import _preparar
 check(
     _preparar.PYTHON == sys.executable,
     "pruebas/_preparar.py usa sys.executable, no una ruta fija a .venv (portable entre SO)",

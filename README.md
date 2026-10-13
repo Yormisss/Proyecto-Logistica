@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               1536 verificaciones automatizadas en 17 suites
+├── pruebas/               1532 verificaciones automatizadas en 17 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -990,36 +990,49 @@ Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 
 ## Verificación
 
-```bash
-.venv/bin/python pruebas/ejecutar_todas.py
-```
+Las pruebas corren solo en MySQL, en una base aparte: `logistica_pruebas` en el mismo
+contenedor. Créela una vez con el usuario root del contenedor:
 
-**1536 verificaciones en 17 suites con SQLite y 1541 con MySQL**, todas pasando. La
-diferencia está en la suite 7, que en MySQL verifica además las claves ajenas que dibuja el
-diagrama EER (SQLite no las agrega a tablas existentes). Cada suite reinicia y resiembra la
-base, por lo que los resultados son reproducibles.
-
-**Cada suite borra la base configurada.** Si su `.env` apunta a una base con datos que
-quiere conservar, pase otra base solo a ese comando (la variable de entorno tiene
-prioridad sobre el `.env`):
-
-```bash
-# SQLite temporal
-DATABASE_URL=sqlite:////tmp/sgds_pruebas.db .venv/bin/python pruebas/ejecutar_todas.py
-# MySQL, en una base aparte (créela una vez con el usuario root del contenedor)
+```powershell
 docker exec sgds-mysql mysql -uroot -proot_clave -e "CREATE DATABASE IF NOT EXISTS logistica_pruebas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON logistica_pruebas.* TO 'sgds'@'%';"
-DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica_pruebas .venv/bin/python pruebas/ejecutar_todas.py
 ```
+
+Y luego, desde la raíz del proyecto:
+
+```powershell
+.venv\Scripts\python.exe pruebas\ejecutar_todas.py              # todas, salida resumida
+.venv\Scripts\python.exe pruebas\ejecutar_todas.py 09 17        # solo esas suites
+.venv\Scripts\python.exe pruebas\ejecutar_todas.py --detalle    # salida completa
+.venv\Scripts\python.exe pruebas\ejecutar_todas.py --externas   # incluye OSRM en vivo
+.venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
+```
+
+**1532 verificaciones en 17 suites contra MySQL 8.0, todas pasando, en unos dos
+minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
+líneas `FALLA`; `--detalle` muestra todo.
+
+**La base de pruebas se borra en cada suite, y nunca es la del `.env`.** Las pruebas usan
+`mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica_pruebas` (otra base con la
+variable `PRUEBAS_DATABASE_URL`) y se niegan a correr si el nombre de la base no termina
+en `_pruebas`; el `DATABASE_URL` del `.env` no se usa. El ejecutor siembra una sola vez y
+cada suite restaura esos datos al arrancar, por lo que los resultados son reproducibles;
+corrida sola, la suite siembra por su cuenta.
+
+**Ninguna suite contacta servicios externos.** `pruebas/_preparar.py`, que cada suite
+importa primero, vacía `MAKE_WEBHOOK_URL`, `MAKE_WEBHOOK_CREDENCIALES_URL` y
+`RETELL_API_KEY` aunque el `.env` las defina, y limita la red a la propia máquina: Make,
+Retell y OSRM se simulan o caen a su respaldo. La única excepción es la parte de OSRM en
+vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 
 | Suite | Cubre | Pruebas |
 |---|---|---|
 | `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción, inventario sembrado | 46 |
 | `prueba_02_pedidos_csv.py` | RF2 · alta manual, importación CSV, inventario, anulación | 64 |
-| `prueba_03_ruteo.py` | RF3 · OSRM, ordenamientos, respaldo offline | 31 |
+| `prueba_03_ruteo.py` | RF3 · ordenamientos, respaldo offline (OSRM en vivo con `--externas`: 32) | 22 |
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
 | `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 67 |
-| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 (73 en MySQL) |
+| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 73 |
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 86 |
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 99 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 79 |
@@ -1031,18 +1044,16 @@ DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica_pruebas .v
 | `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario | 277 |
 | `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración y bitácora (admin); resúmenes, rechazos y auditoría | 94 |
 
-**Las pruebas no avisan al Make real.** `ejecutar_todas.py` corre cada suite, y el
-reinicio y la siembra de la base, con `MAKE_WEBHOOK_URL` y `MAKE_WEBHOOK_CREDENCIALES_URL`
-vacías aunque su `.env` las defina; las suites que prueban los avisos usan un Make
-simulado. Si corre una suite suelta, haga lo mismo: `MAKE_WEBHOOK_URL= .venv/bin/python
-pruebas/prueba_05_entrega_inventario.py`.
+La del asistente firma las peticiones con el propio SDK de Retell para probar la
+verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
+encabezados, y la de sincronización usa un Retell simulado que valida cada llamada contra
+la firma real del SDK. La de rutas en pantalla usa un OSRM simulado.
 
-La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
-el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
-Make, y firma las peticiones con el propio SDK de Retell para probar la verificación real.
-La de automatizaciones también corre sin internet: simula Make y registra cada aviso con
-sus encabezados. La del asistente por rol simula además el ruteo sin red, y la de
-sincronización usa un Retell simulado que valida cada llamada contra la firma real del SDK.
+**`seed.py` corrido a mano sí avisa a Make.** Fuera de las pruebas, sembrar con
+`MAKE_WEBHOOK_URL` definido en el `.env` envía los avisos que generan los datos de
+demostración al escenario real. Para sembrar sin avisos, comente esa línea del `.env`
+antes de correr `seed.py` (en PowerShell, `$env:MAKE_WEBHOOK_URL = ""` no sirve: borra la
+variable y el `.env` vuelve a aportarla).
 
 ## Medición del RNF2
 
@@ -1086,10 +1097,9 @@ en tabla.
 
 ## MySQL y MySQL Workbench (fase piloto)
 
-El proyecto corre indistintamente sobre SQLite (desarrollo) o MySQL (piloto).
-**La migración está verificada:** las 17 tablas se crean correctamente y las 1536
-pruebas (1541 contra MySQL, que suma las verificaciones propias de ese motor: claves
-ajenas y precisión de las coordenadas) pasan íntegras contra MySQL 8.0.46.
+**La migración está verificada:** las 17 tablas se crean correctamente y las 1532
+verificaciones (incluidas las propias de MySQL: claves ajenas y precisión de las
+coordenadas) pasan íntegras contra MySQL 8.0.46.
 
 `docker-compose.yml` no necesita cambios al evolucionar el esquema: solo provisiona
 el servidor MySQL. Las tablas las crea el ORM, así que `init-db` recoge los modelos

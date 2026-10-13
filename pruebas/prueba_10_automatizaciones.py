@@ -9,7 +9,8 @@ import re
 import sys
 from datetime import time, timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 
 from run import app
 from app.services.inventario import registrar_movimiento
@@ -24,9 +25,7 @@ def check(c, m):
     print(("  OK   " if c else "  FALLA") + f" {m}")
     if not c: fallos.append(m)
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 URL_MAKE = "https://hook.make.invalid/sgds"
 CLAVE_MAKE = "clave-make-prueba"
