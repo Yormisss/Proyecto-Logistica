@@ -590,24 +590,24 @@ s = accion("gestor/pedidos", CALL_A, {"operacion": "crear", **pedido_voz, "produ
 check("creé el pedido" in mensaje(s), "el admin tambien puede usar las funciones del gestor")
 
 
-print("\n== 9. Admin: analitica ==")
+print("\n== 9. Analitica (gestor y admin) y panel de rendimiento (solo admin) ==")
 with app.app_context():
     t14 = analitica.tiempo_promedio_entrega(14)
     v30 = analitica.cumplimiento_ventana(30)
     prod14 = analitica.productividad_conductores(14)
     motivos14 = analitica.motivos_fallo(14)
-s = funcion("admin/tiempo-promedio-entrega", CALL_A)
+s = funcion("gestor/tiempo-promedio-entrega", CALL_G)
 check(f"{t14['promedio_min']:.0f} minutos" in mensaje(s) and f"{t14['muestras']} entregas" in mensaje(s)
       and "14 días" in mensaje(s), f"tiempo promedio con el periodo por defecto del panel: {mensaje(s)}")
-s = funcion("admin/cumplimiento-ventana", CALL_A, {"dias": 30})
+s = funcion("gestor/cumplimiento-ventana", CALL_G, {"dias": 30})
 check(f"{v30['dentro']} de {v30['total']}" in mensaje(s) and "30 días" in mensaje(s),
       f"cumplimiento de ventana a 30 dias: {mensaje(s)}")
-s = funcion("admin/cumplimiento-ventana", CALL_A, {"dias": 99})
+s = funcion("gestor/cumplimiento-ventana", CALL_A, {"dias": 99})
 check("14 días" in mensaje(s), "un periodo que el panel no ofrece usa el de por defecto")
-s = funcion("admin/productividad-conductores", CALL_A)
+s = funcion("gestor/productividad-conductores", CALL_G)
 check(prod14 and prod14[0]["conductor"] in mensaje(s) and f"{prod14[0]['entregadas']} entregadas" in mensaje(s),
       f"productividad por conductor: {mensaje(s)}")
-s = funcion("admin/causas-fallo", CALL_A)
+s = funcion("gestor/causas-fallo", CALL_A)
 check(motivos14 and f"{motivos14[0]['motivo']}, {motivos14[0]['cantidad']}" in mensaje(s),
       f"causas de fallo de la mas frecuente: {mensaje(s)}")
 with app.app_context():
@@ -622,6 +622,8 @@ s = funcion("admin/resumen-rendimiento", CALL_A)
 check(f"{rend['muestras']} mediciones" in mensaje(s) and "percentil 95" in mensaje(s)
       and ENDPOINTS_CRITICOS[critico] in mensaje(s),
       f"resumen del panel de rendimiento, con lo que supera el limite: {mensaje(s)}")
+check(funcion("admin/resumen-rendimiento", CALL_G)[0] == 403,
+      "el panel de rendimiento sigue siendo solo del admin, como en pantalla")
 
 
 print("\n== 10. Ajuste de inventario (gestor y admin) ==")

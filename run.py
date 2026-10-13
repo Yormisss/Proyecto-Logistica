@@ -103,6 +103,14 @@ def migrar_auditoria():
     aplicar()
 
 
+@app.cli.command("migrar-pruebas-entrega")
+def migrar_pruebas_entrega():
+    """Pruebas de entrega de solo agregar: quita el indice unico (idempotente)."""
+    from migraciones.m007_pruebas_entrega_historial import aplicar
+
+    aplicar()
+
+
 @app.cli.command("sincronizar-asistentes")
 @click.option("--rol", "roles", multiple=True,
               type=click.Choice(["conductor", "gestor", "admin", "cliente"]),

@@ -23,7 +23,7 @@ import hmac
 from datetime import timedelta
 
 from flask import Blueprint, abort, current_app, jsonify, render_template, request
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
 from app.models import Auditoria, Cliente, EstadoPedido, Pedido
@@ -58,7 +58,7 @@ def _fallidos_para_reprogramar(fecha):
     pedidos = (
         db.session.query(Pedido)
         .join(Cliente, Pedido.cliente_id == Cliente.id)
-        .options(joinedload(Pedido.prueba_entrega), joinedload(Pedido.cliente))
+        .options(selectinload(Pedido.pruebas_entrega), joinedload(Pedido.cliente))
         .filter(
             Pedido.estado == EstadoPedido.FALLIDO,
             Pedido.fecha_despacho == fecha,

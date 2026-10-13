@@ -1,9 +1,9 @@
 """Funciones del asistente de voz del gestor logistico (DESPACHADOR).
 
-El ADMIN tambien puede usarlas. Las consultas leen la operacion del dia; las
-acciones piden confirmacion y aplican los mismos servicios que la pantalla
-(pedidos, despacho, inventario y planificacion), por lo que disparan los
-mismos avisos de Make.
+El ADMIN tambien puede usarlas. Las consultas leen la operacion del dia y los
+indicadores de la analitica; las acciones piden confirmacion y aplican los
+mismos servicios que la pantalla (pedidos, despacho, inventario, planificacion
+y solicitudes de contacto), por lo que disparan los mismos avisos de Make.
 
 Las acciones se agrupan por entidad con el parametro `operacion` (`pedidos`,
 `productos`, `rutas`). El ajuste de inventario es de ambos roles, con motivo
@@ -13,7 +13,7 @@ Fuera del alcance por voz: importar CSV.
 """
 
 from flask import g
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.controllers.asistente_api import (
     NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_agrupada, funcion_asistente, responder,
@@ -47,6 +47,7 @@ from app.services.planificacion import (
 )
 from app.services.ruteo import ESTRATEGIA_DISTANCIA, ESTRATEGIA_VENTANA, ESTRATEGIAS
 from app.services.validacion import DatosInvalidos
+from app.services.solicitudes import SolicitudInvalida, marcar_atendida, pendiente_de
 from app.services.solicitudes import pendientes as pendientes_de_contacto
 from app.tiempo import hoy
 
@@ -291,7 +292,7 @@ def productos_bajo_minimo():
 def fallidos_hoy():
     fallidos = (
         db.session.query(Pedido)
-        .options(joinedload(Pedido.prueba_entrega))
+        .options(selectinload(Pedido.pruebas_entrega))
         .filter(Pedido.estado == EstadoPedido.FALLIDO, Pedido.fecha_despacho == hoy())
         .order_by(Pedido.codigo)
         .all()
@@ -326,8 +327,149 @@ def solicitudes_contacto_pendientes():
     return responder(
         f"Hay {cantidad(len(solicitudes), 'solicitud de contacto pendiente', 'solicitudes de contacto pendientes')}: "
         + _lista(solicitudes, solicitud_texto)
-        + ". Se marcan como atendidas en pantalla."
+        + ". Para marcar una como atendida, dime de qué cliente es."
     )
+
+
+@funcion_asistente(
+    ESPACIO, "atender-solicitud", roles=ROLES, accion=True, entidad="solicitud",
+    descripcion="Marca como atendida la solicitud de contacto pendiente de un cliente, como en la "
+                "pantalla Solicitudes.",
+    parametros={"cliente": {"type": "string",
+                            "description": "Nombre del cliente que pidio que lo contactaran."}},
+    requeridos=("cliente",),
+)
+def atender_solicitud():
+    buscado = texto("cliente")
+    if not buscado:
+        return responder(me_falta(["el cliente"]))
+    cliente, error = resolver(buscar_clientes(buscado), lambda c: c.nombre, "clientes",
+                              f"No encontré el cliente {buscado}.")
+    if cliente is None:
+        return responder(error)
+    solicitud = pendiente_de(cliente)
+    if solicitud is None:
+        return responder(f"{cliente.nombre} no tiene una solicitud de contacto pendiente.")
+
+    pendiente = exigir_confirmacion(
+        f"Voy a marcar como atendida la solicitud de {cliente.nombre} del "
+        f"{solicitud.creada_en.strftime('%d/%m a las %H:%M')}, por {solicitud.motivo}."
+    )
+    if pendiente:
+        return pendiente
+
+    try:
+        marcar_atendida(solicitud, g.usuario.id)
+    except SolicitudInvalida as error:
+        db.session.rollback()
+        return responder(str(error))
+    db.session.commit()
+    return responder(f"Listo, la solicitud de contacto de {cliente.nombre} quedó atendida.")
+
+
+# --------------------------------------------------------------------------
+# Indicadores de la analitica, con los mismos periodos que el panel. El panel
+# de rendimiento (tiempos de respuesta) es solo del admin: admin.py.
+# --------------------------------------------------------------------------
+
+PERIODOS_DIAS = (7, 14, 30)
+DIAS_POR_DEFECTO = 14
+
+PARAMETRO_DIAS = {
+    "dias": {"type": "integer",
+             "description": "Periodo en dias: 7, 14 (por defecto) o 30, como en el panel."},
+}
+
+
+def _dias():
+    dias = entero(g.argumentos.get("dias"))
+    return dias if dias in PERIODOS_DIAS else DIAS_POR_DEFECTO
+
+
+def _minutos(valor):
+    return f"{valor:.0f} minutos" if valor is not None else "sin datos"
+
+
+@funcion_asistente(
+    ESPACIO, "tiempo-promedio-entrega", roles=ROLES,
+    descripcion="Tiempo promedio desde que una parada sale en camino hasta que se entrega.",
+    parametros=PARAMETRO_DIAS,
+)
+def tiempo_promedio_entrega():
+    dias = _dias()
+    datos = analitica.tiempo_promedio_entrega(dias)
+    if not datos["muestras"]:
+        return responder(f"En los últimos {dias} días no hay entregas con tiempos registrados.")
+    return responder(
+        f"En los últimos {dias} días, una entrega tarda en promedio "
+        f"{_minutos(datos['promedio_min'])} desde que sale en camino, sobre "
+        f"{cantidad(datos['muestras'], 'entrega')}; la más rápida "
+        f"{_minutos(datos['minimo'])} y la más lenta {_minutos(datos['maximo'])}."
+    )
+
+
+@funcion_asistente(
+    ESPACIO, "cumplimiento-ventana", roles=ROLES,
+    descripcion="Porcentaje de entregas hechas dentro de la ventana horaria pactada.",
+    parametros=PARAMETRO_DIAS,
+)
+def cumplimiento_ventana():
+    dias = _dias()
+    datos = analitica.cumplimiento_ventana(dias)
+    if not datos["total"]:
+        return responder(f"En los últimos {dias} días no hay entregas con ventana horaria.")
+    return responder(
+        f"En los últimos {dias} días, {porcentaje(datos['porcentaje'])} de las entregas con "
+        f"ventana se hizo a tiempo: {datos['dentro']} de {datos['total']}."
+    )
+
+
+@funcion_asistente(
+    ESPACIO, "productividad-conductores", roles=ROLES,
+    descripcion="Entregas y tasa de exito por conductor, del mas productivo al menos.",
+    parametros=PARAMETRO_DIAS,
+)
+def productividad_conductores():
+    dias = _dias()
+    filas = analitica.productividad_conductores(dias)
+    if not filas:
+        return responder(f"En los últimos {dias} días no hay entregas cerradas por conductores.")
+    return responder(
+        f"En los últimos {dias} días: "
+        + enumerar([
+            f"{f['conductor']}, {cantidad(f['entregadas'], 'entregada')} y "
+            f"{cantidad(f['fallidas'], 'fallida')}, éxito {porcentaje(f['exito'])}"
+            for f in filas[:LIMITE_LISTA]
+        ])
+        + "."
+    )
+
+
+@funcion_asistente(
+    ESPACIO, "causas-fallo", roles=ROLES,
+    descripcion="Motivos de entrega fallida, del mas frecuente al menos.",
+    parametros=PARAMETRO_DIAS,
+)
+def causas_fallo():
+    dias = _dias()
+    filas = analitica.motivos_fallo(dias)
+    if not filas:
+        return responder(f"En los últimos {dias} días no hay entregas fallidas con motivo.")
+    total = sum(f["cantidad"] for f in filas)
+    partes = [
+        f"En los últimos {dias} días hubo {cantidad(total, 'entrega fallida', 'entregas fallidas')}. "
+        "Las causas principales: "
+        + enumerar([f"{f['motivo']}, {f['cantidad']}" for f in filas[:LIMITE_LISTA]])
+        + "."
+    ]
+    otro = next((f for f in filas if f.get("es_otro") and f.get("detalles")), None)
+    if otro:
+        partes.append(
+            f"En «{otro['motivo']}» se escribió: "
+            + enumerar([f"{d['texto']}, {d['cantidad']}" for d in otro["detalles"][:LIMITE_LISTA]])
+            + "."
+        )
+    return responder(" ".join(partes))
 
 
 # --------------------------------------------------------------------------

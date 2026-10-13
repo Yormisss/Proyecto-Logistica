@@ -196,7 +196,7 @@ from retell.types.llm_create_params import GeneralToolCustomTool
 CAMPOS_HERRAMIENTA = set(GeneralToolCustomTool.__annotations__)
 
 print("\n== 1. Configuracion de cada agente ==")
-ESPERADAS = {"conductor": 4, "gestor": 14, "admin": 22, "cliente": 8}
+ESPERADAS = {"conductor": 6, "gestor": 19, "admin": 23, "cliente": 8}
 with app.app_context():
     for definicion in conf.AGENTES:
         tools = conf.herramientas(definicion, URL)
@@ -288,8 +288,8 @@ check(retell.agentes["agent_conductor"][0]["publicada"]
       and retell.llms["llm_de_agent_conductor"][2]["general_prompt"] == "prompt viejo",
       "la version publicada anterior queda intacta, con su version del LLM")
 llm_cond = llm_de("agent_conductor")
-check(len(llm_cond["general_tools"]) == 4 and all(t["url"].startswith(URL + "/api/asistente/conductor/") for t in llm_cond["general_tools"]),
-      "su LLM trae las 4 funciones con la URL publica (sin la barra final)")
+check(len(llm_cond["general_tools"]) == 6 and all(t["url"].startswith(URL + "/api/asistente/conductor/") for t in llm_cond["general_tools"]),
+      "su LLM trae las 6 funciones con la URL publica (sin la barra final)")
 check(llm_cond["begin_message"] == conf.bienvenida(conf.AGENTES[0]) and llm_cond["general_prompt"] == conf.prompt(conf.AGENTES[0])
       and llm_cond["default_dynamic_variables"] == {"nombre_usuario": "", "fecha_hoy": ""},
       "con el prompt, la bienvenida y las variables dinamicas del repositorio")
@@ -304,7 +304,7 @@ check(all(retell.agentes[a][-1]["voice_id"] == "voz-es" and retell.agentes[a][-1
           and retell.agentes[a][-1]["response_engine"]["version"] == 0 for a in creados),
       "con la voz de RETELL_VOZ_ID, el LLM en la version 0 como el agente, y publicados")
 check([len(llm_de(por_nombre[n])["general_tools"]) for n in ("SGDS - Gestor logistico", "SGDS - Administrador", "SGDS - Cliente")]
-      == [14, 22, 8], "gestor con 14 funciones, admin con 22 (las del gestor y las suyas) y cliente con 8")
+      == [19, 23, 8], "gestor con 19 funciones, admin con 23 (las del gestor y las suyas) y cliente con 8")
 for nombre, variable in (("SGDS - Gestor logistico", "RETELL_AGENTE_GESTOR_ID"),
                          ("SGDS - Administrador", "RETELL_AGENTE_ADMIN_ID"), ("SGDS - Cliente", "RETELL_AGENTE_CLIENTE_ID")):
     check(f"{variable}={por_nombre[nombre]}" in r.output, f"imprime {variable} para el .env")

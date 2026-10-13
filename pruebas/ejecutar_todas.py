@@ -44,6 +44,7 @@ SUITES = [
     ("prueba_15_auditoria.py", "RF1/RF4 · Auditoria, bitacora y eventos"),
     ("prueba_16_cobertura_voz.py", "RF4 · Cobertura por voz de la pantalla"),
     ("prueba_17_voz_fase3.py", "RF1/RF4 · Voz: maestros, rutas, usuarios y config."),
+    ("prueba_18_voz_fase4.py", "RF1/RF4/RF5 · Voz: entregas, analitica y solicitudes"),
 ]
 
 

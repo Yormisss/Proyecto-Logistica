@@ -1,8 +1,12 @@
 """Funciones del asistente de voz del conductor.
 
 Solo operan sobre la ruta de hoy del conductor de la llamada y aplican las
-transiciones con `app.services.despacho`, igual que la vista movil. No hay
-funcion para confirmar entregas: esa requiere la prueba de entrega en pantalla.
+transiciones con `app.services.despacho`, igual que la vista movil. La entrega
+por voz exige el nombre y el documento de quien recibe; la llamada no envia la
+ubicacion del telefono, y la prueba de entrega lo dice en su observacion.
+
+Las acciones son de rutina y de alto volumen: quedan en la auditoria sin el
+correo accion_asistente (avisar=False); su historial esta en los eventos.
 """
 
 from flask import g
@@ -10,11 +14,12 @@ from flask import g
 from app.controllers.asistente_api import (
     NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_agrupada, funcion_asistente, responder,
 )
+from app.controllers.asistente_api.comun import fecha_larga, me_falta, texto
 from app.extensions import db
-from app.models import EstadoPedido, Rol
+from app.models import EstadoPedido, Rol, Ruta
 from app.services.configuracion import ConfiguracionInvalida, interpretar_motivo_voz
 from app.services.despacho import (
-    TransicionInvalida, cambiar_estado, ruta_del_dia, ruta_finalizada_del_dia,
+    TransicionInvalida, cambiar_estado, iniciar_ruta, ruta_del_dia, ruta_finalizada_del_dia,
     validar_transicion,
 )
 
@@ -24,6 +29,15 @@ ROLES = (Rol.CONDUCTOR,)
 PENDIENTES = (EstadoPedido.ASIGNADO, EstadoPedido.EN_RUTA)
 
 SIN_RUTA = "No tienes una ruta activa para hoy."
+
+# Observacion de la prueba de una entrega hecha por voz: la llamada no envia la
+# ubicacion del telefono, como si lo hace la pantalla.
+OBSERVACION_ENTREGA_VOZ = "Registrada por el asistente de voz, sin ubicación"
+# Mismos largos que el formulario de entrega de la pantalla.
+LARGO_RECEPTOR = 160
+LARGO_DOCUMENTO = 40
+# Rutas que lee mi-historial (la pantalla lista 30).
+LIMITE_HISTORIAL = 5
 
 PARAMETRO_ORDEN = {
     "orden": {"type": "integer", "description": "Numero de la parada en la ruta de hoy."},
@@ -92,6 +106,63 @@ def mi_ruta():
 
 
 @funcion_asistente(
+    ESPACIO, "iniciar-ruta", roles=ROLES, accion=True, entidad="ruta", avisar=False,
+    descripcion="Inicia la ruta de hoy: pasa a en camino todas las paradas asignadas, como el "
+                "boton Iniciar ruta de la pantalla.",
+)
+def iniciar_ruta_voz():
+    ruta = _ruta()
+    if ruta is None:
+        return responder(SIN_RUTA)
+    asignadas = [p for p in ruta.pedidos if p.estado == EstadoPedido.ASIGNADO]
+    if not asignadas:
+        return responder(f"La ruta {ruta.codigo} no tiene paradas asignadas por iniciar.")
+
+    pendiente = exigir_confirmacion(
+        f"Voy a iniciar tu ruta {ruta.codigo}: "
+        f"{cantidad(len(asignadas), 'parada pasa', 'paradas pasan')} a en camino."
+    )
+    if pendiente:
+        return pendiente
+
+    afectados, advertencias = iniciar_ruta(ruta, g.usuario.id)
+    db.session.commit()
+    if not afectados:
+        return responder(" ".join(["No había paradas pendientes por iniciar.", *advertencias]))
+    return responder(" ".join([
+        f"Listo, la ruta {ruta.codigo} quedó iniciada con "
+        f"{cantidad(len(afectados), 'parada')} en camino.",
+        *advertencias,
+    ]))
+
+
+@funcion_asistente(
+    ESPACIO, "mi-historial", roles=ROLES,
+    descripcion="Ultimas rutas del conductor, de la mas reciente a la mas antigua: fecha, estado "
+                "y cuantas paradas entrego y cuantas fallaron.",
+)
+def mi_historial():
+    rutas = (
+        db.session.query(Ruta)
+        .filter(Ruta.conductor_id == g.usuario.id)
+        .order_by(Ruta.fecha.desc(), Ruta.codigo.desc())
+        .limit(LIMITE_HISTORIAL)
+        .all()
+    )
+    if not rutas:
+        return responder("Aún no tienes rutas registradas.")
+
+    def ruta_texto(ruta):
+        return (f"la {ruta.codigo} del {fecha_larga(ruta.fecha)}, {ruta.estado_etiqueta.lower()}, "
+                f"con {cantidad(ruta.total_paradas, 'parada')}: "
+                f"{cantidad(ruta.contar(EstadoPedido.ENTREGADO), 'entregada')} y "
+                f"{cantidad(ruta.contar(EstadoPedido.FALLIDO), 'fallida')}")
+
+    inicio = "Tu última ruta es " if len(rutas) == 1 else f"Tus últimas {len(rutas)} rutas: "
+    return responder(inicio + "; ".join(ruta_texto(r) for r in rutas) + ".")
+
+
+@funcion_asistente(
     ESPACIO, "siguiente-parada", roles=ROLES,
     descripcion="Primera parada pendiente de la ruta de hoy: cliente, direccion y ventana horaria.",
 )
@@ -146,6 +217,8 @@ parada = funcion_agrupada(
     parametros={
         **PARAMETRO_ORDEN,
         "motivo": {"type": "string", "description": "fallo: por que no se pudo entregar."},
+        "recibe": {"type": "string", "description": "entregar: nombre de quien recibe."},
+        "documento": {"type": "string", "description": "entregar: documento de quien recibe."},
     },
 )
 
@@ -239,3 +312,60 @@ def registrar_fallo():
         f"Registré la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}, "
         f"como no entregada {como}. El inventario no se afectó."
     )
+
+
+@parada("entregar", "Confirmar entrega",
+        "confirma la entrega de la parada y descuenta el inventario, como en pantalla; requiere "
+        "orden, el nombre (recibe) y el documento de quien recibe", avisar=False)
+def confirmar_entrega():
+    ruta = _ruta()
+    if ruta is None:
+        return responder(SIN_RUTA)
+    pedido, error = _parada(ruta)
+    if pedido is None:
+        return responder(error)
+
+    recibe, documento = texto("recibe"), texto("documento")
+    faltan = [etiqueta for valor, etiqueta in ((recibe, "el nombre de quien recibe"),
+                                                (documento, "su documento")) if not valor]
+    if faltan:
+        return responder(me_falta(faltan))
+    if len(recibe) > LARGO_RECEPTOR or len(documento) > LARGO_DOCUMENTO:
+        return responder(f"El nombre admite hasta {LARGO_RECEPTOR} caracteres y el documento "
+                         f"hasta {LARGO_DOCUMENTO}.")
+
+    try:
+        validar_transicion(pedido.estado, EstadoPedido.ENTREGADO)
+    except TransicionInvalida as motivo:
+        return responder(f"No pude confirmar la entrega de la parada {pedido.orden_en_ruta}. {motivo}")
+
+    unidades = sum(item.cantidad for item in pedido.items)
+    pendiente = exigir_confirmacion(
+        f"Voy a confirmar la entrega de la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}, "
+        f"recibida por {recibe}, documento {documento}. Se descuentan "
+        f"{cantidad(unidades, 'unidad', 'unidades')} del inventario."
+    )
+    if pendiente:
+        return pendiente
+
+    try:
+        resultado = cambiar_estado(
+            pedido,
+            EstadoPedido.ENTREGADO,
+            g.usuario.id,
+            nota=NOTA_ASISTENTE,
+            receptor_nombre=recibe,
+            receptor_documento=documento,
+            observacion=OBSERVACION_ENTREGA_VOZ,
+        )
+    except TransicionInvalida as motivo:
+        db.session.rollback()
+        return responder(f"No pude confirmar la entrega de la parada {pedido.orden_en_ruta}. {motivo}")
+
+    db.session.commit()
+    descontadas = sum(m.cantidad for m in resultado.movimientos)
+    partes = [f"Listo, registré la entrega de la parada {pedido.orden_en_ruta}, "
+              f"{pedido.cliente_nombre}, recibida por {recibe}."]
+    if descontadas:
+        partes.append(f"Se descontaron {cantidad(descontadas, 'unidad', 'unidades')} del inventario.")
+    return responder(" ".join(partes + list(resultado.advertencias)))

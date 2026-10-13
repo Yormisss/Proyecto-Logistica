@@ -113,9 +113,17 @@ class Pedido(db.Model):
         cascade="all, delete-orphan",
         order_by="EventoPedido.registrado_en",
     )
-    prueba_entrega = db.relationship(
-        "PruebaEntrega", back_populates="pedido", uselist=False, cascade="all, delete-orphan"
+    # Una prueba por cada cierre (entrega o intento fallido), de solo agregar:
+    # un pedido que falla, se reintenta y se entrega conserva ambas.
+    pruebas_entrega = db.relationship(
+        "PruebaEntrega", back_populates="pedido", cascade="all, delete-orphan",
+        order_by="PruebaEntrega.id",
     )
+
+    @property
+    def prueba_entrega(self):
+        """La prueba mas reciente: la del estado actual si esta cerrado."""
+        return self.pruebas_entrega[-1] if self.pruebas_entrega else None
 
     @property
     def estado_etiqueta(self):
@@ -185,7 +193,8 @@ class PruebaEntrega(db.Model):
     __tablename__ = "pruebas_entrega"
 
     id = db.Column(db.Integer, primary_key=True)
-    pedido_id = db.Column(db.Integer, db.ForeignKey("pedidos.id"), unique=True, nullable=False)
+    # Sin unico: el pedido guarda cada intento (migracion m007).
+    pedido_id = db.Column(db.Integer, db.ForeignKey("pedidos.id"), nullable=False, index=True)
     receptor_nombre = db.Column(db.String(160))
     receptor_documento = db.Column(db.String(40))
     observacion = db.Column(db.Text)
@@ -199,5 +208,5 @@ class PruebaEntrega(db.Model):
     longitud = db.Column(db.Float)
     registrado_en = db.Column(db.DateTime, default=ahora)
 
-    pedido = db.relationship("Pedido", back_populates="prueba_entrega")
+    pedido = db.relationship("Pedido", back_populates="pruebas_entrega")
     motivo = db.relationship("MotivoFallo")

@@ -71,6 +71,8 @@ class FuncionAsistente:
     requeridos: tuple = ()
     accion: bool = False
     entidad: str = ""
+    # Como en Operacion: si su auditoria envia el correo accion_asistente.
+    avisar: bool = True
     # nombre -> Operacion, solo en las funciones agrupadas.
     operaciones: dict = field(default_factory=dict)
 
@@ -102,7 +104,7 @@ FUNCIONES = {}
 
 
 def funcion_asistente(espacio, nombre, *, roles, descripcion, parametros=None,
-                      requeridos=(), accion=False, entidad=None):
+                      requeridos=(), accion=False, entidad=None, avisar=True):
     """Registra una custom function.
 
     `parametros` son las propiedades JSON schema de los argumentos y
@@ -110,7 +112,8 @@ def funcion_asistente(espacio, nombre, *, roles, descripcion, parametros=None,
     modifican datos: deben llamar a `exigir_confirmacion` antes de cambiar
     nada, y la sincronizacion con Retell les agrega el parametro `confirmar`.
     `entidad` es lo que la accion modifica ("pedido", "producto"...), para la
-    auditoria; por omision, la ultima palabra del nombre.
+    auditoria; por omision, la ultima palabra del nombre. `avisar=False`, como
+    en las operaciones, deja la accion en la auditoria sin el correo.
     """
     def registrar(vista):
         clave = (espacio, nombre)
@@ -126,6 +129,7 @@ def funcion_asistente(espacio, nombre, *, roles, descripcion, parametros=None,
             requeridos=tuple(requeridos),
             accion=accion,
             entidad=entidad or nombre.rsplit("-", 1)[-1],
+            avisar=avisar,
         )
         return vista
 
@@ -267,7 +271,7 @@ def _auditar(resultado, mensaje):
         usuario=g.usuario,
         origen=ORIGEN_VOZ,
         call_id=g.sesion.call_id,
-        avisar=operacion.avisar if operacion else True,
+        avisar=operacion.avisar if operacion else funcion.avisar,
     )
     db.session.commit()
 

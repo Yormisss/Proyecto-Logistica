@@ -41,8 +41,8 @@ COBERTURA = {
     "conductor.marcar_en_ruta": Cobertura(voz=("conductor/parada:en-camino",)),
     "conductor.reintentar": Cobertura(voz=("conductor/parada:en-camino",)),
     "conductor.fallar": Cobertura(voz=("conductor/parada:fallo",)),
-    "conductor.entregar": Cobertura(pendiente="Fase 4: confirmar la entrega con nombre y documento de quien recibe."),
-    "conductor.iniciar": Cobertura(pendiente="Fase 4: iniciar la ruta del día."),
+    "conductor.entregar": Cobertura(voz=("conductor/parada:entregar",)),
+    "conductor.iniciar": Cobertura(voz=("conductor/iniciar-ruta",)),
 
     # --- Pedidos ---
     "pedidos.nuevo": Cobertura(voz=("gestor/pedidos:crear",)),
@@ -70,7 +70,7 @@ COBERTURA = {
     "clientes_admin.alternar_sede": Cobertura(voz=("gestor/sedes:activar", "gestor/sedes:desactivar")),
 
     # --- Solicitudes de contacto ---
-    "solicitudes.atender": Cobertura(pendiente="Fase 4: marcar una solicitud como atendida."),
+    "solicitudes.atender": Cobertura(voz=("gestor/atender-solicitud",)),
 
     # --- Vehiculos ---
     "vehiculos.nuevo": Cobertura(voz=("gestor/vehiculos:crear",)),

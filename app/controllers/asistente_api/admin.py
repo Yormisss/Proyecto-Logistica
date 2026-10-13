@@ -1,13 +1,9 @@
-"""Funciones del asistente de voz del administrador.
+"""Funciones del asistente de voz del administrador: el panel de rendimiento.
 
 El admin usa ademas todas las del gestor (gestor.py las declara para ambos
-roles). Aqui van las consultas de analitica, con los mismos periodos que el
-panel. El ajuste de inventario esta en gestor.py (`productos`, operacion
-`ajuste`), para ambos roles.
-
-Fuera del alcance por voz: usuarios, roles, contrasenas y activacion de
-cuentas. No hay funciones para eso; el prompt del agente indica que se hace
-en pantalla.
+roles), incluidos los indicadores de la analitica, y las de administracion.py
+(usuarios, configuracion y bitacora). El panel de rendimiento es solo suyo,
+como en pantalla.
 """
 
 from flask import g
@@ -20,109 +16,11 @@ from app.services import analitica
 ESPACIO = "admin"
 ROLES = (Rol.ADMIN,)
 
-# Mismos periodos que el panel de analitica y el de rendimiento.
-PERIODOS_DIAS = (7, 14, 30)
-DIAS_POR_DEFECTO = 14
+# Mismos periodos que el panel de rendimiento.
 PERIODOS_HORAS = (1, 24, 168)
 HORAS_POR_DEFECTO = 24
 
 LIMITE_LISTA = 5
-
-PARAMETRO_DIAS = {
-    "dias": {"type": "integer",
-             "description": "Periodo en dias: 7, 14 (por defecto) o 30, como en el panel."},
-}
-
-
-def _dias():
-    dias = entero(g.argumentos.get("dias"))
-    return dias if dias in PERIODOS_DIAS else DIAS_POR_DEFECTO
-
-
-def _minutos(valor):
-    return f"{valor:.0f} minutos" if valor is not None else "sin datos"
-
-
-@funcion_asistente(
-    ESPACIO, "tiempo-promedio-entrega", roles=ROLES,
-    descripcion="Tiempo promedio desde que una parada sale en camino hasta que se entrega.",
-    parametros=PARAMETRO_DIAS,
-)
-def tiempo_promedio_entrega():
-    dias = _dias()
-    datos = analitica.tiempo_promedio_entrega(dias)
-    if not datos["muestras"]:
-        return responder(f"En los últimos {dias} días no hay entregas con tiempos registrados.")
-    return responder(
-        f"En los últimos {dias} días, una entrega tarda en promedio "
-        f"{_minutos(datos['promedio_min'])} desde que sale en camino, sobre "
-        f"{cantidad(datos['muestras'], 'entrega')}; la más rápida "
-        f"{_minutos(datos['minimo'])} y la más lenta {_minutos(datos['maximo'])}."
-    )
-
-
-@funcion_asistente(
-    ESPACIO, "cumplimiento-ventana", roles=ROLES,
-    descripcion="Porcentaje de entregas hechas dentro de la ventana horaria pactada.",
-    parametros=PARAMETRO_DIAS,
-)
-def cumplimiento_ventana():
-    dias = _dias()
-    datos = analitica.cumplimiento_ventana(dias)
-    if not datos["total"]:
-        return responder(f"En los últimos {dias} días no hay entregas con ventana horaria.")
-    return responder(
-        f"En los últimos {dias} días, {porcentaje(datos['porcentaje'])} de las entregas con "
-        f"ventana se hizo a tiempo: {datos['dentro']} de {datos['total']}."
-    )
-
-
-@funcion_asistente(
-    ESPACIO, "productividad-conductores", roles=ROLES,
-    descripcion="Entregas y tasa de exito por conductor, del mas productivo al menos.",
-    parametros=PARAMETRO_DIAS,
-)
-def productividad_conductores():
-    dias = _dias()
-    filas = analitica.productividad_conductores(dias)
-    if not filas:
-        return responder(f"En los últimos {dias} días no hay entregas cerradas por conductores.")
-    return responder(
-        f"En los últimos {dias} días: "
-        + enumerar([
-            f"{f['conductor']}, {cantidad(f['entregadas'], 'entregada')} y "
-            f"{cantidad(f['fallidas'], 'fallida')}, éxito {porcentaje(f['exito'])}"
-            for f in filas[:LIMITE_LISTA]
-        ])
-        + "."
-    )
-
-
-@funcion_asistente(
-    ESPACIO, "causas-fallo", roles=ROLES,
-    descripcion="Motivos de entrega fallida, del mas frecuente al menos.",
-    parametros=PARAMETRO_DIAS,
-)
-def causas_fallo():
-    dias = _dias()
-    filas = analitica.motivos_fallo(dias)
-    if not filas:
-        return responder(f"En los últimos {dias} días no hay entregas fallidas con motivo.")
-    total = sum(f["cantidad"] for f in filas)
-    partes = [
-        f"En los últimos {dias} días hubo {cantidad(total, 'entrega fallida', 'entregas fallidas')}. "
-        "Las causas principales: "
-        + enumerar([f"{f['motivo']}, {f['cantidad']}" for f in filas[:LIMITE_LISTA]])
-        + "."
-    ]
-    otro = next((f for f in filas if f.get("es_otro") and f.get("detalles")), None)
-    if otro:
-        partes.append(
-            f"En «{otro['motivo']}» se escribió: "
-            + enumerar([f"{d['texto']}, {d['cantidad']}" for d in otro["detalles"][:LIMITE_LISTA]])
-            + "."
-        )
-    return responder(" ".join(partes))
 
 
 @funcion_asistente(

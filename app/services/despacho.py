@@ -243,18 +243,20 @@ def cambiar_estado(
     if nuevo_estado == EstadoPedido.ENTREGADO:
         movimientos, advertencias = _descontar_inventario(pedido, usuario_id)
 
-    # Prueba de entrega: aplica tanto a la entrega exitosa como al intento fallido.
+    # Prueba de entrega: aplica tanto a la entrega exitosa como al intento
+    # fallido. Cada cierre agrega la suya; las de intentos anteriores se conservan.
     if nuevo_estado in EstadoPedido.CERRADOS:
-        prueba = pedido.prueba_entrega or PruebaEntrega(pedido_id=pedido.id)
-        prueba.receptor_nombre = receptor_nombre or prueba.receptor_nombre
-        prueba.receptor_documento = receptor_documento or prueba.receptor_documento
-        prueba.observacion = observacion or prueba.observacion
-        prueba.motivo_fallo = motivo_fallo if nuevo_estado == EstadoPedido.FALLIDO else None
-        prueba.motivo_id = motivo_id if nuevo_estado == EstadoPedido.FALLIDO else None
-        prueba.latitud = latitud if latitud is not None else prueba.latitud
-        prueba.longitud = longitud if longitud is not None else prueba.longitud
-        prueba.registrado_en = ahora()
-        db.session.add(prueba)
+        fallido = nuevo_estado == EstadoPedido.FALLIDO
+        pedido.pruebas_entrega.append(PruebaEntrega(
+            receptor_nombre=receptor_nombre,
+            receptor_documento=receptor_documento,
+            observacion=observacion,
+            motivo_fallo=motivo_fallo if fallido else None,
+            motivo_id=motivo_id if fallido else None,
+            latitud=latitud,
+            longitud=longitud,
+            registrado_en=ahora(),
+        ))
 
     db.session.add(
         EventoPedido(

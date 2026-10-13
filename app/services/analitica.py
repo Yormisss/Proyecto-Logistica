@@ -261,10 +261,14 @@ def cumplimiento_ventana(dias=30, hasta=None):
     hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
+    # La prueba de la entrega es la mas reciente del pedido; las anteriores son
+    # intentos fallidos.
+    ultimas = db.session.query(func.max(PruebaEntrega.id)).group_by(PruebaEntrega.pedido_id)
     filas = (
         db.session.query(Pedido.ventana_fin, PruebaEntrega.registrado_en)
         .join(PruebaEntrega, PruebaEntrega.pedido_id == Pedido.id)
         .filter(
+            PruebaEntrega.id.in_(ultimas),
             Pedido.estado == EstadoPedido.ENTREGADO,
             Pedido.ventana_fin.isnot(None),
             Pedido.fecha_despacho.between(desde, hasta),
