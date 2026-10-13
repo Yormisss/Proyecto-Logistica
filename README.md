@@ -890,6 +890,12 @@ DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica_pruebas .v
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` y `credencial_usuario` | 56 |
 | `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario | 110 |
 
+**Las pruebas no avisan al Make real.** `ejecutar_todas.py` corre cada suite, y el
+reinicio y la siembra de la base, con `MAKE_WEBHOOK_URL` y `MAKE_WEBHOOK_CREDENCIALES_URL`
+vacías aunque su `.env` las defina; las suites que prueban los avisos usan un Make
+simulado. Si corre una suite suelta, haga lo mismo: `MAKE_WEBHOOK_URL= .venv/bin/python
+pruebas/prueba_05_entrega_inventario.py`.
+
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
 Make, y firma las peticiones con el propio SDK de Retell para probar la verificación real.

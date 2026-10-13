@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import RAIZ, PYTHON, reiniciar_base  # noqa: E402
+from _preparar import ENTORNO_PRUEBAS, RAIZ, PYTHON, reiniciar_base  # noqa: E402
 
 SUITES = [
     ("prueba_01_acceso.py", "RF1 · Autenticacion, roles y tablero"),
@@ -46,7 +46,7 @@ def main():
 
         proceso = subprocess.run(
             [str(PYTHON), str(RAIZ / "pruebas" / archivo)],
-            cwd=RAIZ, capture_output=True, text=True,
+            cwd=RAIZ, capture_output=True, text=True, env=ENTORNO_PRUEBAS,
         )
         salida = "\n".join(
             linea for linea in proceso.stdout.splitlines()
