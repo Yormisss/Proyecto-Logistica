@@ -505,7 +505,11 @@ with app.app_context():
 print("\n== 9. Demo de Make con la semilla ==")
 # Se vuelve a sembrar con SEMILLA_CORREO_CLIENTE, como lo haria la demo, y se
 # recorre el camino del conductor sin ningun paso manual.
+envios_antes = len(envios_make)
 _preparar.reiniciar_base(SEMILLA_CORREO_CLIENTE="demo@portal.invalid")
+notificaciones.esperar_envios()
+check(not [e for e in envios_make[envios_antes:] if e["json"].get("tipo") == "accion_asistente"],
+      "con el webhook configurado, la auditoria de ejemplo de la semilla no avisa a Make")
 with app.app_context():
     db.session.remove()
     portal = db.session.query(Cliente).filter_by(nombre="Supermercado El Portal").one()

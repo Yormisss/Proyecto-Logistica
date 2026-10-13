@@ -4,30 +4,30 @@
 {% block contenido %}
 <div class="encabezado-pagina">
   <h1 class="titulo-pagina">Mis pedidos</h1>
-  <p class="subtitulo-pagina">{{ cliente.nombre }} &middot; seguimiento de sus ordenes de despacho</p>
+  <p class="subtitulo-pagina">{{ cliente.nombre }} &middot; seguimiento de sus órdenes de despacho</p>
 </div>
 
 <div class="rejilla-kpis">
   <div class="kpi">
     <span class="kpi-etiqueta">En curso</span>
     <span class="kpi-valor">{{ resumen.en_curso }}</span>
-    <span class="kpi-detalle">Pedidos aun no cerrados</span>
+    <span class="kpi-detalle">Pedidos aún no cerrados</span>
   </div>
   <div class="kpi kpi-exito">
     <span class="kpi-etiqueta">Entregados</span>
     <span class="kpi-valor">{{ resumen.entregados }}</span>
-    <span class="kpi-detalle">Historico acumulado</span>
+    <span class="kpi-detalle">Histórico acumulado</span>
   </div>
   <div class="kpi {{ 'kpi-alerta' if resumen.fallidos }}">
     <span class="kpi-etiqueta">No entregados</span>
     <span class="kpi-valor">{{ resumen.fallidos }}</span>
-    <span class="kpi-detalle">Requirieron reprogramacion</span>
+    <span class="kpi-detalle">Requirieron reprogramación</span>
   </div>
   {% if resumen.cancelados %}
   <div class="kpi">
     <span class="kpi-etiqueta">Anulados</span>
     <span class="kpi-valor">{{ resumen.cancelados }}</span>
-    <span class="kpi-detalle">Cancelados por el centro de distribucion</span>
+    <span class="kpi-detalle">Cancelados por el centro de distribución</span>
   </div>
   {% endif %}
 </div>
@@ -51,7 +51,7 @@
         <thead>
           <tr>
             <th>Pedido</th><th>Estado</th><th>Fecha de despacho</th>
-            <th>Direccion de entrega</th><th>Ventana</th><th></th>
+            <th>Dirección de entrega</th><th>Ventana</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -80,7 +80,7 @@
       {% if paginacion.has_prev %}
         <a href="{{ url_for('cliente.mis_pedidos', pagina=paginacion.prev_num, estado=filtro) }}">Anterior</a>
       {% endif %}
-      <span>Pagina {{ paginacion.page }} de {{ paginacion.pages }}</span>
+      <span>Página {{ paginacion.page }} de {{ paginacion.pages }}</span>
       {% if paginacion.has_next %}
         <a href="{{ url_for('cliente.mis_pedidos', pagina=paginacion.next_num, estado=filtro) }}">Siguiente</a>
       {% endif %}

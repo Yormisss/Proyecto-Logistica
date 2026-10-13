@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block titulo %}Vehiculos | {{ nombre_sistema }}{% endblock %}
+{% block titulo %}Vehículos | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina fila-encabezado">
   <div>
-    <h1 class="titulo-pagina">Vehiculos</h1>
-    <p class="subtitulo-pagina">{{ vehiculos|length }} vehiculo(s) &middot; la placa queda fija al crearse</p>
+    <h1 class="titulo-pagina">Vehículos</h1>
+    <p class="subtitulo-pagina">{{ vehiculos|length }} vehículo(s) &middot; la placa queda fija al crearse</p>
   </div>
   <div class="acciones-encabezado">
-    <a class="boton boton-primario" href="{{ url_for('vehiculos.nuevo') }}">Nuevo vehiculo</a>
+    <a class="boton boton-primario" href="{{ url_for('vehiculos.nuevo') }}">Nuevo vehículo</a>
   </div>
 </div>
 
@@ -42,7 +42,7 @@
     </tbody>
   </table>
   {% else %}
-    <p class="vacio">No hay vehiculos registrados.</p>
+    <p class="vacio">No hay vehículos registrados.</p>
   {% endif %}
 </section>
 {% endblock %}

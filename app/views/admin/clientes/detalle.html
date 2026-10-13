@@ -47,7 +47,7 @@
           {% if current_user.es_admin %}
             <a href="{{ url_for('usuarios.nuevo', cliente_id=cliente.id) }}">Crear su cuenta</a>.
           {% else %}
-            Solicitelo a un administrador.
+            Solicítelo a un administrador.
           {% endif %}
         </p>
       {% endif %}
@@ -57,7 +57,7 @@
       <h2 class="tarjeta-titulo">Sedes de entrega</h2>
       {% if cliente.direcciones %}
       <table class="tabla">
-        <thead><tr><th>Etiqueta</th><th>Direccion</th><th>Ventana</th><th>Coordenadas</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Etiqueta</th><th>Dirección</th><th>Ventana</th><th>Coordenadas</th><th>Estado</th><th></th></tr></thead>
         <tbody>
         {% for sede in cliente.direcciones %}
           <tr>
@@ -134,14 +134,14 @@
         <p class="nota-pie">
           Las coordenadas son opcionales; si no se registran, se toman del primer pedido
           geolocalizado que use la sede. Sin ellas el pedido queda al final del trazado
-          automatico.
+          automático.
         </p>
       </details>
     </section>
   </div>
 
   <section class="tarjeta">
-    <h2 class="tarjeta-titulo">Ultimos pedidos</h2>
+    <h2 class="tarjeta-titulo">Últimos pedidos</h2>
     {% if pedidos %}
       <table class="tabla">
         <thead><tr><th>Pedido</th><th>Fecha</th><th>Estado</th></tr></thead>
@@ -166,7 +166,7 @@
         </p>
       {% endif %}
     {% else %}
-      <p class="vacio">Este cliente aun no tiene pedidos.</p>
+      <p class="vacio">Este cliente aún no tiene pedidos.</p>
     {% endif %}
   </section>
 </div>

@@ -13,7 +13,7 @@
 
 {% if pedido.estado == EstadoPedido.ASIGNADO %}
   <div class="alerta alerta-advertencia">
-    El pedido ya esta en una ruta: solo se cambian la ventana, la prioridad y las observaciones.
+    El pedido ya está en una ruta: solo se cambian la ventana, la prioridad y las observaciones.
     {{ aviso_recalcular }}
   </div>
 {% endif %}
@@ -35,7 +35,7 @@
         {{ formulario.sede_id.label }}
         {% if formulario.sede_id.choices %}
           {{ formulario.sede_id() }}
-          <small class="ayuda-campo">Solo sedes activas del mismo cliente; actualiza la direccion del pedido.</small>
+          <small class="ayuda-campo">Solo sedes activas del mismo cliente; actualiza la dirección del pedido.</small>
         {% else %}
           <p class="vacio">El pedido no tiene un cliente con sedes activas registradas.</p>
         {% endif %}

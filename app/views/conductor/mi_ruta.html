@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block titulo %}Mi ruta | {{ nombre_sistema }}{% endblock %}
-{% block clase_body %}vista-movil{% endblock %}
+{% block clase_body %}vista-móvil{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina fila-encabezado">
@@ -23,10 +23,11 @@
       <div><strong>{{ ruta.duracion_min|round(0)|int }}</strong><span>min</span></div>
     </div>
     <div class="barra-avance grande"><span style="width: {{ ruta.avance_porcentaje }}%"></span></div>
-    <small>{{ ruta.paradas_cerradas }} de {{ ruta.total_paradas }} completadas</small>
+    {% set entregadas = ruta.contar(EstadoPedido.ENTREGADO) %}{% set fallidas = ruta.contar(EstadoPedido.FALLIDO) %}
+    <small>{{ ruta.paradas_cerradas }} de {{ ruta.total_paradas }} cerradas &middot; {{ entregadas }} entregada{{ 's' if entregadas != 1 }} &middot; {{ fallidas }} fallida{{ 's' if fallidas != 1 }}</small>
 
     {% if ruta.vehiculo %}
-      <p class="nota-pie">Vehiculo asignado: <strong class="mono">{{ ruta.vehiculo.placa }}</strong></p>
+      <p class="nota-pie">Vehículo asignado: <strong class="mono">{{ ruta.vehiculo.placa }}</strong></p>
     {% endif %}
 
     {% set pendientes_inicio = ruta.pedidos | selectattr('estado', 'equalto', EstadoPedido.ASIGNADO) | list %}
@@ -34,7 +35,12 @@
     <form method="post" action="{{ url_for('conductor.iniciar', ruta_id=ruta.id) }}" class="accion-bloque">
       {{ formulario.hidden_tag() }}
       <button type="submit" class="boton boton-primario boton-bloque boton-grande">
-        Iniciar ruta ({{ pendientes_inicio|length }} parada{{ 's' if pendientes_inicio|length != 1 }})
+        {% set n = pendientes_inicio|length %}
+        {% if ruta.estado == EstadoRuta.EN_CURSO %}
+        Poner en camino {{ n }} parada{{ 's' if n != 1 }} pendiente{{ 's' if n != 1 }}
+        {% else %}
+        Iniciar ruta ({{ n }} parada{{ 's' if n != 1 }})
+        {% endif %}
       </button>
     </form>
     {% endif %}
@@ -76,7 +82,7 @@
 {% else %}
   <div class="tarjeta vacio-centrado">
     <p>No tiene una ruta asignada para hoy.</p>
-    <small>El gestor logistico le asignara los despachos del dia.</small>
+    <small>El gestor logístico le asignará los despachos del día.</small>
   </div>
 {% endif %}
 {% endblock %}

@@ -6,8 +6,8 @@
   <a class="enlace-volver" href="{{ url_for('clientes_admin.lista') }}">&lsaquo; Volver a clientes</a>
   <h1 class="titulo-pagina">{{ cliente.nombre if cliente else 'Nuevo cliente' }}</h1>
   <p class="subtitulo-pagina">
-    {% if cliente %}Los pedidos ya despachados conservan la razon social con la que salieron
-    {% else %}Alta manual; la importacion CSV tambien crea clientes por su cuenta{% endif %}
+    {% if cliente %}Los pedidos ya despachados conservan la razón social con la que salieron
+    {% else %}Alta manual; la importación CSV también crea clientes por su cuenta{% endif %}
   </p>
 </div>
 
@@ -30,8 +30,8 @@
         {% else %}
           {{ formulario.documento(placeholder="900123456-1") }}
           <small class="ayuda-campo">
-            Clave mas confiable que el nombre: identifica al cliente aunque el ERP
-            reescriba la razon social. Una vez registrado, no se puede cambiar.
+            Clave más confiable que el nombre: identifica al cliente aunque el ERP
+            reescriba la razón social. Una vez registrado, no se puede cambiar.
           </small>
         {% endif %}
         {% for e in formulario.documento.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
@@ -51,7 +51,7 @@
         </label>
         <small class="ayuda-campo">
           Un cliente inactivo no admite pedidos nuevos y su portal deja de responder.
-          No se elimina: los pedidos historicos lo referencian.
+          No se elimina: los pedidos históricos lo referencian.
         </small>
       </div>
     </div>

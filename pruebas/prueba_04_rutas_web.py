@@ -61,7 +61,7 @@ html = c.get(f"/rutas/nueva?fecha={hoy.isoformat()}").data.decode()
 check("TEST-100" in html and "TEST-103" in html, "lista los pedidos pendientes")
 check(html.count('name="pedido_id"') >= 4, "cada pedido tiene su casilla")
 fila_sin_geo = [f for f in re.findall(r"<tr>.*?</tr>", html, re.S) if "TEST-103" in f]
-check(bool(fila_sin_geo) and "etiqueta-fallido" in fila_sin_geo[0] and "No entra en el calculo" in fila_sin_geo[0],
+check(bool(fila_sin_geo) and "etiqueta-fallido" in fila_sin_geo[0] and "No entra en el cálculo" in fila_sin_geo[0],
       "marca el pedido sin coordenadas")
 
 print("\n== 3. Generacion de ruta (RF3) ==")

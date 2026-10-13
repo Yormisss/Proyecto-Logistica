@@ -364,9 +364,17 @@ r = admin_web.get("/admin/bitacora/")
 html = r.data.decode()
 check(r.status_code == 200 and "Ajustar inventario" in html and "Crear usuario" in html,
       "el administrador ve la bitacora")
-check("Bitacora" in admin_web.get("/admin/").data.decode(), "con enlace en el menu del administrador")
+menu = re.search(r'<details class="menu-desplegable".*?</details>', admin_web.get("/admin/").data.decode(), re.S)
+check(menu is not None and all(f">{t}</a>" in menu.group(0)
+                               for t in ("Usuarios", "Rendimiento", "Configuración", "Bitácora"))
+      and "<summary" in menu.group(0) and ">Administración</summary>" in menu.group(0),
+      "con enlace en el desplegable Administración del menu del administrador")
+check('class="activo">Administración</summary>' in admin_web.get("/admin/bitacora/").data.decode(),
+      "el desplegable se marca activo en una de sus pantallas")
 gestor_web = sesion("despachador@sgds.com", "Despacho123*")
 check(gestor_web.get("/admin/bitacora/").status_code == 403, "el gestor no la ve (403)")
+check("menu-desplegable" not in gestor_web.get("/admin/").data.decode(),
+      "el menu del gestor queda igual, sin el desplegable Administración")
 check(sesion("conductor1@sgds.com", "Conductor123*").get("/admin/bitacora/").status_code == 403,
       "el conductor tampoco")
 

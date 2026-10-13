@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block titulo %}{{ 'Editar vehiculo' if vehiculo else 'Nuevo vehiculo' }} | {{ nombre_sistema }}{% endblock %}
+{% block titulo %}{{ 'Editar vehículo' if vehiculo else 'Nuevo vehículo' }} | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina">
-  <a class="enlace-volver" href="{{ url_for('vehiculos.lista') }}">&lsaquo; Volver a vehiculos</a>
-  <h1 class="titulo-pagina">{{ vehiculo.placa if vehiculo else 'Nuevo vehiculo' }}</h1>
+  <a class="enlace-volver" href="{{ url_for('vehiculos.lista') }}">&lsaquo; Volver a vehículos</a>
+  <h1 class="titulo-pagina">{{ vehiculo.placa if vehiculo else 'Nuevo vehículo' }}</h1>
 </div>
 
 <form method="post" class="formulario" novalidate>
@@ -15,7 +15,7 @@
         {{ formulario.placa.label }}
         {% if vehiculo %}
           {{ formulario.placa(readonly=True) }}
-          <small class="ayuda-campo">La placa queda fija una vez creado el vehiculo.</small>
+          <small class="ayuda-campo">La placa queda fija una vez creado el vehículo.</small>
         {% else %}
           {{ formulario.placa(placeholder="ABC123") }}
         {% endif %}
@@ -29,15 +29,15 @@
         </div>
       {% endfor %}
       <div class="campo campo-ancho">
-        <label class="campo-inline">{{ formulario.activo() }} <span>Vehiculo activo</span></label>
+        <label class="campo-inline">{{ formulario.activo() }} <span>Vehículo activo</span></label>
         {% for e in formulario.activo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
-        <small class="ayuda-campo">No se puede desactivar un vehiculo que esta en una ruta abierta.</small>
+        <small class="ayuda-campo">No se puede desactivar un vehículo que está en una ruta abierta.</small>
       </div>
     </div>
   </section>
   <div class="acciones-formulario">
     <a class="boton boton-plano" href="{{ url_for('vehiculos.lista') }}">Cancelar</a>
-    <button type="submit" class="boton boton-primario">{{ 'Guardar cambios' if vehiculo else 'Registrar vehiculo' }}</button>
+    <button type="submit" class="boton boton-primario">{{ 'Guardar cambios' if vehiculo else 'Registrar vehículo' }}</button>
   </div>
 </form>
 {% endblock %}

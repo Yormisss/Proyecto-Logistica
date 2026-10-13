@@ -33,9 +33,9 @@ clientes_admin_bp = Blueprint("clientes_admin", __name__)
 class FormularioCliente(FlaskForm):
     # Sin validadores propios: las reglas las aplica app.services.clientes, las
     # mismas que usa el asistente de voz.
-    nombre = StringField("Nombre o razon social", validators=[Optional()])
+    nombre = StringField("Nombre o razón social", validators=[Optional()])
     documento = StringField("NIT o documento", validators=[Optional()])
-    telefono = StringField("Telefono", validators=[Optional()])
+    telefono = StringField("Teléfono", validators=[Optional()])
     correo = StringField("Correo", validators=[Optional()])
     activo = BooleanField("Cliente activo", default=True)
 
@@ -46,7 +46,7 @@ class FormularioCliente(FlaskForm):
 
 class FormularioSede(FlaskForm):
     etiqueta = StringField("Etiqueta", validators=[Optional()])
-    direccion = StringField("Direccion", validators=[Optional()])
+    direccion = StringField("Dirección", validators=[Optional()])
     ciudad = StringField("Ciudad", validators=[Optional()], default="Bogota")
     latitud = StringField("Latitud", validators=[Optional()])
     longitud = StringField("Longitud", validators=[Optional()])

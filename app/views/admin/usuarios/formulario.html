@@ -14,7 +14,7 @@
 {% if es_propia %}
 <div class="alerta alerta-advertencia">
   Esta es su propia cuenta: no puede cambiarse el rol ni desactivarse, para no
-  quedar sin acceso a la gestion de usuarios.
+  quedar sin acceso a la gestión de usuarios.
 </div>
 {% endif %}
 
@@ -44,7 +44,7 @@
       </div>
       <div class="campo">
         {{ formulario.documento.label }}
-        {{ formulario.documento(placeholder="Cedula") }}
+        {{ formulario.documento(placeholder="Cédula") }}
         {% for e in formulario.documento.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
       </div>
       <div class="campo">
@@ -68,7 +68,7 @@
         {{ formulario.cliente_id() }}
         {% for e in formulario.cliente_id.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
         <small class="ayuda-campo">
-          Solo para el rol Cliente: define de quien vera los pedidos.
+          Solo para el rol Cliente: define de quién verá los pedidos.
           <a href="{{ url_for('clientes_admin.nuevo') }}">Registrar un cliente nuevo</a>.
         </small>
       </div>
@@ -78,27 +78,27 @@
           <span>Cuenta activa</span>
         </label>
         {% if es_propia %}<input type="hidden" name="activo" value="y">{% endif %}
-        <small class="ayuda-campo">Una cuenta inactiva no puede iniciar sesion.</small>
+        <small class="ayuda-campo">Una cuenta inactiva no puede iniciar sesión.</small>
       </div>
     </div>
     <p class="nota-pie">
-      Solo se ofrecen los clientes sin cuenta: la relacion es uno a uno, de modo que
+      Solo se ofrecen los clientes sin cuenta: la relación es uno a uno, de modo que
       un cliente no puede quedar asociado a dos credenciales.
     </p>
   </section>
 
   <section class="tarjeta">
-    <h2 class="tarjeta-titulo">Contrasena</h2>
+    <h2 class="tarjeta-titulo">Contraseña</h2>
     <div class="rejilla-campos">
       <div class="campo campo-ancho">
         {{ formulario.contrasena.label }}
-        {{ formulario.contrasena(placeholder="Dejar vacio para generar una temporal", autocomplete="new-password") }}
+        {{ formulario.contrasena(placeholder="Dejar vacío para generar una temporal", autocomplete="new-password") }}
         {% for e in formulario.contrasena.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
         <small class="ayuda-campo">
           {% if usuario %}
-            Dejela vacia para conservar la contrasena actual. Minimo {{ longitud_minima }} caracteres.
+            Déjela vacía para conservar la contraseña actual. Mínimo {{ longitud_minima }} caracteres.
           {% else %}
-            Si la deja vacia, el sistema genera una contrasena temporal y la muestra una
+            Si la deja vacía, el sistema genera una contraseña temporal y la muestra una
             sola vez para que la entregue por un canal aparte.
           {% endif %}
         </small>

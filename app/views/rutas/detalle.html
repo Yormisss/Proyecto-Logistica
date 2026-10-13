@@ -20,7 +20,7 @@
     <a class="boton boton-plano" href="{{ url_for('rutas.lista') }}">Volver</a>
     {% if ruta.estado != EstadoRuta.FINALIZADA %}
     <form method="post" action="{{ url_for('rutas.eliminar', ruta_id=ruta.id) }}"
-          onsubmit="return confirm('¿Eliminar la ruta {{ ruta.codigo }}? Sus pedidos volveran a pendientes.');">
+          onsubmit="return confirm('¿Eliminar la ruta {{ ruta.codigo }}? Sus pedidos volverán a pendientes.');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="boton boton-peligro">Eliminar ruta</button>
     </form>
@@ -39,12 +39,12 @@
     <span class="kpi-valor">{{ ruta.distancia_km|round(1) }}<small class="kpi-unidad">km</small></span>
     <span class="kpi-detalle">
       {% if ruta.proveedor_ruteo == 'OSRM' %}Calculada por OSRM sobre malla vial
-      {% elif ruta.proveedor_ruteo == 'LOCAL' %}Estimacion local en linea recta
+      {% elif ruta.proveedor_ruteo == 'LOCAL' %}Estimación local en línea recta
       {% else %}Sin calcular{% endif %}
     </span>
   </article>
   <article class="kpi kpi-exito">
-    <span class="kpi-etiqueta">Duracion estimada</span>
+    <span class="kpi-etiqueta">Duración estimada</span>
     <span class="kpi-valor">{{ ruta.duracion_min|round(0)|int }}<small class="kpi-unidad">min</small></span>
     <span class="kpi-detalle">Avance {{ ruta.avance_porcentaje }}%</span>
   </article>
@@ -52,9 +52,9 @@
 
 {% if ruta.proveedor_ruteo == 'LOCAL' %}
 <div class="alerta alerta-advertencia">
-  Esta ruta se calculo con la heuristica local porque el servicio de geolocalizacion
-  no estuvo disponible. Las metricas son estimaciones en linea recta; recalcule la
-  ruta cuando haya conexion para obtener distancias sobre la malla vial real.
+  Esta ruta se calculó con la heurística local porque el servicio de geolocalización
+  no estuvo disponible. Las métricas son estimaciones en línea recta; recalcule la
+  ruta cuando haya conexión para obtener distancias sobre la malla vial real.
 </div>
 {% endif %}
 
@@ -102,8 +102,8 @@
     <section class="tarjeta">
       <h2 class="tarjeta-titulo">Recalcular secuencia</h2>
       <p class="nota-superior">
-        Vuelve a ordenar unicamente las paradas pendientes. Las entregas ya cerradas
-        conservan su posicion en el historico.
+        Vuelve a ordenar únicamente las paradas pendientes. Las entregas ya cerradas
+        conservan su posición en el histórico.
       </p>
       <form method="post" action="{{ url_for('rutas.recalcular', ruta_id=ruta.id) }}" class="formulario">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -124,7 +124,7 @@
       <h2 class="tarjeta-titulo">Ficha de la ruta</h2>
       <dl class="lista-datos">
         <dt>Conductor</dt><dd>{{ ruta.conductor.nombre }}</dd>
-        <dt>Vehiculo</dt>
+        <dt>Vehículo</dt>
         <dd>{% if ruta.vehiculo %}{{ ruta.vehiculo.placa }} ({{ ruta.vehiculo.tipo }}){% else %}Sin asignar{% endif %}</dd>
         <dt>Proveedor</dt><dd>{{ ruta.proveedor_ruteo or 'Sin calcular' }}</dd>
         <dt>Creada</dt><dd>{{ ruta.creada_en.strftime('%d/%m/%Y %H:%M') }}</dd>

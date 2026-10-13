@@ -38,7 +38,7 @@ rutas_bp = Blueprint("rutas", __name__)
 class FormularioRuta(FlaskForm):
     fecha = DateField("Fecha de despacho", validators=[DataRequired("Indique la fecha.")])
     conductor_id = SelectField("Conductor", coerce=int, validators=[DataRequired()])
-    vehiculo_id = SelectField("Vehiculo", coerce=int, validators=[Optional()])
+    vehiculo_id = SelectField("Vehículo", coerce=int, validators=[Optional()])
     estrategia = SelectField(
         "Criterio de ordenamiento",
         choices=list(ESTRATEGIAS.items()),

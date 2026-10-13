@@ -29,10 +29,10 @@ class FormularioProducto(FlaskForm):
     # alta y entra como ENTRADA; despues el stock cambia solo con movimientos.
     sku = StringField("SKU", validators=[Optional()])
     nombre = StringField("Nombre", validators=[Optional()])
-    descripcion = TextAreaField("Descripcion", validators=[Optional()])
+    descripcion = TextAreaField("Descripción", validators=[Optional()])
     unidad = StringField("Unidad", validators=[Optional()], default="UND")
     stock_inicial = StringField("Stock inicial", validators=[Optional()], default="0")
-    stock_minimo = StringField("Stock minimo", validators=[Optional()], default="0")
+    stock_minimo = StringField("Stock mínimo", validators=[Optional()], default="0")
     activo = BooleanField("Producto activo", default=True)
 
     def datos(self):

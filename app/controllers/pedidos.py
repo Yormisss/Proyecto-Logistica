@@ -46,14 +46,14 @@ PRIORIDADES = [("1", "Alta"), ("2", "Media"), ("3", "Baja")]
 class FormularioPedido(FlaskForm):
     """Carga manual de una orden (RF2)."""
 
-    codigo = StringField("Codigo", validators=[Optional(), Length(max=40)])
+    codigo = StringField("Código", validators=[Optional(), Length(max=40)])
     cliente_nombre = StringField(
         "Nombre del cliente", validators=[DataRequired("Indique el cliente."), Length(max=160)]
     )
     cliente_documento = StringField(
         "NIT o documento", validators=[Optional(), Length(max=30)]
     )
-    cliente_telefono = StringField("Telefono", validators=[Optional(), Length(max=30)])
+    cliente_telefono = StringField("Teléfono", validators=[Optional(), Length(max=30)])
     direccion = StringField(
         "Direccion de entrega", validators=[DataRequired("Indique la direccion."), Length(max=255)]
     )

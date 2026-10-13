@@ -15,17 +15,17 @@ auth_bp = Blueprint("auth", __name__)
 
 class FormularioLogin(FlaskForm):
     correo = StringField(
-        "Correo electronico",
+        "Correo electrónico",
         validators=[DataRequired("Ingrese su correo."), Email("Correo no valido.")],
     )
     contrasena = PasswordField(
-        "Contrasena", validators=[DataRequired("Ingrese su contrasena.")]
+        "Contraseña", validators=[DataRequired("Ingrese su contrasena.")]
     )
-    recordar = BooleanField("Mantener sesion iniciada")
+    recordar = BooleanField("Mantener sesión iniciada")
 
 
 class FormularioCambioContrasena(FlaskForm):
-    contrasena_actual = PasswordField("Contrasena actual", validators=[DataRequired()])
+    contrasena_actual = PasswordField("Contraseña actual", validators=[DataRequired()])
     contrasena_nueva = PasswordField(
         "Nueva contrasena",
         validators=[DataRequired(), Length(min=8, message="Minimo 8 caracteres.")],

@@ -5,7 +5,7 @@
 <div class="encabezado-pagina fila-encabezado">
   <div>
     <h1 class="titulo-pagina">Cuentas de acceso</h1>
-    <p class="subtitulo-pagina">{{ usuarios|length }} cuenta(s) &middot; gestion de usuarios y roles (RF1)</p>
+    <p class="subtitulo-pagina">{{ usuarios|length }} cuenta(s) &middot; gestión de usuarios y roles (RF1)</p>
   </div>
   <div class="acciones-encabezado">
     <a class="boton boton-primario" href="{{ url_for('usuarios.nuevo') }}">Nueva cuenta</a>
@@ -14,8 +14,8 @@
 
 {% if sin_portal %}
 <div class="alerta alerta-advertencia">
-  {{ sin_portal }} cliente(s) todavia no tienen acceso al portal de seguimiento.
-  <a href="{{ url_for('clientes_admin.lista', portal='no') }}">Ver cuales</a>.
+  {{ sin_portal }} cliente(s) todavía no tienen acceso al portal de seguimiento.
+  <a href="{{ url_for('clientes_admin.lista', portal='no') }}">Ver cuáles</a>.
 </div>
 {% endif %}
 
@@ -61,7 +61,7 @@
               <a href="{{ url_for('clientes_admin.detalle', cliente_id=usuario.cliente.id) }}">
                 {{ usuario.cliente.nombre }}</a>
             {% elif usuario.es_cliente %}
-              <span class="aviso-inline">Sin cliente: no vera nada</span>
+              <span class="aviso-inline">Sin cliente: no verá nada</span>
             {% else %}—{% endif %}
           </td>
           <td>
@@ -72,7 +72,7 @@
           <td class="derecha acciones-fila">
             <a href="{{ url_for('usuarios.editar', usuario_id=usuario.id) }}">Editar</a>
             <form method="post" action="{{ url_for('usuarios.restablecer', usuario_id=usuario.id) }}"
-                  onsubmit="return confirm('¿Generar una contrasena temporal para {{ usuario.nombre }}? La actual dejara de servir.');">
+                  onsubmit="return confirm('¿Generar una contraseña temporal para {{ usuario.nombre }}? La actual dejará de servir.');">
               {{ formulario.hidden_tag() }}
               <button type="submit" class="boton-enlace">Restablecer clave</button>
             </form>
@@ -94,7 +94,7 @@
   <p class="nota-pie">
     Las cuentas no se eliminan: se desactivan. <code>Usuario</code> es el origen de la
     trazabilidad de rutas, eventos y movimientos de inventario, y borrarlo la rompe.
-    Una cuenta inactiva no puede iniciar sesion.
+    Una cuenta inactiva no puede iniciar sesión.
   </p>
   {% else %}
     <p class="vacio">Ninguna cuenta coincide con el filtro.</p>

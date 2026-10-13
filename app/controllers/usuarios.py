@@ -50,16 +50,16 @@ class FormularioUsuario(FlaskForm):
     # Sin validadores propios: las reglas (obligatorios, largos, correo,
     # unicidad, rol, cliente, contrasena) las aplica el servicio, igual que por voz.
     nombre = StringField("Nombre completo", validators=[Optional()])
-    correo = StringField("Correo electronico", validators=[Optional()])
+    correo = StringField("Correo electrónico", validators=[Optional()])
     documento = StringField("Documento", validators=[Optional()])
-    telefono = StringField("Telefono", validators=[Optional()])
+    telefono = StringField("Teléfono", validators=[Optional()])
     # `validate_choice=False`: la comprobacion de WTForms responde en ingles.
     rol = SelectField("Rol", validate_choice=False, validators=[Optional()])
     # Solo aplica al rol CLIENTE: es la entidad comercial cuyos pedidos vera.
     cliente_id = SelectField(
         "Cliente asociado", coerce=_a_entero, validate_choice=False, validators=[Optional()],
     )
-    contrasena = PasswordField("Contrasena", validators=[Optional()])
+    contrasena = PasswordField("Contraseña", validators=[Optional()])
     activo = BooleanField("Cuenta activa", default=True)
 
     def __init__(self, *args, usuario=None, **kwargs):

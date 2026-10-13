@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block titulo %}Configuracion | {{ nombre_sistema }}{% endblock %}
+{% block titulo %}Configuración | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina">
-  <h1 class="titulo-pagina">Configuracion del negocio</h1>
+  <h1 class="titulo-pagina">Configuración del negocio</h1>
   <p class="subtitulo-pagina">
-    Datos que ajusta la operacion. Las claves, tokens y direcciones del sistema viven en el
-    archivo .env y no se editan aqui.
+    Datos que ajusta la operación. Las claves, tokens y direcciones del sistema viven en el
+    archivo .env y no se editan aquí.
   </p>
 </div>
 
 <section class="tarjeta">
-  <h2 class="tarjeta-titulo">Centro de distribucion</h2>
+  <h2 class="tarjeta-titulo">Centro de distribución</h2>
   <p class="nota-pie">Origen de las rutas. Un cambio solo afecta a las rutas nuevas o recalculadas.</p>
   <form method="post" action="{{ url_for('configuracion.centro') }}" class="formulario">
     {{ formulario_centro.hidden_tag() }}
@@ -51,9 +51,11 @@
             <form method="post" action="{{ url_for('configuracion.renombrar_motivo', motivo_id=motivo.id) }}"
                   class="formulario-en-linea">
               {{ formulario_motivo.hidden_tag() }}
-              <input type="text" name="nombre" value="{{ motivo.nombre }}" maxlength="{{ largo_maximo }}"
-                     aria-label="Nombre del motivo">
-              <button type="submit" class="boton boton-plano">Renombrar</button>
+              <div class="campo">
+                <input type="text" name="nombre" value="{{ motivo.nombre }}" maxlength="{{ largo_maximo }}"
+                       aria-label="Nombre del motivo {{ motivo.nombre }}" required>
+              </div>
+              <button type="submit" class="boton boton-secundario">Renombrar</button>
             </form>
           {% endif %}
         </td>
@@ -76,10 +78,13 @@
     </tbody>
   </table>
 
-  <form method="post" action="{{ url_for('configuracion.agregar_motivo') }}" class="formulario formulario-en-linea">
+  <form method="post" action="{{ url_for('configuracion.agregar_motivo') }}"
+        class="formulario-en-linea formulario-nuevo-motivo">
     {{ formulario_motivo.hidden_tag() }}
-    <label for="nuevo_motivo">Nuevo motivo</label>
-    <input type="text" name="nombre" id="nuevo_motivo" maxlength="{{ largo_maximo }}" required>
+    <div class="campo">
+      <label for="nuevo_motivo">Nuevo motivo</label>
+      <input type="text" name="nombre" id="nuevo_motivo" maxlength="{{ largo_maximo }}" required>
+    </div>
     <button type="submit" class="boton boton-primario">Agregar</button>
   </form>
 </section>

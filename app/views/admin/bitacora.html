@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block titulo %}Bitacora | {{ nombre_sistema }}{% endblock %}
+{% block titulo %}Bitácora | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina">
-  <h1 class="titulo-pagina">Bitacora</h1>
-  <p class="subtitulo-pagina">{{ total }} registro(s) &middot; acciones confirmadas por voz, cambios de configuracion y acciones sobre usuarios. Solo lectura.</p>
+  <h1 class="titulo-pagina">Bitácora</h1>
+  <p class="subtitulo-pagina">{{ total }} registro(s) &middot; acciones confirmadas por voz; usuarios y configuración; y, en pantalla, clientes, sedes, productos, ajustes de inventario, vehículos, rutas, pedidos, importaciones CSV y solicitudes atendidas. Solo lectura.</p>
 </div>
 
 <section class="tarjeta">
@@ -20,7 +20,7 @@
       {% endfor %}
     </select>
     <select name="origen">
-      <option value="">Todos los origenes</option>
+      <option value="">Todos los orígenes</option>
       {% for origen in origenes %}
         <option value="{{ origen }}" {{ 'selected' if filtros.origen == origen }}>{{ origen|capitalize }}</option>
       {% endfor %}
@@ -41,7 +41,7 @@
   <div class="tabla-scroll">
     <table class="tabla">
       <thead>
-        <tr><th>Fecha</th><th>Usuario</th><th>Origen</th><th>Accion</th><th>Resumen</th><th>Resultado</th></tr>
+        <tr><th>Fecha</th><th>Usuario</th><th>Origen</th><th>Acción</th><th>Resumen</th><th>Resultado</th></tr>
       </thead>
       <tbody>
       {% for registro in registros %}
@@ -65,7 +65,7 @@
           </td>
           <td>
             <span class="etiqueta etiqueta-{{ 'entregado' if registro.resultado == 'exito' else 'fallido' }}">
-              {{ 'Exito' if registro.resultado == 'exito' else 'Error' }}
+              {{ 'Éxito' if registro.resultado == 'exito' else 'Error' }}
             </span>
           </td>
         </tr>
@@ -76,11 +76,11 @@
   {% if paginas > 1 %}
   <p class="paginacion">
     {% if pagina > 1 %}
-      <a href="{{ url_for('bitacora.lista', pagina=pagina - 1, **filtros) }}">&lsaquo; Mas recientes</a>
+      <a href="{{ url_for('bitacora.lista', pagina=pagina - 1, **filtros) }}">&lsaquo; Más recientes</a>
     {% endif %}
-    Pagina {{ pagina }} de {{ paginas }}
+    Página {{ pagina }} de {{ paginas }}
     {% if pagina < paginas %}
-      <a href="{{ url_for('bitacora.lista', pagina=pagina + 1, **filtros) }}">Mas antiguos &rsaquo;</a>
+      <a href="{{ url_for('bitacora.lista', pagina=pagina + 1, **filtros) }}">Más antiguos &rsaquo;</a>
     {% endif %}
   </p>
   {% endif %}

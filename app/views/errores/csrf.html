@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block titulo %}Sesion expirada | {{ nombre_sistema }}{% endblock %}
+{% block titulo %}Sesión expirada | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
 <div class="tarjeta vacio-centrado">
   <h1 class="codigo-error">&#8635;</h1>
-  <h2>La sesion expiro</h2>
+  <h2>La sesión expiró</h2>
   <p>
-    Por seguridad, el formulario dejo de ser valido. Esto suele ocurrir cuando la
-    pagina permanecio abierta demasiado tiempo o se perdio la conexion.
+    Por seguridad, el formulario dejó de ser válido. Esto suele ocurrir cuando la
+    página permaneció abierta demasiado tiempo o se perdió la conexión.
   </p>
-  <p class="nota-superior">Vuelva a la pantalla anterior y repita la accion.</p>
+  <p class="nota-superior">Vuelva a la pantalla anterior y repita la acción.</p>
   <a class="boton boton-primario" href="{{ url_for('principal.inicio') }}">Volver al inicio</a>
 </div>
 {% endblock %}

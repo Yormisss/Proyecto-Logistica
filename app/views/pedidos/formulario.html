@@ -38,7 +38,7 @@
       </div>
       <div class="campo">
         {{ formulario.codigo.label }}
-        {{ formulario.codigo(placeholder="Se genera automaticamente") }}
+        {{ formulario.codigo(placeholder="Se genera automáticamente") }}
         {% for e in formulario.codigo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
       </div>
       <div class="campo">
@@ -52,16 +52,16 @@
         {% for e in formulario.longitud.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
       </div>
     </div>
-    <p class="nota-pie">Las coordenadas son opcionales; se requieren para incluir el pedido en el trazado automatico de rutas.</p>
+    <p class="nota-pie">Las coordenadas son opcionales; se requieren para incluir el pedido en el trazado automático de rutas.</p>
     <p class="nota-pie">
-      Si el cliente y la direccion ya existen, el pedido se asocia al registro
-      actual en lugar de crear uno nuevo. El NIT es la forma mas confiable de
+      Si el cliente y la dirección ya existen, el pedido se asocia al registro
+      actual en lugar de crear uno nuevo. El NIT es la forma más confiable de
       identificarlo.
     </p>
   </section>
 
   <section class="tarjeta">
-    <h2 class="tarjeta-titulo">Programacion del despacho</h2>
+    <h2 class="tarjeta-titulo">Programación del despacho</h2>
     <div class="rejilla-campos">
       <div class="campo">
         {{ formulario.fecha_despacho.label }}

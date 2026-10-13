@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block titulo %}{{ nombre_sistema }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+  <script src="{{ url_for('static', filename='js/menu.js') }}" defer></script>
   {% block cabecera %}{% endblock %}
 </head>
 <body class="{% block clase_body %}{% endblock %}{{ ' con-asistente' if asistente_disponible }}">
@@ -31,20 +32,33 @@
         <a href="{{ url_for('clientes_admin.lista') }}"
            class="{{ 'activo' if request.blueprint == 'clientes_admin' }}">Clientes</a>
         <a href="{{ url_for('admin.analitica_operacion') }}"
-           class="{{ 'activo' if request.endpoint == 'admin.analitica_operacion' }}">Analitica</a>
+           class="{{ 'activo' if request.endpoint == 'admin.analitica_operacion' }}">Analítica</a>
         <a href="{{ url_for('solicitudes.lista') }}"
            class="{{ 'activo' if request.blueprint == 'solicitudes' }}">Solicitudes</a>
         <a href="{{ url_for('vehiculos.lista') }}"
-           class="{{ 'activo' if request.blueprint == 'vehiculos' }}">Vehiculos</a>
+           class="{{ 'activo' if request.blueprint == 'vehiculos' }}">Vehículos</a>
         {% if current_user.es_admin %}
-        <a href="{{ url_for('usuarios.lista') }}"
-           class="{{ 'activo' if request.blueprint == 'usuarios' }}">Usuarios</a>
-        <a href="{{ url_for('admin.rendimiento') }}"
-           class="{{ 'activo' if request.endpoint == 'admin.rendimiento' }}">Rendimiento</a>
-        <a href="{{ url_for('configuracion.inicio') }}"
-           class="{{ 'activo' if request.blueprint == 'configuracion' }}">Configuracion</a>
-        <a href="{{ url_for('bitacora.lista') }}"
-           class="{{ 'activo' if request.blueprint == 'bitacora' }}">Bitacora</a>
+        {# Desplegable con <details>: se abre con Enter o Espacio sobre "Administración";
+           menu.js lo cierra con Escape (devolviendo el foco) o al salir de él. #}
+        {% set en_administracion = request.blueprint in ('usuarios', 'configuracion', 'bitacora')
+                                   or request.endpoint == 'admin.rendimiento' %}
+        <details class="menu-desplegable" data-menu-desplegable>
+          <summary class="{{ 'activo' if en_administracion }}">Administración</summary>
+          <div class="menu-desplegable-lista">
+            <a href="{{ url_for('usuarios.lista') }}"
+               class="{{ 'activo' if request.blueprint == 'usuarios' }}"
+               {{ 'aria-current=page' if request.blueprint == 'usuarios' }}>Usuarios</a>
+            <a href="{{ url_for('admin.rendimiento') }}"
+               class="{{ 'activo' if request.endpoint == 'admin.rendimiento' }}"
+               {{ 'aria-current=page' if request.endpoint == 'admin.rendimiento' }}>Rendimiento</a>
+            <a href="{{ url_for('configuracion.inicio') }}"
+               class="{{ 'activo' if request.blueprint == 'configuracion' }}"
+               {{ 'aria-current=page' if request.blueprint == 'configuracion' }}>Configuración</a>
+            <a href="{{ url_for('bitacora.lista') }}"
+               class="{{ 'activo' if request.blueprint == 'bitacora' }}"
+               {{ 'aria-current=page' if request.blueprint == 'bitacora' }}>Bitácora</a>
+          </div>
+        </details>
         {% endif %}
       {% elif current_user.es_cliente %}
         <a href="{{ url_for('cliente.mis_pedidos') }}"

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block titulo %}{{ pedido.codigo }} | {{ nombre_sistema }}{% endblock %}
-{% block clase_body %}vista-movil{% endblock %}
+{% block clase_body %}vista-móvil{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina">
@@ -15,10 +15,10 @@
 <section class="tarjeta">
   <h2 class="tarjeta-titulo">{{ pedido.cliente_nombre }}</h2>
   <dl class="lista-datos">
-    <dt>Direccion</dt><dd>{{ pedido.direccion }}, {{ pedido.ciudad }}</dd>
+    <dt>Dirección</dt><dd>{{ pedido.direccion }}, {{ pedido.ciudad }}</dd>
     <dt>Ventana</dt><dd>{{ pedido.ventana_texto }}</dd>
     {% if pedido.cliente_telefono %}
-    <dt>Telefono</dt><dd><a href="tel:{{ pedido.cliente_telefono }}">{{ pedido.cliente_telefono }}</a></dd>
+    <dt>Teléfono</dt><dd><a href="tel:{{ pedido.cliente_telefono }}">{{ pedido.cliente_telefono }}</a></dd>
     {% endif %}
     {% if pedido.observaciones %}
     <dt>Instrucciones</dt><dd>{{ pedido.observaciones }}</dd>
@@ -33,7 +33,7 @@
 </section>
 
 <section class="tarjeta">
-  <h2 class="tarjeta-titulo">Mercancia a entregar</h2>
+  <h2 class="tarjeta-titulo">Mercancía a entregar</h2>
   <ul class="lista-mercancia">
   {% for item in pedido.items %}
     <li>
@@ -61,7 +61,7 @@
 <section class="tarjeta">
   <h2 class="tarjeta-titulo">Confirmar entrega</h2>
   <p class="nota-superior">
-    Al confirmar, el sistema descuenta automaticamente la mercancia del inventario del almacen.
+    Al confirmar, el sistema descuenta automáticamente la mercancía del inventario del almacén.
   </p>
   <form method="post" action="{{ url_for('conductor.entregar', pedido_id=pedido.id) }}"
         class="formulario formulario-geo" novalidate>
@@ -72,7 +72,7 @@
     </div>
     <div class="campo">
       {{ formulario_entrega.receptor_documento.label }}
-      {{ formulario_entrega.receptor_documento(placeholder="Cedula o NIT", inputmode="numeric") }}
+      {{ formulario_entrega.receptor_documento(placeholder="Cédula o NIT", inputmode="numeric") }}
     </div>
     <div class="campo">
       {{ formulario_entrega.observacion.label }}
@@ -134,13 +134,13 @@
     <dt>Documento</dt><dd>{{ pedido.prueba_entrega.receptor_documento or '—' }}</dd>
     <dt>Fecha</dt><dd>{{ pedido.prueba_entrega.registrado_en.strftime('%d/%m/%Y %H:%M') }}</dd>
     {% if pedido.prueba_entrega.observacion %}
-    <dt>Observacion</dt><dd>{{ pedido.prueba_entrega.observacion }}</dd>
+    <dt>Observación</dt><dd>{{ pedido.prueba_entrega.observacion }}</dd>
     {% endif %}
   </dl>
   {% endif %}
   <p class="nota-pie">
     {% if pedido.inventario_descontado %}
-      La mercancia fue descontada del inventario del almacen.
+      La mercancía fue descontada del inventario del almacén.
     {% else %}
       Este pedido no afecto el inventario.
     {% endif %}

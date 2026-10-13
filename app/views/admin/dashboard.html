@@ -5,14 +5,14 @@
 <div class="encabezado-pagina">
   <div>
     <h1 class="titulo-pagina">Tablero de control</h1>
-    <p class="subtitulo-pagina">{{ cd_nombre }} &middot; Operacion del {{ kpis.fecha.strftime('%d/%m/%Y') }}</p>
+    <p class="subtitulo-pagina">{{ cd_nombre }} &middot; Operación del {{ kpis.fecha.strftime('%d/%m/%Y') }}</p>
   </div>
 </div>
 
 <!-- RF6 - Tres KPIs fundamentales del prototipo -->
 <section class="rejilla-kpis">
   <article class="kpi">
-    <span class="kpi-etiqueta">Total de entregas del dia</span>
+    <span class="kpi-etiqueta">Total de entregas del día</span>
     <span class="kpi-valor">{{ kpis.total_dia }}</span>
     <span class="kpi-detalle">{{ kpis.entregados }} entregadas &middot; {{ kpis.fallidos }} fallidas</span>
   </article>
@@ -20,11 +20,11 @@
   <article class="kpi kpi-alerta">
     <span class="kpi-etiqueta">Entregas pendientes</span>
     <span class="kpi-valor">{{ kpis.pendientes }}</span>
-    <span class="kpi-detalle">{{ kpis.sin_asignar }} sin asignar &middot; {{ kpis.en_ruta }} en ruta</span>
+    <span class="kpi-detalle">{{ kpis.sin_asignar }} sin asignar &middot; {{ kpis.asignados }} asignado{{ 's' if kpis.asignados != 1 }} &middot; {{ kpis.en_ruta }} en ruta</span>
   </article>
 
   <article class="kpi kpi-exito">
-    <span class="kpi-etiqueta">Porcentaje de exito</span>
+    <span class="kpi-etiqueta">Porcentaje de éxito</span>
     <span class="kpi-valor">{{ kpis.porcentaje_exito }}%</span>
     <span class="kpi-detalle">Sobre {{ kpis.entregados + kpis.fallidos }} entregas cerradas</span>
   </article>
@@ -33,7 +33,7 @@
 <div class="rejilla-dos">
   <section class="tarjeta">
     <h2 class="tarjeta-titulo fila-encabezado">
-      <span>Rutas del dia</span>
+      <span>Rutas del día</span>
       <a class="enlace-tabla" href="{{ url_for('rutas.nueva') }}">Planificar ruta</a>
     </h2>
     {% if rutas_hoy %}
@@ -74,7 +74,7 @@
       {% endfor %}
       </ul>
     {% else %}
-      <p class="vacio">Ningun producto por debajo del stock minimo.</p>
+      <p class="vacio">Ningún producto por debajo del stock mínimo.</p>
     {% endif %}
     <p class="nota-pie">Conductores activos en la flota: <strong>{{ conductores_activos }}</strong></p>
   </section>

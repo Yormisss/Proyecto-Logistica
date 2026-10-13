@@ -41,7 +41,7 @@ class FormularioVehiculo(FlaskForm):
     capacidad_unidades = StringField("Capacidad (unidades)", validators=[Optional()], default="0")
     conductor_id = SelectField("Conductor asignado", coerce=int, validate_choice=False,
                                validators=[Optional()])
-    activo = BooleanField("Vehiculo activo", default=True)
+    activo = BooleanField("Vehículo activo", default=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block titulo %}Iniciar sesion | {{ nombre_sistema }}{% endblock %}
-{% block clase_body %}pagina-acceso{% endblock %}
+{% block titulo %}Iniciar sesión | {{ nombre_sistema }}{% endblock %}
+{% block clase_body %}página-acceso{% endblock %}
 
 {% block contenido %}
 <div class="acceso-panel">
   <div class="acceso-encabezado">
     <span class="marca-icono grande">SG</span>
-    <h1>Sistema de Gestion de Despachos</h1>
-    <p>Optimizacion de transporte, almacenamiento y distribucion de ultima milla</p>
+    <h1>Sistema de Gestión de Despachos</h1>
+    <p>Optimización de transporte, almacenamiento y distribución de última milla</p>
   </div>
 
   <form method="post" class="formulario" novalidate>
@@ -26,12 +26,12 @@
     </div>
 
     <label class="campo-inline">
-      {{ formulario.recordar() }} <span>Mantener sesion iniciada</span>
+      {{ formulario.recordar() }} <span>Mantener sesión iniciada</span>
     </label>
 
     <button type="submit" class="boton boton-primario boton-bloque">Ingresar</button>
   </form>
 
-  <p class="acceso-pie">Universidad de San Buenaventura &middot; Ingenieria de Sistemas</p>
+  <p class="acceso-pie">Universidad de San Buenaventura &middot; Ingeniería de Sistemas</p>
 </div>
 {% endblock %}

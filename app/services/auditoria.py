@@ -56,12 +56,14 @@ def limpiar(datos):
 
 
 def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RESULTADO_EXITO,
-                        entidad_id=None, usuario=None, origen=None, call_id=None, avisar=True):
+                        entidad_id=None, usuario=None, origen=None, call_id=None, avisar=True,
+                        registrado_en=None):
     """Agrega un registro de auditoria (y, si `avisar`, su evento) a la transaccion en curso.
 
     `usuario` y `origen` se toman de la peticion si no vienen: el usuario de la
     llamada de voz o el de la sesion web, y "voz" o "pantalla". Sin usuario el
-    registro es del sistema, automatico.
+    registro es del sistema, automatico. `registrado_en` (por omision, ahora) solo
+    lo fija la semilla, para repartir sus ejemplos en los ultimos dias.
     """
     usuario = usuario if usuario is not None else usuario_actual()
     origen = origen or origen_actual() or ORIGEN_AUTOMATICO
@@ -77,7 +79,9 @@ def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RES
         detalle=json.dumps(limpiar(detalle), ensure_ascii=False, default=str) if detalle else None,
         resultado=resultado,
         call_id=call_id,
-        registrado_en=ahora(),
+        # Sin microsegundos: MySQL redondea DATETIME al segundo, y la fecha_hora del
+        # evento (que los trunca) no coincidiria con la guardada cuando pasan de 0,5 s.
+        registrado_en=(registrado_en or ahora()).replace(microsecond=0),
     )
     registro.usuario = usuario
     db.session.add(registro)

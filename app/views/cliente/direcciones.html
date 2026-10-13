@@ -15,13 +15,13 @@
   <section class="tarjeta">
     <h2 class="tarjeta-titulo">{{ sede.etiqueta }}</h2>
     <dl class="lista-datos">
-      <dt>Direccion</dt><dd>{{ sede.direccion }}</dd>
+      <dt>Dirección</dt><dd>{{ sede.direccion }}</dd>
       <dt>Ciudad</dt><dd>{{ sede.ciudad }}</dd>
       <dt>Ventana</dt>
       <dd>
         {% if sede.ventana_inicio and sede.ventana_fin %}
           {{ sede.ventana_inicio.strftime('%H:%M') }} - {{ sede.ventana_fin.strftime('%H:%M') }}
-        {% else %}Sin restriccion{% endif %}
+        {% else %}Sin restricción{% endif %}
       </dd>
       <dt>Geolocalizada</dt>
       <dd>
@@ -36,9 +36,9 @@
   {% endfor %}
 </div>
 <p class="nota-pie">
-  Para agregar o corregir una sede, comuniquese con el centro de distribucion.
+  Para agregar o corregir una sede, comuníquese con el centro de distribución.
 </p>
 {% else %}
-<div class="tarjeta vacio-centrado"><p>Aun no tiene sedes registradas.</p></div>
+<div class="tarjeta vacio-centrado"><p>Aún no tiene sedes registradas.</p></div>
 {% endif %}
 {% endblock %}

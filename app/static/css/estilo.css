@@ -55,6 +55,29 @@ body {
 }
 .navegacion a:hover { background: rgba(255,255,255,.1); color: var(--blanco); }
 .navegacion a.activo { background: var(--azul-700); color: var(--blanco); }
+.navegacion a:focus-visible, .menu-desplegable summary:focus-visible {
+  outline: 2px solid var(--blanco); outline-offset: 2px;
+}
+
+/* Desplegable "Administración" del admin (details/summary) */
+.menu-desplegable { position: relative; }
+.menu-desplegable summary {
+  list-style: none; cursor: pointer; color: #c6d4e4; padding: .4rem .8rem;
+  border-radius: 6px; font-size: .9rem; display: flex; align-items: center; gap: .35rem;
+}
+.menu-desplegable summary::-webkit-details-marker { display: none; }
+.menu-desplegable summary::after {
+  content: ""; width: .4rem; height: .4rem; margin-top: -.2rem;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg);
+}
+.menu-desplegable[open] summary::after { margin-top: .2rem; transform: rotate(-135deg); }
+.menu-desplegable summary:hover { background: rgba(255,255,255,.1); color: var(--blanco); }
+.menu-desplegable summary.activo { background: var(--azul-700); color: var(--blanco); }
+.menu-desplegable-lista {
+  position: absolute; right: 0; top: calc(100% + .35rem); z-index: 50; min-width: 11rem;
+  display: flex; flex-direction: column; gap: .15rem; padding: .35rem;
+  background: var(--azul-900); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
 
 .usuario-caja { display: flex; align-items: center; gap: .8rem; }
 .usuario-info { display: flex; flex-direction: column; line-height: 1.2; text-align: right; }
@@ -162,6 +185,10 @@ body {
 }
 .campo-error { color: var(--rojo); font-size: .8rem; }
 .campo-inline { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
+/* Un campo y su boton en la misma fila (motivos de fallo en Configuración) */
+.formulario-en-linea { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; margin: 0; }
+.formulario-en-linea .campo { flex: 1; min-width: 12rem; }
+.formulario-nuevo-motivo { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--gris-200); }
 
 .boton {
   display: inline-block; padding: .65rem 1.1rem; border: none; border-radius: 8px;

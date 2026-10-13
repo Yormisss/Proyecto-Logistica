@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block titulo %}Analitica | {{ nombre_sistema }}{% endblock %}
+{% block titulo %}Analítica | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina fila-encabezado">
   <div>
-    <h1 class="titulo-pagina">Analitica de la operacion</h1>
-    <p class="subtitulo-pagina">Indicadores de apoyo a la toma de decisiones estrategicas</p>
+    <h1 class="titulo-pagina">Analítica de la operación</h1>
+    <p class="subtitulo-pagina">Indicadores de apoyo a la toma de decisiones estratégicas</p>
   </div>
   <nav class="selector-rango">
     {% for opcion in [7, 14, 30] %}
       <a href="{{ url_for('admin.analitica_operacion', dias=opcion) }}"
-         class="{{ 'activo' if dias == opcion }}">{{ opcion }} dias</a>
+         class="{{ 'activo' if dias == opcion }}">{{ opcion }} días</a>
     {% endfor %}
   </nav>
 </div>
@@ -40,10 +40,10 @@
   </article>
 
   <article class="kpi">
-    <span class="kpi-etiqueta">Rango de duracion</span>
+    <span class="kpi-etiqueta">Rango de duración</span>
     {% if tiempo.minimo is not none %}
       <span class="kpi-valor">{{ tiempo.minimo }}–{{ tiempo.maximo }}<small class="kpi-unidad">min</small></span>
-      <span class="kpi-detalle">Entrega mas rapida y mas lenta</span>
+      <span class="kpi-detalle">Entrega más rápida y más lenta</span>
     {% else %}
       <span class="kpi-valor kpi-sin-dato">—</span>
       <span class="kpi-detalle">Sin datos suficientes</span>
@@ -54,7 +54,7 @@
 {# --- Entregas por dia: dos series, columna apilada --- #}
 <section class="tarjeta">
   <div class="grafica-encabezado">
-    <h2 class="tarjeta-titulo sin-borde">Entregas cerradas por dia</h2>
+    <h2 class="tarjeta-titulo sin-borde">Entregas cerradas por día</h2>
     <ul class="leyenda">
       <li><span class="muestra" style="background: var(--serie-1)"></span>Entregadas</li>
       <li><span class="muestra" style="background: var(--serie-2)"></span>Fallidas</li>
@@ -63,7 +63,7 @@
 
   {% if maximo_dia %}
   <div class="grafica-columnas" role="img"
-       aria-label="Entregas cerradas por dia durante los ultimos {{ dias }} dias">
+       aria-label="Entregas cerradas por día durante los últimos {{ días }} días">
     {% for punto in serie %}
       {% set alto_entregadas = (punto.entregadas / maximo_dia * 100) if maximo_dia else 0 %}
       {% set alto_fallidas = (punto.fallidas / maximo_dia * 100) if maximo_dia else 0 %}
@@ -100,7 +100,7 @@
     </table>
   </details>
   {% else %}
-    <p class="vacio">No hay entregas cerradas en los ultimos {{ dias }} dias.</p>
+    <p class="vacio">No hay entregas cerradas en los últimos {{ dias }} días.</p>
   {% endif %}
 </section>
 
@@ -129,7 +129,7 @@
         </ul>
       {% endfor %}
       <p class="nota-pie">
-        Identificar la causa dominante permite atacarla en la planificacion,
+        Identificar la causa dominante permite atacarla en la planificación,
         no solo registrarla.
       </p>
     {% else %}
@@ -156,7 +156,7 @@
       <details class="tabla-alterna">
         <summary>Ver detalle por conductor</summary>
         <table class="tabla">
-          <thead><tr><th>Conductor</th><th class="derecha">Entregadas</th><th class="derecha">Fallidas</th><th class="derecha">Exito</th></tr></thead>
+          <thead><tr><th>Conductor</th><th class="derecha">Entregadas</th><th class="derecha">Fallidas</th><th class="derecha">Éxito</th></tr></thead>
           <tbody>
           {% for fila in conductores %}
             <tr>
@@ -170,7 +170,7 @@
         </table>
       </details>
     {% else %}
-      <p class="vacio">Ningun conductor tiene entregas cerradas en el periodo.</p>
+      <p class="vacio">Ningún conductor tiene entregas cerradas en el periodo.</p>
     {% endif %}
   </section>
 </div>

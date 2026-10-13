@@ -63,8 +63,10 @@ def kpis_del_dia(fecha=None):
         "fallidos": fallidos,
         "cancelados": conteos.get(EstadoPedido.CANCELADO, 0),
         "pendientes": pendientes,
-        "en_ruta": conteos.get(EstadoPedido.EN_RUTA, 0),
+        # Desglose de `pendientes`: sin_asignar + asignados + en_ruta.
         "sin_asignar": conteos.get(EstadoPedido.PENDIENTE, 0),
+        "asignados": conteos.get(EstadoPedido.ASIGNADO, 0),
+        "en_ruta": conteos.get(EstadoPedido.EN_RUTA, 0),
         "porcentaje_exito": round(entregados * 100 / cerrados, 1) if cerrados else 0.0,
         "conteos": conteos,
     }

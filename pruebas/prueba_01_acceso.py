@@ -35,6 +35,11 @@ with app.test_client() as c:
     kpis = re.findall(r'kpi-valor">([^<]+)<', html)
     print(f"       KPIs renderizados: {kpis}")
     check(len(kpis) == 3, "muestra los 3 KPIs del RF6")
+    pend = re.search(r'Entregas pendientes</span>\s*<span class="kpi-valor">(\d+)</span>\s*'
+                     r'<span class="kpi-detalle">(\d+) sin asignar &middot; (\d+) asignados? &middot; (\d+) en ruta', html)
+    check(pend is not None and int(pend.group(1)) == sum(int(pend.group(i)) for i in (2, 3, 4))
+          and int(pend.group(3)) > 0,
+          f"entregas pendientes: sin asignar, asignados y en ruta suman el total ({pend and pend.groups()})")
     check("RUT-" in html, "lista las rutas del dia")
     check("SKU-1004" in html, "alerta de producto bajo minimo")
     r = c.get("/conductor/")
@@ -48,6 +53,13 @@ with app.test_client() as c:
     check("Supermercado El Portal" in html, "lista las paradas asignadas")
     n = html.count('class="parada ')
     check(n == 5, f"muestra 5 paradas (encontradas: {n})")
+    check("3 de 5 cerradas &middot; 2 entregadas &middot; 1 fallida" in html,
+          "el avance cuenta las cerradas (entregadas y fallidas), con su desglose")
+    check("Poner en camino 1 parada pendiente" in html and "Iniciar ruta (" not in html,
+          "con la ruta en curso, el boton pone en camino las paradas asignadas que quedan")
+    historial = c.get("/conductor/historial").data.decode()
+    check("3 de 5 cerradas &middot; 2 entregadas &middot; 1 fallida" in historial and " entregas &middot;" not in historial,
+          "el historial usa cerradas y el mismo desglose")
     r = c.get("/admin/")
     check(r.status_code == 403, f"conductor bloqueado en tablero admin (status {r.status_code})")
 
@@ -202,6 +214,22 @@ with app.app_context():
               and saldo == producto.stock_actual,
               f"{producto.sku}: entrada inicial de {inicial.cantidad if inicial else '?'} y "
               f"{len(movimientos) - 1} salidas que encadenan hasta {producto.stock_actual} ({rotos} rotos)")
+
+print("\n== 11. seed.py: registros de ejemplo en la bitacora ==")
+from app.models import Auditoria
+with app.app_context():
+    registros = db.session.query(Auditoria).all()
+    check(8 <= len(registros) <= 10, f"deja entre 8 y 10 registros de auditoria ({len(registros)})")
+    check({r.origen for r in registros} == {"pantalla", "voz"} and len({r.usuario_id for r in registros}) >= 3
+          and len({r.entidad for r in registros}) >= 5,
+          "de pantalla y de voz, de varios usuarios y entidades")
+    check(any(r.resultado == "error" for r in registros) and all(r.call_id for r in registros if r.origen == "voz"),
+          "incluye una accion fallida, y las de voz llevan su call_id")
+with app.test_client() as c:
+    c.post("/auth/login", data={"correo": "admin@sgds.com", "contrasena": "Admin123*"})
+    html = c.get("/admin/bitacora/").data.decode()
+    check(f"{len(registros)} registro(s)" in html and "Ajustar inventario" in html,
+          "la pantalla Bitacora los muestra desde la siembra")
 
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))

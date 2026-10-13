@@ -9,12 +9,12 @@
     <dt>Nombre</dt><dd>{{ current_user.nombre }}</dd>
     <dt>Correo</dt><dd>{{ current_user.correo }}</dd>
     <dt>Rol</dt><dd>{{ current_user.rol_etiqueta }}</dd>
-    <dt>Telefono</dt><dd>{{ current_user.telefono or 'No registrado' }}</dd>
+    <dt>Teléfono</dt><dd>{{ current_user.telefono or 'No registrado' }}</dd>
   </dl>
 </div>
 
 <div class="tarjeta">
-  <h2 class="tarjeta-titulo">Cambiar contrasena</h2>
+  <h2 class="tarjeta-titulo">Cambiar contraseña</h2>
   <form method="post" class="formulario" novalidate>
     {{ formulario.hidden_tag() }}
     <div class="campo">
@@ -26,7 +26,7 @@
       {{ formulario.contrasena_nueva(autocomplete="new-password") }}
       {% for error in formulario.contrasena_nueva.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
     </div>
-    <button type="submit" class="boton boton-primario">Actualizar contrasena</button>
+    <button type="submit" class="boton boton-primario">Actualizar contraseña</button>
   </form>
 </div>
 {% endblock %}

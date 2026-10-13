@@ -250,11 +250,92 @@ def sembrar_datos():
     _generar_historico(usuarios, productos, resolutor, dias=21)
     _cuadrar_inventario(productos, usuarios["despachador@sgds.com"], desde=hoy - timedelta(days=21))
 
+    # Ejemplos de la bitacora, de pantalla y de voz.
+    _sembrar_auditoria(usuarios, ruta, hoy)
+
     print("Datos de demostracion cargados.")
     print("-" * 58)
     for nombre, correo, rol, clave in USUARIOS:
         print(f"  {Rol.ETIQUETAS[rol]:<18} {correo:<26} {clave}")
     print("-" * 58)
+
+
+def _sembrar_auditoria(usuarios, ruta, hoy):
+    """Nueve registros de auditoria de ejemplo para la pantalla Bitacora.
+
+    Se crean con el mismo servicio que la pantalla y la voz (`registrar_auditoria`),
+    con los titulos, entidades y detalles que esas acciones registran, repartidos
+    en la ultima semana. Ninguno avisa a Make (avisar=False), aunque el .env tenga
+    el webhook.
+    """
+    from app.services.auditoria import registrar_auditoria
+    from app.services.notificaciones import ORIGEN_PANTALLA, ORIGEN_VOZ
+
+    admin = usuarios["admin@sgds.com"]
+    gestor = usuarios["despachador@sgds.com"]
+    conductor = usuarios["conductor1@sgds.com"]
+    en_camino = next((p for p in ruta.pedidos if p.estado == EstadoPedido.EN_RUTA), None)
+
+    def momento(dias, hora, minuto):
+        return datetime.combine(hoy - timedelta(days=dias), time(hora, minuto))
+
+    def voz(funcion, datos, respuesta):
+        return {"funcion": funcion, "datos": datos, "respuesta": respuesta}
+
+    ejemplos = [
+        (momento(6, 8, 15), admin, ORIGEN_PANTALLA, None, "exito",
+         "Editar centro de distribución", "configuracion", None,
+         "Actualizó el centro de distribución: Centro de Distribucion Bogota.",
+         {"cd_nombre": ["Centro de Distribucion", "Centro de Distribucion Bogota"]}),
+        (momento(5, 9, 40), gestor, ORIGEN_PANTALLA, None, "exito",
+         "Crear cliente", "cliente", None, "Registró el cliente Tienda Fontibon.",
+         {"nombre": "Tienda Fontibon", "documento": "900678901-6", "telefono": None, "correo": None,
+          "activo": True}),
+        (momento(5, 9, 52), gestor, ORIGEN_PANTALLA, None, "exito",
+         "Agregar sede", "sede", None,
+         "Agregó la sede Sede Toberin de Supermercado El Portal: Av. Cra 19 #166-30.",
+         {"cliente": "Supermercado El Portal", "direccion": "Av. Cra 19 #166-30", "ciudad": "Bogota"}),
+        (momento(4, 11, 5), admin, ORIGEN_PANTALLA, None, "exito",
+         "Crear producto", "producto", "SKU-1006", "Creó el producto SKU-1006, Papel higienico 12 rollos.",
+         {"sku": "SKU-1006", "nombre": "Papel higienico 12 rollos", "stock_minimo": 25}),
+        (momento(3, 16, 20), gestor, ORIGEN_VOZ, "call_demo_gestor_1", "exito",
+         "Ajustar inventario", "producto", None,
+         "Voy a ajustar el inventario de SKU-1004, Aceite vegetal 1 L, de 34 a 30 unidades, por: "
+         "Conteo fisico semanal.",
+         voz("gestor/productos:ajuste", {"producto": "SKU-1004", "nuevo_stock": 30,
+                                         "motivo": "Conteo fisico semanal"},
+             "Listo, el stock de SKU-1004 quedó en 30.")),
+        (momento(1, 10, 30), admin, ORIGEN_VOZ, "call_demo_admin_1", "exito",
+         "Crear cliente", "cliente", None,
+         "Voy a registrar el cliente Tienda Usaquen, NIT 900789012-7, teléfono sin dato y correo sin dato.",
+         voz("gestor/clientes:crear", {"nombre": "Tienda Usaquen", "nit": "900789012-7"},
+             "Listo, registré el cliente Tienda Usaquen.")),
+        (momento(1, 15, 45), gestor, ORIGEN_VOZ, "call_demo_gestor_2", "error",
+         "Anular pedido", "pedido", None,
+         "Voy a anular el pedido de Tienda Usaquen por: Cliente cerro el local.",
+         voz("gestor/pedidos:anular", {"pedido": "tienda usaquen", "motivo": "Cliente cerro el local"},
+             "No puedo anular ese pedido: ya fue entregado.")),
+        (momento(0, 6, 30), gestor, ORIGEN_PANTALLA, None, "exito",
+         "Crear ruta", "ruta", ruta.codigo,
+         f"Creó la ruta {ruta.codigo} del {hoy.isoformat()} para {conductor.nombre} con "
+         f"{len(ruta.pedidos)} paradas.",
+         {"conductor": conductor.nombre, "paradas": len(ruta.pedidos)}),
+    ]
+    if en_camino is not None:
+        ejemplos.append(
+            (momento(0, 7, 40), conductor, ORIGEN_VOZ, "call_demo_conductor_1", "exito",
+             "Marcar parada en camino", "pedido", None,
+             f"Voy a marcar en camino la parada {en_camino.orden_en_ruta}, {en_camino.cliente_nombre}.",
+             voz("conductor/parada:en-camino", {"orden": en_camino.orden_en_ruta},
+                 f"Listo, la parada {en_camino.orden_en_ruta}, {en_camino.cliente_nombre}, quedó en camino."))
+        )
+
+    for (cuando, usuario, origen, call_id, resultado, accion, entidad, entidad_id, resumen,
+         detalle) in ejemplos:
+        registrar_auditoria(accion, entidad, resumen, detalle, resultado=resultado, entidad_id=entidad_id,
+                            usuario=usuario, origen=origen, call_id=call_id, avisar=False,
+                            registrado_en=cuando)
+    db.session.commit()
 
 
 MOTIVOS_DEMO = [

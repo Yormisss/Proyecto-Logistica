@@ -41,7 +41,7 @@ class FormularioFallo(FlaskForm):
     # `motivo_otro` lleva el motivo escrito por el conductor.
     motivo_fallo = StringField("Motivo", validators=[Optional(), Length(max=160)])
     # Sin Length: el largo lo valida el servicio, con un mensaje claro.
-    motivo_otro = StringField("Cual fue el motivo", validators=[Optional()])
+    motivo_otro = StringField("Cuál fue el motivo", validators=[Optional()])
     observacion = TextAreaField("Detalle", validators=[Optional(), Length(max=1000)])
     latitud = HiddenField()
     longitud = HiddenField()
