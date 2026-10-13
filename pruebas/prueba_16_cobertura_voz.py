@@ -2,7 +2,7 @@
 
 Toda ruta POST de la pantalla debe tener una funcion del asistente que la
 cubra, con los mismos roles, o estar en la lista aprobada de exclusiones.
-Lo que todavia falta se lista como pendiente, con su fase.
+Desde la fase 4 no se admite nada pendiente (PENDIENTES_PERMITIDOS = False).
 """
 
 import json
@@ -93,7 +93,8 @@ pendientes = sorted((e, c.pendiente) for e, c in cobertura.COBERTURA.items() if 
 for endpoint, que in pendientes:
     print(f"  ...  {endpoint}: {que}")
 check(cobertura.PENDIENTES_PERMITIDOS or not pendientes,
-      f"al cerrar la fase 5 no queda nada pendiente ({len(pendientes)} pendientes)")
+      f"cobertura cerrada: no queda nada pendiente ({len(pendientes)} pendientes)")
+check(not cobertura.PENDIENTES_PERMITIDOS, "PENDIENTES_PERMITIDOS queda en False")
 check(all(c.pendiente.startswith("Fase") for c in cobertura.COBERTURA.values() if c.pendiente),
       "cada pendiente dice en que fase se resuelve")
 

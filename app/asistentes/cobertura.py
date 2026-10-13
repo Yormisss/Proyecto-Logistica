@@ -10,13 +10,15 @@ fuera de la lista aprobada.
 Cada funcion se nombra "espacio/nombre", o "espacio/nombre:operacion" si la
 funcion agrupa varias operaciones de una entidad con el parametro `operacion`.
 
-`pendiente` marca lo que aun falta por voz y en que fase se hace. Se admite
-mientras PENDIENTES_PERMITIDOS sea True; al cerrar la fase 5 debe quedar vacio.
+`pendiente` marca lo que aun falta por voz y en que fase se hace. Solo se
+admite con PENDIENTES_PERMITIDOS en True. Desde el cierre de la fase 4 la
+cobertura esta completa y la bandera queda en False: una ruta POST nueva de la
+pantalla debe llegar con su funcion de voz o con una exclusion aprobada.
 """
 
 from dataclasses import dataclass
 
-PENDIENTES_PERMITIDOS = True
+PENDIENTES_PERMITIDOS = False
 
 
 @dataclass(frozen=True)
