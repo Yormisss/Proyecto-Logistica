@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               1532 verificaciones automatizadas en 17 suites (MySQL)
+├── pruebas/               1623 verificaciones automatizadas en 18 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -63,6 +63,7 @@ cp .env.example .env
 .venv/bin/flask --app run migrar-asistente # Crear o actualizar las tablas del asistente de voz
 .venv/bin/flask --app run migrar-configuracion # Crear la configuración del negocio (motivos, centro)
 .venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
+.venv/bin/flask --app run migrar-pruebas-entrega # Pruebas de entrega de solo agregar (m007, MySQL)
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -382,9 +383,9 @@ confirmación y quedan en la auditoría).
 
 | Rol | Funciones | Total |
 |---|---|---|
-| **Conductor** | Consultas: `mi-ruta`, `siguiente-parada`, `detalle-parada`. `parada`: `en-camino` (M, también reintenta una fallida), `fallo` (M, con el catálogo o "Otro") | 4 |
-| **Gestor logístico** | Consultas: `resumen-dia`, `pendientes-sin-ruta`, `avance-rutas`, `buscar-pedido`, `stock-producto`, `productos-bajo-minimo`, `fallidos-hoy`, `solicitudes-contacto-pendientes`. `pedidos`: crear, editar, anular, reintentar (M). `productos`: crear, editar, activar, desactivar, entrada, ajuste (M). `rutas`: consultar, crear, agregar-parada, quitar-parada, recalcular, eliminar (M salvo consultar). `clientes` y `sedes`: consultar, crear, editar, activar, desactivar (M salvo consultar). `vehiculos`: consultar, crear, editar, activar, desactivar (M salvo consultar) | 14 |
-| **Administrador** | Todas las del gestor; la analítica (`tiempo-promedio-entrega`, `cumplimiento-ventana`, `productividad-conductores`, `causas-fallo`, `resumen-rendimiento`); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (consulta) | 22 |
+| **Conductor** | Consultas: `mi-ruta`, `siguiente-parada`, `detalle-parada`, `mi-historial` (últimas 5 rutas). `iniciar-ruta` (M). `parada`: `en-camino` (M, también reintenta una fallida), `fallo` (M, con el catálogo o "Otro"), `entregar` (M, con nombre y documento de quien recibe) | 6 |
+| **Gestor logístico** | Consultas: `resumen-dia`, `pendientes-sin-ruta`, `avance-rutas`, `buscar-pedido`, `stock-producto`, `productos-bajo-minimo`, `fallidos-hoy`, `solicitudes-contacto-pendientes`. Analítica, con los periodos del panel: `tiempo-promedio-entrega`, `cumplimiento-ventana`, `productividad-conductores`, `causas-fallo`. `atender-solicitud` (M). `pedidos`: crear, editar, anular, reintentar (M). `productos`: crear, editar, activar, desactivar, entrada, ajuste (M). `rutas`: consultar, crear, agregar-parada, quitar-parada, recalcular, eliminar (M salvo consultar). `clientes` y `sedes`: consultar, crear, editar, activar, desactivar (M salvo consultar). `vehiculos`: consultar, crear, editar, activar, desactivar (M salvo consultar) | 19 |
+| **Administrador** | Todas las del gestor; `resumen-rendimiento` (el panel de rendimiento, solo suyo como en pantalla); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (últimos registros, con filtros por fecha, usuario y entidad) | 23 |
 | **Cliente** | Consultas: `pedidos-en-curso`, `pedidos-recientes`, `estado-pedido`, `ventana-entrega`, `motivo-fallo`, `mis-sedes`. Acciones: `cancelar-pedido` (M, solo PENDIENTE), `solicitar-contacto` (M, una pendiente a la vez) | 8 |
 
 Reglas que el servidor aplica igual que la pantalla, porque usa los mismos servicios
@@ -410,6 +411,19 @@ Reglas que el servidor aplica igual que la pantalla, porque usa los mismos servi
   del usuario. Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, esas dos operaciones se rechazan ya en
   el resumen. El resumen de editar lee las consecuencias (un vehículo que queda sin
   conductor, un cliente que pierde el portal); ver [Salvaguardas](#salvaguardas).
+- **Entregas.** El conductor confirma una entrega por voz solo con el nombre y el
+  documento de quien recibe; descuenta el inventario igual que la pantalla. La llamada
+  no envía la ubicación del teléfono, así que la prueba de entrega queda sin
+  coordenadas y con la observación *"Registrada por el asistente de voz, sin
+  ubicación"*. Iniciar la ruta, en camino, entregar y fallo quedan en la auditoría sin
+  el correo `accion_asistente`: son de rutina y su historial está en los eventos.
+- **Pruebas de entrega de solo agregar.** Cada cierre (entrega o intento fallido)
+  agrega su prueba: un pedido que falla, se reintenta y se entrega conserva todas. El
+  pedido, el portal, el aviso FALLIDO y el resumen diario usan la más reciente; las
+  causas de fallo cuentan todos los intentos fallidos, y el cumplimiento de ventana, solo
+  la entrega. En una base existente, aplique `flask --app run migrar-pruebas-entrega`
+  (m007, idempotente): quita el índice único de `pruebas_entrega.pedido_id` y conserva
+  las filas.
 
 Las ediciones son parciales: solo cambia lo que el usuario dijo, y el resumen lee cada
 cambio con su valor anterior y el nuevo. La operación entra en la huella de la
@@ -425,12 +439,14 @@ sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_rete
 | Todos | Iniciar y cerrar sesión, cambiar la propia contraseña, el botón que abre la llamada | La llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
 | Gestor y admin | Importar pedidos desde CSV | Exige subir un archivo; no tiene equivalente hablado |
 | Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
+| Conductor | La ubicación del teléfono y la observación escrita al entregar o registrar un fallo | La llamada no envía la ubicación; la prueba de entrega por voz lo dice en su observación |
+| Conductor | Rutas de otros días (salvo su historial) o de otros conductores | Igual que en pantalla: solo opera su ruta de hoy |
 | Cliente | Cancelar un pedido ya programado | Desde ASIGNADO ya hay una ruta planificada: el asistente ofrece solicitar contacto con el gestor |
 | Cliente | Rutas, conductores, stock, datos de otros clientes | El mismo aislamiento del portal: un pedido ajeno se responde igual que uno inexistente |
 
-Pendientes de la fase 4 (las acciones las lista `app/asistentes/cobertura.py`): el
-conductor confirma la entrega e inicia la ruta, el gestor atiende una solicitud de
-contacto, la analítica pasa también al gestor y el conductor consulta su historial.
+**La cobertura está cerrada.** `app/asistentes/cobertura.py` asigna a cada ruta `POST` de
+la pantalla su función de voz o una de las exclusiones de esta tabla, y la suite 16 falla
+si aparece una ruta nueva sin ninguna de las dos (`PENDIENTES_PERMITIDOS = False`).
 
 ### Cómo funciona
 
@@ -500,7 +516,8 @@ Un cliente puede pedir por voz que el gestor lo contacte. La solicitud queda en
 evento `solicitud_contacto` (ver [Automatizaciones con Make](#automatizaciones-con-make)).
 Mientras un cliente tenga una pendiente, no se registra otra ni se avisa de nuevo. El
 gestor y el administrador las ven en **Solicitudes** (`/admin/solicitudes/`) o las
-consultan por voz, y las marcan como atendidas en pantalla.
+consultan por voz, y las marcan como atendidas en pantalla o por voz
+(`atender-solicitud`, por el nombre del cliente).
 
 ### Configurar los agentes en Retell: `sincronizar-asistentes`
 
@@ -947,7 +964,8 @@ sembrados no tienen correo, así que no reciben avisos.
 1. Inicie sesión como `conductor1@sgds.com` y abra la parada de Supermercado El Portal.
 2. Márquela en camino, con el botón o por voz ("marca en camino la parada N") → aviso
    **EN_RUTA**.
-3. Confirme la entrega en pantalla → aviso **ENTREGADO**.
+3. Confirme la entrega en pantalla, o por voz con el nombre y el documento de quien
+   recibe → aviso **ENTREGADO**.
 
 Para ver un aviso **CANCELADO**, anule desde *Pedidos* (como `despachador@sgds.com`) un
 pedido pendiente o asignado de Supermercado El Portal, indicando el motivo.
@@ -988,6 +1006,83 @@ curl -H "X-Automatizacion-Token: $AUTOMATIZACION_TOKEN" \
 
 Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 
+## Activación de Retell y Make
+
+Hoy ambos están apagados: el código está completo y verificado, pero ninguna prueba
+contacta Retell ni Make. Pasos para conectarlos, en orden (comandos de PowerShell desde
+la raíz del proyecto):
+
+1. **Base de datos.** Si la base ya tiene datos, aplique las migraciones pendientes; todas
+   son idempotentes:
+
+   ```powershell
+   .venv\Scripts\flask.exe --app run migrar-asistente
+   .venv\Scripts\flask.exe --app run migrar-configuracion
+   .venv\Scripts\flask.exe --app run migrar-auditoria
+   .venv\Scripts\flask.exe --app run migrar-pruebas-entrega
+   ```
+
+2. **URL pública.** Levante el servidor y exponga una URL `https://` con
+   [ngrok](#ngrok) (o use la de Render). Sin ella Retell no llega a las funciones ni el
+   navegador permite el micrófono fuera de `localhost`.
+3. **Variables del `.env`** (y de las variables del despliegue):
+
+   | Variable | Valor |
+   |---|---|
+   | `RETELL_API_KEY` | La API key de Retell **con el distintivo de webhook**: firma las funciones |
+   | `URL_PUBLICA` | La URL `https://` del paso 2, sin barra final |
+   | `RETELL_VOZ_ID` | Una voz en español del panel de Retell |
+   | `RETELL_AGENTE_CONDUCTOR_ID`, `_GESTOR_ID`, `_ADMIN_ID`, `_CLIENTE_ID` | Vacías la primera vez; se llenan en el paso 4 |
+   | `MAKE_WEBHOOK_URL` | El webhook del escenario de avisos (paso 5a) |
+   | `MAKE_WEBHOOK_KEY` | La API key de los webhooks de Make (opcional, recomendada) |
+   | `MAKE_WEBHOOK_CREDENCIALES_URL` | El webhook **aparte** del escenario de credenciales (paso 5b). Sin él, crear o restablecer cuentas por voz se rechaza |
+   | `CORREO_OPERACIONES` | Destino de `stock_bajo`, `solicitud_contacto`, `accion_asistente` y el resumen diario |
+   | `AUTOMATIZACION_TOKEN` | `python -c "import secrets; print(secrets.token_urlsafe(32))"`; lo usan los pasos 5c y 5d |
+
+   Con `MAKE_WEBHOOK_URL` definido, correr `seed.py` a mano envía avisos reales (ver
+   [Verificación](#verificación)). Las pruebas automáticas siguen sin contactar nada:
+   vacían estas variables y bloquean la red.
+4. **Agentes de Retell.** Cree o actualice los cuatro agentes y publíquelos
+   ([detalle](#configurar-los-agentes-en-retell-sincronizar-asistentes)):
+
+   ```powershell
+   .venv\Scripts\flask.exe --app run sincronizar-asistentes
+   ```
+
+   Copie al `.env` los `agent_id` que imprime para los agentes nuevos y reinicie el
+   servidor: el botón del micrófono aparece para cada rol con agente. Cada vez que cambie
+   la URL de ngrok, vuelva a ejecutar el comando.
+5. **Escenarios de Make:**
+   - a. [Router de avisos](#escenario-1-webhook-con-router): un *Custom webhook* en
+     `MAKE_WEBHOOK_URL` y un Router con una ruta por `tipo` (`pedido_estado`,
+     `stock_bajo`, `solicitud_contacto`, `accion_asistente`).
+   - b. [Credenciales](#escenario-de-credenciales-webhook-aparte): un escenario aparte con
+     su webhook en `MAKE_WEBHOOK_CREDENCIALES_URL`, solo para `credencial_usuario`, con
+     **"Data is confidential"** activado en *Scenario settings* para que Make no guarde
+     las contraseñas.
+   - c. [Resumen diario](#escenario-2-resumen-diario-programado): programado, con un
+     `GET /api/automatizacion/resumen-diario` y el encabezado `X-Automatizacion-Token`.
+   - d. [Auditoría a Google Sheets](#escenario-3-auditoría-en-google-sheets): programado,
+     lee `GET /api/automatizacion/auditoria?desde_id=<n>&limite=200` por lotes y agrega
+     las filas a la hoja `Auditoria`.
+6. **Pruebas de voz recomendadas**, una llamada por rol con las cuentas de demostración:
+   - *Conductor:* "¿cuál es mi ruta?"; iniciar la ruta; "la siguiente parada"; entregar
+     una parada (Gaby debe pedir nombre y documento si faltan, y el stock debe bajar);
+     registrar un fallo con un motivo fuera del catálogo (queda como "Otro"); "mi
+     historial". En Make no debe llegar `accion_asistente` por estas acciones, sí
+     `pedido_estado` si el cliente tiene correo.
+   - *Gestor:* crear un pedido para un cliente no registrado (ofrece registrarlo y
+     retoma el pedido); crear una ruta; ajustar el inventario (exige motivo); "las
+     causas de fallo de la última semana"; atender una solicitud de contacto.
+   - *Administrador:* crear un usuario (la contraseña llega solo por el escenario de
+     credenciales; sin ese webhook se rechaza en el resumen); la bitácora filtrada por
+     usuario o fecha; el resumen de rendimiento.
+   - *Cliente:* el estado de un pedido; cancelar uno PENDIENTE; solicitar contacto
+     (llega `solicitud_contacto` a operaciones). Preguntar por un pedido ajeno debe
+     responderse como inexistente.
+   - *En todas:* responder "no" al resumen no cambia nada; cada acción confirmada aparece
+     en **Bitácora** con origen `voz` y su `call_id`.
+
 ## Verificación
 
 Las pruebas corren solo en MySQL, en una base aparte: `logistica_pruebas` en el mismo
@@ -1007,7 +1102,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**1532 verificaciones en 17 suites contra MySQL 8.0, todas pasando, en unos dos
+**1623 verificaciones en 18 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1036,13 +1131,14 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 86 |
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 99 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 79 |
-| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 214 |
+| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 215 |
 | `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 94 |
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 87 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario | 277 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 289 |
 | `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración y bitácora (admin); resúmenes, rechazos y auditoría | 94 |
+| `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba | 78 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
@@ -1097,7 +1193,7 @@ en tabla.
 
 ## MySQL y MySQL Workbench (fase piloto)
 
-**La migración está verificada:** las 17 tablas se crean correctamente y las 1532
+**La migración está verificada:** las 17 tablas se crean correctamente y las 1623
 verificaciones (incluidas las propias de MySQL: claves ajenas y precisión de las
 coordenadas) pasan íntegras contra MySQL 8.0.46.
 
@@ -1148,6 +1244,7 @@ con datos ejecútelas en este orden:
 .venv/bin/flask --app run migrar-asistente      # sesiones del asistente y solicitudes de contacto
 .venv/bin/flask --app run migrar-configuracion  # motivos de fallo, centro de distribución
 .venv/bin/flask --app run migrar-auditoria      # tabla de auditoría (bitácora)
+.venv/bin/flask --app run migrar-pruebas-entrega # pruebas de entrega de solo agregar (m007)
 ```
 
 `migrar-configuracion` además pasa a `DOUBLE` las coordenadas del centro de distribución
