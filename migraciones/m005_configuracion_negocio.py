@@ -7,6 +7,10 @@
    analitica las reconoce por su texto.
 3. Carga los motivos que estaban fijos en el codigo, mas "Otro", y la fila del
    centro de distribucion con CD_NOMBRE, CD_LAT y CD_LNG del .env.
+4. En MySQL, si `configuracion_negocio` se creo con las coordenadas en FLOAT
+   (precision simple, redondea a unos 7 digitos), las pasa a DOUBLE. Los
+   valores ya redondeados no se recuperan: vuelva a guardar el centro en la
+   pantalla Configuracion si necesita la precision completa.
 
 Es idempotente: solo hace lo que falte.
 
@@ -27,7 +31,7 @@ CLAVE_AJENA = "fk_pruebas_entrega_motivo_id"
 def aplicar(verboso=True):
     """Aplica lo que falte. Devuelve un diccionario con lo que hizo."""
     hecho = {"tablas": [], "columnas": [], "indices": [], "claves": [], "motivos": [],
-             "centro": False}
+             "centro": False, "precision": []}
     inspector = inspect(db.engine)
     existentes = set(inspector.get_table_names())
     hecho["tablas"] = [t.name for t in TABLAS if t.name not in existentes]
@@ -59,6 +63,16 @@ def aplicar(verboso=True):
                 ))
             hecho["claves"].append(CLAVE_AJENA)
 
+    if db.engine.dialect.name == "mysql":
+        for columna in inspect(db.engine).get_columns("configuracion_negocio"):
+            if (columna["name"] in ("cd_latitud", "cd_longitud")
+                    and type(columna["type"]).__name__.upper() == "FLOAT"):
+                with db.engine.begin() as conexion:
+                    conexion.execute(text(
+                        f"ALTER TABLE configuracion_negocio MODIFY {columna['name']} DOUBLE NOT NULL"
+                    ))
+                hecho["precision"].append(columna["name"])
+
     hecho["motivos"] = asegurar_catalogo()
     hecho["centro"] = asegurar_configuracion()
     db.session.commit()
@@ -69,7 +83,8 @@ def aplicar(verboso=True):
                    f"indices: {', '.join(hecho['indices'])}" if hecho["indices"] else "",
                    f"claves ajenas: {', '.join(hecho['claves'])}" if hecho["claves"] else "",
                    f"motivos cargados: {len(hecho['motivos'])}" if hecho["motivos"] else "",
-                   "centro de distribucion tomado del .env" if hecho["centro"] else ""]
+                   "centro de distribucion tomado del .env" if hecho["centro"] else "",
+                   f"coordenadas a DOUBLE: {', '.join(hecho['precision'])}" if hecho["precision"] else ""]
         cambios = [c for c in cambios if c]
         print("Configuracion del negocio: " + ("; ".join(cambios) if cambios else "sin cambios."))
     return hecho

@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               929 verificaciones automatizadas en 12 suites
+├── pruebas/               1222 verificaciones automatizadas en 16 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -835,7 +835,9 @@ Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**929 verificaciones en 12 suites**, todas pasando. Cada suite reinicia y resiembra la
+**1222 verificaciones en 16 suites con SQLite y 1227 con MySQL**, todas pasando. La
+diferencia está en la suite 7, que en MySQL verifica además las claves ajenas que dibuja el
+diagrama EER (SQLite no las agrega a tablas existentes). Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 **Cada suite borra la base configurada.** Si su `.env` apunta a una base con datos que
@@ -858,12 +860,16 @@ DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica_pruebas .v
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
 | `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 67 |
-| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 |
+| `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 (73 en MySQL) |
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
-| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 97 |
-| `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 74 |
+| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 98 |
+| `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 78 |
 | `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 211 |
-| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 83 |
+| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 92 |
+| `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
+| `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 54 |
+| `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` y `credencial_usuario` | 56 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario | 110 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
@@ -915,9 +921,9 @@ en tabla.
 ## MySQL y MySQL Workbench (fase piloto)
 
 El proyecto corre indistintamente sobre SQLite (desarrollo) o MySQL (piloto).
-**La migración está verificada:** las 14 tablas se crean correctamente y las 929
-pruebas (934 contra MySQL, que suma las verificaciones de claves ajenas propias
-de ese motor) pasan íntegras contra MySQL 8.0.46.
+**La migración está verificada:** las 17 tablas se crean correctamente y las 1222
+pruebas (1227 contra MySQL, que suma las verificaciones propias de ese motor: claves
+ajenas y precisión de las coordenadas) pasan íntegras contra MySQL 8.0.46.
 
 `docker-compose.yml` no necesita cambios al evolucionar el esquema: solo provisiona
 el servidor MySQL. Las tablas las crea el ORM, así que `init-db` recoge los modelos
@@ -958,6 +964,20 @@ a partir de las claves ajenas declaradas**, así que sin él las tablas de clien
 aparecerían sueltas, sin las líneas que las unen a `pedidos`, y esas dos columnas
 quedarían sin integridad referencial. Verificado contra una base MySQL con datos: el
 esquema resultante es idéntico al que produce `init-db` sobre una base vacía.
+
+Las funciones posteriores tienen su propia migración, también idempotente; en una base
+con datos ejecútelas en este orden:
+
+```bash
+.venv/bin/flask --app run migrar-asistente      # sesiones del asistente y solicitudes de contacto
+.venv/bin/flask --app run migrar-configuracion  # motivos de fallo, centro de distribución
+.venv/bin/flask --app run migrar-auditoria      # tabla de auditoría (bitácora)
+```
+
+`migrar-configuracion` además pasa a `DOUBLE` las coordenadas del centro de distribución
+si la tabla se creó con `FLOAT`: en MySQL, `FLOAT` es de precisión simple y guardaba
+4.6482837 como 4.64828. Los valores ya redondeados no se recuperan; si necesita la
+precisión completa, vuelva a guardar el centro en *Configuración*.
 
 ### Conectar MySQL Workbench
 

@@ -50,8 +50,10 @@ class ConfiguracionNegocio(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     cd_nombre = db.Column(db.String(120), nullable=False)
-    cd_latitud = db.Column(db.Float, nullable=False)
-    cd_longitud = db.Column(db.Float, nullable=False)
+    # Double: en MySQL, Float es FLOAT de precision simple y redondea las
+    # coordenadas a unos 7 digitos (4.6482837 se guardaria como 4.64828).
+    cd_latitud = db.Column(db.Double, nullable=False)
+    cd_longitud = db.Column(db.Double, nullable=False)
     actualizado_en = db.Column(db.DateTime, nullable=False, default=ahora)
     actualizado_por_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
 

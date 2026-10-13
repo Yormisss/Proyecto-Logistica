@@ -313,6 +313,24 @@ with app.app_context():
         check(db.engine.dialect.name == "mysql" and "motivo_id" in {
             fk["constrained_columns"][0] for fk in inspect(db.engine).get_foreign_keys("pruebas_entrega")},
               "en MySQL, pruebas_entrega.motivo_id declara la clave ajena")
+        # Base creada cuando las coordenadas eran FLOAT (precision simple).
+        with db.engine.begin() as conexion:
+            conexion.execute(text("ALTER TABLE configuracion_negocio MODIFY cd_latitud FLOAT NOT NULL"))
+            conexion.execute(text("ALTER TABLE configuracion_negocio MODIFY cd_longitud FLOAT NOT NULL"))
+        db.session.remove()
+        hecho = aplicar(verboso=False)
+        check(hecho["precision"] == ["cd_latitud", "cd_longitud"],
+              f"en MySQL pasa las coordenadas del centro de FLOAT a DOUBLE ({hecho['precision']})")
+        tipos = {c["name"]: type(c["type"]).__name__.upper()
+                 for c in inspect(db.engine).get_columns("configuracion_negocio")}
+        check(tipos["cd_latitud"] == tipos["cd_longitud"] == "DOUBLE", f"quedan DOUBLE ({tipos['cd_latitud']})")
+        conf.editar_centro("CD Preciso", "4.6482837", "-74.2478938", None)
+        db.session.commit()
+        db.session.remove()
+        centro = conf.centro_distribucion()
+        check((centro["latitud"], centro["longitud"]) == (4.6482837, -74.2478938),
+              f"y conservan las coordenadas completas ({centro['latitud']}, {centro['longitud']})")
+        check(not any(aplicar(verboso=False).values()), "volver a ejecutarla no cambia nada")
 
 
 print("\n" + "=" * 55)
