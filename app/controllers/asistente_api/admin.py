@@ -2,8 +2,8 @@
 
 El admin usa ademas todas las del gestor (gestor.py las declara para ambos
 roles). Aqui van las consultas de analitica, con los mismos periodos que el
-panel, y el ajuste de inventario a un valor absoluto, que el gestor no tiene
-por voz.
+panel. El ajuste de inventario esta en gestor.py (`productos`, operacion
+`ajuste`), para ambos roles.
 
 Fuera del alcance por voz: usuarios, roles, contrasenas y activacion de
 cuentas. No hay funciones para eso; el prompt del agente indica que se hace
@@ -12,17 +12,10 @@ en pantalla.
 
 from flask import g
 
-from app.controllers.asistente_api import (
-    NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_asistente, responder,
-)
-from app.controllers.asistente_api.comun import (
-    LARGO_MAXIMO_MOTIVO, entero, enumerar, porcentaje, resolver, texto,
-)
-from app.extensions import db
-from app.models import Rol, TipoMovimiento
+from app.controllers.asistente_api import cantidad, funcion_asistente, responder
+from app.controllers.asistente_api.comun import entero, enumerar, porcentaje
+from app.models import Rol
 from app.services import analitica
-from app.services.busqueda_voz import buscar_productos
-from app.services.inventario import registrar_movimiento
 
 ESPACIO = "admin"
 ROLES = (Rol.ADMIN,)
@@ -156,48 +149,3 @@ def resumen_rendimiento():
     if lentas:
         partes.append("Superan el límite: " + enumerar(lentas[:LIMITE_LISTA]) + ".")
     return responder(" ".join(partes))
-
-
-@funcion_asistente(
-    ESPACIO, "ajustar-inventario", entidad="producto", roles=ROLES, accion=True,
-    descripcion="Ajusta el stock de un producto a un valor absoluto (inventario fisico), con "
-                "motivo obligatorio. Puede disparar el aviso de stock bajo.",
-    parametros={
-        "producto": {"type": "string", "description": "SKU o nombre del producto."},
-        "valor": {"type": "integer", "description": "Nuevo stock, entero mayor o igual a cero."},
-        "motivo": {"type": "string", "description": "Motivo del ajuste."},
-    },
-    requeridos=("producto", "valor", "motivo"),
-)
-def ajustar_inventario():
-    buscado = texto("producto")
-    if not buscado:
-        return responder("Necesito el SKU o el nombre del producto.")
-    producto, error = resolver(
-        buscar_productos(buscado, solo_activos=False), lambda p: f"{p.sku}, {p.nombre}",
-        "productos", f"No encontré el producto {buscado}.",
-    )
-    if producto is None:
-        return responder(error)
-    valor = entero(g.argumentos.get("valor"))
-    if valor is None or valor < 0:
-        return responder("El nuevo stock debe ser un número entero mayor o igual a cero.")
-    motivo = texto("motivo")[:LARGO_MAXIMO_MOTIVO]
-    if not motivo:
-        return responder("Necesito el motivo del ajuste.")
-    if valor == producto.stock_actual:
-        return responder(f"El stock de {producto.sku} ya es {valor}; no hay nada que ajustar.")
-
-    pendiente = exigir_confirmacion(
-        f"Voy a ajustar el inventario de {producto.sku}, {producto.nombre}: el stock pasa de "
-        f"{producto.stock_actual} a {valor}, por: {motivo}."
-    )
-    if pendiente:
-        return pendiente
-
-    registrar_movimiento(
-        producto, TipoMovimiento.AJUSTE, valor, g.usuario.id,
-        motivo=f"{motivo}. {NOTA_ASISTENTE}",
-    )
-    db.session.commit()
-    return responder(f"Listo, el stock de {producto.sku} quedó en {valor}.")

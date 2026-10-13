@@ -5,15 +5,18 @@ acciones piden confirmacion y aplican los mismos servicios que la pantalla
 (pedidos, despacho, inventario y planificacion), por lo que disparan los
 mismos avisos de Make.
 
-Fuera del alcance por voz: importar CSV, crear o eliminar rutas, ajustes de
-inventario (solo el admin, en admin.py) y crear clientes o sedes.
+Las acciones se agrupan por entidad con el parametro `operacion` (`pedidos`,
+`productos`, `rutas`). El ajuste de inventario es de ambos roles, con motivo
+obligatorio.
+
+Fuera del alcance por voz: importar CSV.
 """
 
 from flask import g
 from sqlalchemy.orm import joinedload
 
 from app.controllers.asistente_api import (
-    NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_asistente, responder,
+    NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_agrupada, funcion_asistente, responder,
 )
 from app.controllers.asistente_api.comun import (
     LARGO_MAXIMO_MOTIVO, entero, enumerar, fecha_iso, fecha_larga, fecha_voz, me_falta, pedido_texto,
@@ -294,18 +297,19 @@ def solicitudes_contacto_pendientes():
 # Acciones (con confirmacion)
 # --------------------------------------------------------------------------
 
-@funcion_asistente(
-    ESPACIO, "crear-pedido", roles=ROLES, accion=True,
-    descripcion="Crea un pedido para un cliente registrado y una de sus sedes registradas, "
-                "con productos existentes. No crea clientes ni sedes.",
+pedidos = funcion_agrupada(
+    ESPACIO, "pedidos", roles=ROLES, entidad="pedido",
+    descripcion="Pedidos: crear, editar, anular o reintentar uno fallido. Para consultar un "
+                "pedido usa buscar-pedido.",
     parametros={
-        "cliente": {"type": "string", "description": "Nombre del cliente registrado."},
+        **PARAMETRO_PEDIDO,
+        "cliente": {"type": "string", "description": "crear: nombre del cliente registrado."},
         "sede": {"type": "string",
-                 "description": "Etiqueta o direccion de la sede. Opcional si el cliente tiene "
-                                "una sola."},
+                 "description": "crear: etiqueta o direccion de la sede. Opcional si el cliente "
+                                "tiene una sola."},
         "productos": {
             "type": "array",
-            "description": "Productos del pedido.",
+            "description": "crear: productos del pedido.",
             "items": {
                 "type": "object",
                 "properties": {
@@ -316,16 +320,24 @@ def solicitudes_contacto_pendientes():
             },
         },
         "fecha": {"type": "string",
-                  "description": "Fecha de despacho AAAA-MM-DD. Por defecto, hoy."},
-        "prioridad": {"type": "integer", "description": "1 alta, 2 media, 3 baja (por defecto)."},
+                  "description": "crear: fecha de despacho AAAA-MM-DD. Por defecto, hoy."},
+        "prioridad": {"type": "integer",
+                      "description": "crear y editar: 1 alta, 2 media, 3 baja (por defecto al "
+                                     "crear)."},
+        "motivo": {"type": "string", "description": "anular: motivo de la anulacion."},
     },
-    requeridos=("cliente", "productos"),
 )
+
+
+@pedidos("crear", "Crear pedido",
+         "crea un pedido para un cliente registrado y una de sus sedes registradas, con "
+         "productos existentes; requiere cliente y productos")
 def crear_pedido_voz():
     # Dialogo de formulario: se dice de una vez todo lo obligatorio que falta.
     nombre_cliente = texto("cliente")
     lineas = g.argumentos.get("productos")
-    faltan = ([] if nombre_cliente else ["el cliente"]) +         ([] if isinstance(lineas, list) and lineas else ["los productos con sus cantidades"])
+    faltan = ([] if nombre_cliente else ["el cliente"]) + \
+        ([] if isinstance(lineas, list) and lineas else ["los productos con sus cantidades"])
     if faltan:
         return responder(me_falta(faltan))
     cliente, error = resolver(
@@ -410,13 +422,8 @@ def crear_pedido_voz():
     return responder(f"Listo, creé el pedido {pedido.codigo} para {cliente.nombre}.")
 
 
-@funcion_asistente(
-    ESPACIO, "anular-pedido", roles=ROLES, accion=True,
-    descripcion="Anula un pedido pendiente, asignado o fallido, con el motivo.",
-    parametros={**PARAMETRO_PEDIDO,
-                "motivo": {"type": "string", "description": "Motivo de la anulacion."}},
-    requeridos=("pedido", "motivo"),
-)
+@pedidos("anular", "Anular pedido",
+         "anula un pedido pendiente, asignado o fallido; requiere pedido y motivo")
 def anular_pedido_voz():
     pedido, error = _pedido()
     if pedido is None:
@@ -444,12 +451,9 @@ def anular_pedido_voz():
     return responder(f"Listo, anulé el pedido {pedido.codigo}.")
 
 
-@funcion_asistente(
-    ESPACIO, "reintentar-pedido", roles=ROLES, accion=True,
-    descripcion="Devuelve un pedido fallido de una ruta de hoy a asignado, para un nuevo intento "
-                "del conductor.",
-    parametros=PARAMETRO_PEDIDO, requeridos=("pedido",),
-)
+@pedidos("reintentar", "Reintentar pedido",
+         "devuelve un pedido fallido de una ruta de hoy a asignado, para un nuevo intento del "
+         "conductor; requiere pedido")
 def reintentar_pedido():
     pedido, error = _pedido()
     if pedido is None:
@@ -478,14 +482,24 @@ def reintentar_pedido():
     return responder(f"Listo, el pedido {pedido.codigo} quedó asignado para un nuevo intento.")
 
 
-@funcion_asistente(
-    ESPACIO, "registrar-entrada", entidad="producto", roles=ROLES, accion=True,
-    descripcion="Registra una entrada de mercancia (suma unidades al stock de un producto).",
-    parametros={**PARAMETRO_PRODUCTO,
-                "cantidad": {"type": "integer", "description": "Unidades recibidas, entero positivo."},
-                "motivo": {"type": "string", "description": "Opcional: remision o proveedor."}},
-    requeridos=("producto", "cantidad"),
+productos = funcion_agrupada(
+    ESPACIO, "productos", roles=ROLES, entidad="producto",
+    descripcion="Productos del inventario. El stock solo cambia con 'entrada' o 'ajuste'. Para "
+                "consultar el stock usa stock-producto.",
+    parametros={
+        **PARAMETRO_PRODUCTO,
+        "cantidad": {"type": "integer",
+                     "description": "entrada: unidades recibidas, entero positivo."},
+        "nuevo_stock": {"type": "integer",
+                        "description": "ajuste: stock contado, entero mayor o igual a cero."},
+        "motivo": {"type": "string",
+                   "description": "entrada: opcional (remision o proveedor). ajuste: obligatorio."},
+    },
 )
+
+
+@productos("entrada", "Registrar entrada",
+           "suma unidades recibidas al stock; requiere producto y cantidad")
 def registrar_entrada():
     producto, error = _producto(solo_activos=False)
     if producto is None:
@@ -511,14 +525,42 @@ def registrar_entrada():
     return responder(f"Listo, registré la entrada de {unidades} de {producto.nombre}.")
 
 
-@funcion_asistente(
-    ESPACIO, "cambiar-prioridad", entidad="pedido", roles=ROLES, accion=True,
-    descripcion="Cambia la prioridad de un pedido pendiente o asignado (1 alta, 2 media, 3 baja).",
-    parametros={**PARAMETRO_PEDIDO,
-                "prioridad": {"type": "integer", "description": "1 alta, 2 media, 3 baja."}},
-    requeridos=("pedido", "prioridad"),
-)
-def cambiar_prioridad_voz():
+@productos("ajuste", "Ajustar inventario",
+           "fija el stock de un producto al valor contado (inventario fisico); requiere "
+           "producto, nuevo_stock y motivo; puede disparar el aviso de stock bajo")
+def ajustar_inventario():
+    producto, error = _producto(solo_activos=False)
+    if producto is None:
+        return responder(error)
+    motivo = texto("motivo")[:LARGO_MAXIMO_MOTIVO]
+    faltan = (["el nuevo stock"] if g.argumentos.get("nuevo_stock") in (None, "") else []) + \
+        ([] if motivo else ["el motivo del ajuste"])
+    if faltan:
+        return responder(me_falta(faltan))
+    valor = entero(g.argumentos.get("nuevo_stock"))
+    if valor is None or valor < 0:
+        return responder("El nuevo stock debe ser un número entero mayor o igual a cero.")
+    if valor == producto.stock_actual:
+        return responder(f"El stock de {producto.sku} ya es {valor}; no hay nada que ajustar.")
+
+    pendiente = exigir_confirmacion(
+        f"Voy a ajustar el inventario de {producto.sku}, {producto.nombre}: el stock actual es "
+        f"{producto.stock_actual} y el nuevo será {valor}, por: {motivo}."
+    )
+    if pendiente:
+        return pendiente
+
+    registrar_movimiento(
+        producto, TipoMovimiento.AJUSTE, valor, g.usuario.id,
+        motivo=f"{motivo}. {NOTA_ASISTENTE}",
+    )
+    db.session.commit()
+    return responder(f"Listo, el stock de {producto.sku} quedó en {valor}.")
+
+
+@pedidos("editar", "Editar pedido",
+         "cambia la prioridad de un pedido pendiente o asignado; requiere pedido y prioridad")
+def editar_pedido_voz():
     pedido, error = _pedido()
     if pedido is None:
         return responder(error)
@@ -546,14 +588,19 @@ def cambiar_prioridad_voz():
     )
 
 
-@funcion_asistente(
-    ESPACIO, "agregar-a-ruta", roles=ROLES, accion=True,
-    descripcion="Agrega un pedido pendiente a la ruta de hoy de un conductor y recalcula la "
-                "secuencia. No crea rutas ni reabre una ruta finalizada.",
-    parametros={**PARAMETRO_PEDIDO,
-                "conductor": {"type": "string", "description": "Nombre del conductor."}},
-    requeridos=("pedido", "conductor"),
+rutas = funcion_agrupada(
+    ESPACIO, "rutas", roles=ROLES, entidad="ruta",
+    descripcion="Rutas de reparto. Para el avance de las rutas de hoy usa avance-rutas.",
+    parametros={
+        **PARAMETRO_PEDIDO,
+        "conductor": {"type": "string", "description": "agregar-parada: nombre del conductor."},
+    },
 )
+
+
+@rutas("agregar-parada", "Agregar parada a ruta",
+       "agrega un pedido pendiente a la ruta de hoy de un conductor y recalcula la secuencia; "
+       "no reabre una ruta finalizada; requiere pedido y conductor")
 def agregar_a_ruta_voz():
     pedido, error = _pedido()
     if pedido is None:

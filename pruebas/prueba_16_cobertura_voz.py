@@ -75,6 +75,8 @@ for endpoint, entrada in sorted(cobertura.COBERTURA.items()):
         if operacion:
             opciones = funcion.parametros.get("operacion", {}).get("enum", [])
             check(operacion in opciones, f"{endpoint}: {referencia} acepta la operacion {operacion}")
+            check(operacion in funcion.operaciones and funcion.operaciones[operacion].modifica,
+                  f"{endpoint}: la operacion {operacion} modifica datos y pide confirmacion")
         roles_voz |= set(funcion.roles)
     roles_pantalla = set(getattr(app.view_functions[endpoint], "roles_permitidos", ()))
     faltan = roles_pantalla - roles_voz
@@ -127,9 +129,11 @@ with app.app_context():
                                    vence_en=ahora() + VIGENCIA_SESION))
     db.session.commit()
 
-check(funcion("gestor/crear-pedido", "call_cobertura") == "Me faltan el cliente y los productos con sus cantidades.",
-      "crear-pedido sin datos dice todo lo que falta de una vez")
-check(funcion("gestor/crear-pedido", "call_cobertura", {"cliente": "Supermercado El Portal"})
+check(funcion("gestor/pedidos", "call_cobertura", {"operacion": "crear"}) == "Me faltan el cliente y los productos con sus cantidades.",
+      "pedidos:crear sin datos dice todo lo que falta de una vez")
+check(funcion("gestor/pedidos", "call_cobertura").startswith("¿Qué quieres hacer? Con pedidos puedo:"),
+      "sin operacion, la funcion agrupada pregunta que hacer")
+check(funcion("gestor/pedidos", "call_cobertura", {"operacion": "crear", "cliente": "Supermercado El Portal"})
       == "Me faltan los productos con sus cantidades.", "con el cliente, dice solo lo que falta")
 
 

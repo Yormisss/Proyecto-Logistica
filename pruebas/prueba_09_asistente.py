@@ -247,7 +247,7 @@ with app.app_context():
     db.session.commit()
 s = funcion("mi-ruta", "call_vencido")
 check(s[0] == 403, f"call_id vencido: 403 ({s[0]})")
-s = funcion("marcar-en-camino", "call_vencido", {"orden": 1})
+s = funcion("parada", "call_vencido", {"operacion": "en-camino", "orden": 1})
 check(s[0] == 403, "un call_id vencido tampoco puede ejecutar acciones")
 s = funcion("mi-ruta", "call_de_cliente")
 check(s[0] == 403, "call_id abierto por un cliente: 403")
@@ -334,7 +334,7 @@ with app.app_context():
     stock_inicial = db.session.get(Producto, prod_id).stock_actual
 
 envios_antes = len(envios_make)
-s = funcion("marcar-en-camino", CALL_C2, {"orden": 1})
+s = funcion("parada", CALL_C2, {"operacion": "en-camino", "orden": 1})
 notificaciones.esperar_envios()
 check(mensaje(s) == "Voy a marcar en camino la parada 1, Supermercado El Portal. ¿confirmas?",
       "sin confirmar=true, marcar-en-camino solo resume y pide confirmacion")
@@ -344,7 +344,7 @@ with app.app_context():
           "y no cambia el pedido ni la bitacora")
 check(len(envios_make) == envios_antes, "ni envia avisos a Make")
 
-s = accion("marcar-en-camino", CALL_C2, {"orden": 1})
+s = accion("parada", CALL_C2, {"operacion": "en-camino", "orden": 1})
 notificaciones.esperar_envios()
 check("quedó en camino" in mensaje(s), "con confirmar=true, marcar-en-camino confirma en voz")
 with app.app_context():
@@ -354,20 +354,20 @@ with app.app_context():
     check(ev.nota == NOTA and ev.usuario_id == c2_id, "el evento queda con la nota del asistente y el conductor")
     check(db.session.get(Ruta, p.ruta_id).estado == EstadoRuta.EN_CURSO, "la ruta pasa a EN_CURSO (regla de despacho.py)")
 
-s = accion("marcar-en-camino", CALL_C2, {"orden": 1})
+s = accion("parada", CALL_C2, {"operacion": "en-camino", "orden": 1})
 check("No pude" in mensaje(s) and "En ruta" in mensaje(s), "una transicion invalida se explica en voz")
 
 envios_antes = len(envios_make)
-s = accion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "  "})
+s = accion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "  "})
 check("Necesito el motivo" in mensaje(s), "registrar-fallo exige el motivo")
-s = accion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Cliente ausente"})
+s = accion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Cliente ausente"})
 check("Necesito" not in mensaje(s) and "No pude" in mensaje(s),
       "no se puede fallar una parada que no ha salido (ASIGNADO -> FALLIDO)")
-accion("marcar-en-camino", CALL_C2, {"orden": 2})
-s = funcion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Cliente ausente"})
+accion("parada", CALL_C2, {"operacion": "en-camino", "orden": 2})
+s = funcion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Cliente ausente"})
 check(mensaje(s) == "Voy a registrar la parada 2, Tienda La Esquina, como no entregada por: "
       "Cliente ausente. ¿confirmas?", "registrar-fallo tambien resume antes de ejecutar")
-s = funcion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Cliente ausente", "confirmar": True})
+s = funcion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Cliente ausente", "confirmar": True})
 notificaciones.esperar_envios()
 check("como no entregada por: Cliente ausente" in mensaje(s), "registrar-fallo confirma en voz")
 with app.app_context():
@@ -449,7 +449,7 @@ with app.app_context():
                           estado=EstadoPedido.CANCELADO, ruta_id=ruta2.id, orden_en_ruta=3,
                           creado_por_id=desp_id))
     db.session.commit()
-accion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Establecimiento cerrado"})
+accion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Establecimiento cerrado"})
 notificaciones.esperar_envios()
 with app.app_context():
     check(db.session.query(Ruta).filter_by(codigo="RUT-ASIS-02").one().estado == EstadoRuta.FINALIZADA,
@@ -525,7 +525,7 @@ with app.app_context():
 conductor1 = sesion("conductor1@sgds.com", "Conductor123*")
 call_demo = pedir_llamada(conductor1, "/conductor/").get_json()["call_id"]
 envios_antes = len(envios_make)
-accion("marcar-en-camino", call_demo, {"orden": orden_demo})
+accion("parada", call_demo, {"operacion": "en-camino", "orden": orden_demo})
 t = token_csrf(conductor1, f"/conductor/parada/{pid_demo}")
 conductor1.post(f"/conductor/parada/{pid_demo}/entregar", data={"csrf_token": t})
 notificaciones.esperar_envios()

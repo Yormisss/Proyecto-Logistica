@@ -8,7 +8,7 @@ funcion para confirmar entregas: esa requiere la prueba de entrega en pantalla.
 from flask import g
 
 from app.controllers.asistente_api import (
-    NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_asistente, responder,
+    NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_agrupada, funcion_asistente, responder,
 )
 from app.extensions import db
 from app.models import EstadoPedido, Rol
@@ -140,12 +140,18 @@ def detalle_parada():
     return responder(" ".join(partes))
 
 
-@funcion_asistente(
-    ESPACIO, "marcar-en-camino", entidad="pedido", roles=ROLES, accion=True,
-    descripcion="Pasa una parada de la ruta de hoy a EN_RUTA (tambien sirve para reintentar "
-                "una fallida).",
-    parametros=PARAMETRO_ORDEN, requeridos=("orden",),
+parada = funcion_agrupada(
+    ESPACIO, "parada", roles=ROLES, entidad="pedido",
+    descripcion="Acciones sobre una parada de la ruta de hoy, por su numero.",
+    parametros={
+        **PARAMETRO_ORDEN,
+        "motivo": {"type": "string", "description": "fallo: por que no se pudo entregar."},
+    },
 )
+
+
+@parada("en-camino", "Marcar parada en camino",
+        "pasa la parada a EN_RUTA; tambien sirve para reintentar una fallida; requiere orden")
 def marcar_en_camino():
     ruta = _ruta()
     if ruta is None:
@@ -177,16 +183,10 @@ def marcar_en_camino():
     )
 
 
-@funcion_asistente(
-    ESPACIO, "registrar-fallo", entidad="pedido", roles=ROLES, accion=True,
-    descripcion="Pasa una parada de la ruta de hoy a FALLIDO con el motivo; no toca el inventario. "
-                "El motivo se compara con el catalogo; si no coincide, queda como 'Otro' con lo dicho.",
-    parametros={
-        **PARAMETRO_ORDEN,
-        "motivo": {"type": "string", "description": "Por que no se pudo entregar."},
-    },
-    requeridos=("orden", "motivo"),
-)
+@parada("fallo", "Registrar entrega fallida",
+        "pasa la parada a FALLIDO con el motivo, sin tocar el inventario; el motivo se compara "
+        "con el catalogo y, si no coincide, queda como 'Otro' con lo dicho; requiere orden y "
+        "motivo")
 def registrar_fallo():
     ruta = _ruta()
     if ruta is None:

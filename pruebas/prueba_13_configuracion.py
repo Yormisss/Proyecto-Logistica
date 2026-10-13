@@ -202,22 +202,22 @@ def voz(nombre, args):
                              "X-Retell-Signature": symmetric["sign"](cuerpo, CLAVE)})
     return (r.get_json(silent=True) or {}).get("mensaje", "")
 
-s = voz("registrar-fallo", {"orden": 93, "motivo": "cliente ausnte"})
+s = voz("parada", {"operacion": "fallo", "orden": 93, "motivo": "cliente ausnte"})
 check(s.endswith("como no entregada por: Cliente ausente. ¿confirmas?"),
       f"un motivo mal transcrito se reconoce en el catalogo y se lee asi: {s}")
-voz("registrar-fallo", {"orden": 93, "motivo": "cliente ausnte", "confirmar": True})
+voz("parada", {"operacion": "fallo", "orden": 93, "motivo": "cliente ausnte", "confirmar": True})
 pe = prueba_de(paradas[2])
 check(pe.texto == "Cliente ausente" and pe.motivo_id == motivo("Cliente ausente").id,
       "y se registra con el nombre del catalogo")
-s = voz("registrar-fallo", {"orden": 94, "motivo": "el perro no dejaba pasar"})
+s = voz("parada", {"operacion": "fallo", "orden": 94, "motivo": "el perro no dejaba pasar"})
 check(s.endswith("como no entregada por otro motivo: el perro no dejaba pasar. ¿confirmas?"),
       f"lo que no coincide se lee como 'Otro' con el texto dicho: {s}")
-voz("registrar-fallo", {"orden": 94, "motivo": "el perro no dejaba pasar", "confirmar": True})
+voz("parada", {"operacion": "fallo", "orden": 94, "motivo": "el perro no dejaba pasar", "confirmar": True})
 pe = prueba_de(paradas[3])
 check(pe.texto == "el perro no dejaba pasar" and pe.motivo_id == otro, "y se registra como 'Otro' con ese texto")
-s = voz("registrar-fallo", {"orden": 95, "motivo": "otro"})
+s = voz("parada", {"operacion": "fallo", "orden": 95, "motivo": "otro"})
 check("Dime cuál fue el motivo" in s and not s.endswith("¿confirmas?"), "decir solo 'otro' pide el motivo")
-s = voz("registrar-fallo", {"orden": 95, "motivo": "z" * 161})
+s = voz("parada", {"operacion": "fallo", "orden": 95, "motivo": "z" * 161})
 check("no puede pasar de 160 caracteres" in s, "un motivo de mas de 160 caracteres se rechaza")
 check(prueba_de(paradas[4]).estado == EstadoPedido.EN_RUTA, "y ninguno de esos dos cambia el pedido")
 

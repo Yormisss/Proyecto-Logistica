@@ -38,21 +38,20 @@ COBERTURA = {
     "pedidos.confirmar_importacion": Cobertura(excluida=IMPORTAR_CSV),
 
     # --- Conductor ---
-    "conductor.marcar_en_ruta": Cobertura(voz=("conductor/marcar-en-camino",)),
-    "conductor.reintentar": Cobertura(voz=("conductor/marcar-en-camino",)),
-    "conductor.fallar": Cobertura(voz=("conductor/registrar-fallo",)),
+    "conductor.marcar_en_ruta": Cobertura(voz=("conductor/parada:en-camino",)),
+    "conductor.reintentar": Cobertura(voz=("conductor/parada:en-camino",)),
+    "conductor.fallar": Cobertura(voz=("conductor/parada:fallo",)),
     "conductor.entregar": Cobertura(pendiente="Fase 4: confirmar la entrega con nombre y documento de quien recibe."),
     "conductor.iniciar": Cobertura(pendiente="Fase 4: iniciar la ruta del día."),
 
     # --- Pedidos ---
-    "pedidos.nuevo": Cobertura(voz=("gestor/crear-pedido",)),
-    "pedidos.anular": Cobertura(voz=("gestor/anular-pedido",)),
-    "pedidos.editar": Cobertura(voz=("gestor/cambiar-prioridad",),
+    "pedidos.nuevo": Cobertura(voz=("gestor/pedidos:crear",)),
+    "pedidos.anular": Cobertura(voz=("gestor/pedidos:anular",)),
+    "pedidos.editar": Cobertura(voz=("gestor/pedidos:editar",),
                                 pendiente="Fase 4: editar fecha, sede, ventana, observaciones y productos."),
 
     # --- Inventario ---
-    "inventario.detalle": Cobertura(voz=("gestor/registrar-entrada", "admin/ajustar-inventario"),
-                                    pendiente="Fase 4: ajuste de inventario por voz también para el gestor."),
+    "inventario.detalle": Cobertura(voz=("gestor/productos:entrada", "gestor/productos:ajuste")),
     "inventario.nuevo": Cobertura(pendiente="Fase 3: crear productos."),
     "inventario.editar": Cobertura(pendiente="Fase 3: editar y activar o desactivar productos."),
 

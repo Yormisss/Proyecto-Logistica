@@ -18,9 +18,11 @@ Toda accion confirmada queda en la auditoria (con origen "voz"), haya salido
 bien o no: `ejecutar` la registra despues de la funcion, en su propio commit.
 
 Cada funcion se declara con `funcion_asistente`, que registra su espacio,
-nombre, roles permitidos, descripcion y parametros (JSON schema). Ese registro
-es la unica fuente de verdad: la sincronizacion con Retell construye las
-herramientas de cada agente a partir de el.
+nombre, roles permitidos, descripcion y parametros (JSON schema). Las acciones
+sobre una misma entidad se agrupan en una sola funcion con el parametro
+`operacion` (`funcion_agrupada`): "pedidos" con crear, editar, anular... Ese
+registro es la unica fuente de verdad: la sincronizacion con Retell construye
+las herramientas de cada agente a partir de el.
 
 Las respuestas son texto breve en espanol, pensado para leerse en voz alta.
 Los errores de negocio responden 200 con el mensaje para que el agente se lo
@@ -45,6 +47,16 @@ asistente_api_bp = Blueprint("asistente_api", __name__)
 
 
 @dataclass(frozen=True)
+class Operacion:
+    """Una operacion de una funcion agrupada ("crear" de "pedidos")."""
+    nombre: str
+    vista: object
+    titulo: str          # para la auditoria: "Crear pedido"
+    descripcion: str
+    modifica: bool = True
+
+
+@dataclass(frozen=True)
 class FuncionAsistente:
     espacio: str
     nombre: str
@@ -55,10 +67,30 @@ class FuncionAsistente:
     requeridos: tuple = ()
     accion: bool = False
     entidad: str = ""
+    # nombre -> Operacion, solo en las funciones agrupadas.
+    operaciones: dict = field(default_factory=dict)
 
     @property
     def ruta(self):
         return f"/api/asistente/{self.espacio}/{self.nombre}"
+
+    @property
+    def descripcion_completa(self):
+        """Descripcion para Retell: la funcion y, si agrupa, cada operacion."""
+        if not self.operaciones:
+            return self.descripcion + (
+                " Modifica datos: llamala primero sin 'confirmar' para obtener el resumen."
+                if self.accion else ""
+            )
+        detalle = "; ".join(
+            f"'{op.nombre}': {op.descripcion}" + (" (modifica datos)" if op.modifica else "")
+            for op in self.operaciones.values()
+        )
+        texto = f"{self.descripcion} Operaciones: {detalle}."
+        if any(op.modifica for op in self.operaciones.values()):
+            texto += (" Las que modifican datos: llamala primero sin 'confirmar' para obtener "
+                      "el resumen.")
+        return texto
 
 
 # (espacio, nombre) -> FuncionAsistente
@@ -94,6 +126,53 @@ def funcion_asistente(espacio, nombre, *, roles, descripcion, parametros=None,
         return vista
 
     return registrar
+
+
+def funcion_agrupada(espacio, nombre, *, roles, descripcion, entidad, parametros=None):
+    """Registra una funcion que agrupa las operaciones de una entidad.
+
+    Devuelve el decorador de cada operacion:
+
+        pedidos = funcion_agrupada("gestor", "pedidos", roles=..., entidad="pedido", ...)
+
+        @pedidos("crear", "Crear pedido", "Crea un pedido para ...")
+        def crear_pedido_voz(): ...
+
+    `operacion` es un parametro mas: entra en la huella de la confirmacion, de
+    modo que confirmar "editar" no ejecuta "anular". `modifica=False` marca las
+    operaciones de solo consulta, que no piden confirmacion.
+    """
+    parametros = {
+        "operacion": {"type": "string", "enum": [], "description": "Que hacer."},
+        **(parametros or {}),
+    }
+
+    def despachar():
+        funcion = FUNCIONES[(espacio, nombre)]
+        elegida = str(g.argumentos.get("operacion") or "").strip().lower()
+        operacion = funcion.operaciones.get(elegida)
+        if operacion is None:
+            from app.services.busqueda_voz import enumerar
+            return responder(f"¿Qué quieres hacer? Con {nombre} puedo: "
+                             f"{enumerar(list(funcion.operaciones))}.")
+        g.operacion = operacion
+        return operacion.vista()
+
+    funcion_asistente(espacio, nombre, roles=roles, descripcion=descripcion, parametros=parametros,
+                      requeridos=("operacion",), accion=True, entidad=entidad)(despachar)
+    funcion = FUNCIONES[(espacio, nombre)]
+
+    def operacion(nombre_operacion, titulo, descripcion_operacion, *, modifica=True):
+        def registrar(vista):
+            if nombre_operacion in funcion.operaciones:
+                raise ValueError(f"Operacion duplicada: {espacio}/{nombre}:{nombre_operacion}")
+            funcion.operaciones[nombre_operacion] = Operacion(
+                nombre_operacion, vista, titulo, descripcion_operacion, modifica)
+            funcion.parametros["operacion"]["enum"].append(nombre_operacion)
+            return vista
+        return registrar
+
+    return operacion
 
 
 def funciones_de_rol(rol):
@@ -162,13 +241,15 @@ def _resultado_confirmada():
 
 def _auditar(resultado, mensaje):
     funcion = g.funcion
+    operacion = g.get("operacion")
     argumentos = {k: v for k, v in g.argumentos.items() if k != "confirmar"}
     registrar_auditoria(
-        funcion.nombre.replace("-", " ").capitalize(),
+        operacion.titulo if operacion else funcion.nombre.replace("-", " ").capitalize(),
         funcion.entidad,
         g.accion_confirmada["resumen"],
-        {"funcion": f"{funcion.espacio}/{funcion.nombre}", "datos": argumentos,
-         "respuesta": mensaje},
+        {"funcion": f"{funcion.espacio}/{funcion.nombre}"
+                    + (f":{operacion.nombre}" if operacion else ""),
+         "datos": argumentos, "respuesta": mensaje},
         resultado=resultado,
         usuario=g.usuario,
         origen=ORIGEN_VOZ,

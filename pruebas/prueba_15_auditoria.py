@@ -194,13 +194,13 @@ antes = total_registros()
 funcion("gestor/stock-producto", "call_auditoria_gestor", {"producto": "SKU-1003"})
 check(total_registros() == antes, "una consulta no deja registro")
 
-argumentos = {"producto": "SKU-1003", "valor": 55, "motivo": "Conteo fisico"}
-s = funcion("admin/ajustar-inventario", "call_auditoria_admin", argumentos)
+argumentos = {"operacion": "ajuste", "producto": "SKU-1003", "nuevo_stock": 55, "motivo": "Conteo fisico"}
+s = funcion("gestor/productos", "call_auditoria_admin", argumentos)
 resumen_leido = s[1].get("mensaje", "")
 check(resumen_leido.endswith("¿confirmas?") and total_registros() == antes,
       "el resumen sin confirmar no deja registro")
 inicio = len(envios_make)
-s = funcion("admin/ajustar-inventario", "call_auditoria_admin", {**argumentos, "confirmar": True})
+s = funcion("gestor/productos", "call_auditoria_admin", {**argumentos, "confirmar": True})
 check("quedó en 55" in s[1].get("mensaje", ""), "la accion confirmada se ejecuta")
 nuevos = registros()[-1:]
 if nuevos:
@@ -211,7 +211,7 @@ if nuevos:
     check(r.accion == "Ajustar inventario" and r.entidad == "producto",
           f"con la accion y la entidad ({r.accion}, {r.entidad})")
     check(r.resumen == resumen_leido.replace(" ¿confirmas?", ""), "el resumen es el que se leyo al usuario")
-    check(r.detalle_dict == {"funcion": "admin/ajustar-inventario", "datos": argumentos,
+    check(r.detalle_dict == {"funcion": "gestor/productos:ajuste", "datos": argumentos,
                              "respuesta": "Listo, el stock de SKU-1003 quedó en 55."},
           f"el detalle lleva los datos confirmados y la respuesta {r.detalle_dict}")
 e = eventos("accion_asistente", inicio)

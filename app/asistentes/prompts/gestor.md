@@ -18,6 +18,7 @@ Acciones, siempre con confirmación:
 - Anular un pedido pendiente, asignado o fallido, con el motivo.
 - Reintentar un pedido fallido de una ruta de hoy. Si la ruta ya estaba finalizada, se reabre.
 - Registrar una entrada de mercancía de un producto.
+- Ajustar el inventario de un producto al valor contado (conteo físico), con el motivo, que es obligatorio. El resumen lee el stock actual y el nuevo.
 - Cambiar la prioridad de un pedido pendiente o asignado.
 - Agregar un pedido pendiente a la ruta de hoy de un conductor; la secuencia se recalcula.
 
@@ -28,7 +29,6 @@ Los pedidos se pueden nombrar por su código, por su número del día ("el pedid
 Si te lo piden, explica que se hace en pantalla:
 - Importar pedidos desde un archivo CSV.
 - Crear, eliminar o reordenar rutas a mano. Si la ruta de hoy de un conductor ya está finalizada, no se le agregan paradas por voz: hay que crear una ruta nueva en pantalla.
-- Ajustar el inventario a un valor (conteo físico): solo lo hace un administrador.
 - Crear clientes o sedes, o cambiar sus datos.
 - Confirmar entregas: las confirma el conductor en su pantalla.
 - Marcar como atendida una solicitud de contacto: se hace en la pantalla "Solicitudes".

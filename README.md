@@ -361,9 +361,15 @@ aplicación funciona igual.
 | Rol | Consultas | Acciones (con confirmación) |
 |---|---|---|
 | **Conductor** | Su ruta de hoy (o el cierre si ya la terminó), la siguiente parada, el detalle de una parada | Marcar una parada en camino o reintentarla, registrar una entrega fallida con su motivo |
-| **Gestor logístico** | Resumen del día (KPIs), pendientes sin ruta, avance de las rutas por conductor, un pedido (estado, ruta, conductor, bitácora), stock de un producto, productos bajo mínimo, fallidos de hoy, solicitudes de contacto pendientes | Crear un pedido (cliente y sede registrados, productos existentes, fecha desde hoy), anular un pedido, reintentar un fallido de una ruta de hoy, registrar una entrada de mercancía, cambiar la prioridad, agregar un pedido pendiente a la ruta de hoy de un conductor (recalcula la secuencia) |
-| **Administrador** | Todo lo del gestor, más tiempo promedio de entrega, cumplimiento de ventana, productividad por conductor, causas de fallo (7, 14 o 30 días) y el resumen del panel de rendimiento | Todo lo del gestor, más ajustar el inventario de un producto a un valor exacto con motivo |
+| **Gestor logístico** | Resumen del día (KPIs), pendientes sin ruta, avance de las rutas por conductor, un pedido (estado, ruta, conductor, bitácora), stock de un producto, productos bajo mínimo, fallidos de hoy, solicitudes de contacto pendientes | Crear un pedido (cliente y sede registrados, productos existentes, fecha desde hoy), anular un pedido, reintentar un fallido de una ruta de hoy, registrar una entrada de mercancía, ajustar el inventario al valor contado (motivo obligatorio), cambiar la prioridad, agregar un pedido pendiente a la ruta de hoy de un conductor (recalcula la secuencia) |
+| **Administrador** | Todo lo del gestor, más tiempo promedio de entrega, cumplimiento de ventana, productividad por conductor, causas de fallo (7, 14 o 30 días) y el resumen del panel de rendimiento | Todo lo del gestor |
 | **Cliente** | Sus pedidos en curso, el estado e historial de un pedido (con la traducción del portal), su ventana de entrega, el motivo de un fallo, sus sedes | Cancelar un pedido propio que sigue PENDIENTE, solicitar que el gestor lo contacte (una solicitud pendiente a la vez) |
+
+Las acciones sobre una misma entidad se agrupan en una sola función con el parámetro
+`operacion`: `pedidos` (crear, editar, anular, reintentar), `productos` (entrada, ajuste),
+`rutas` (agregar-parada) y, para el conductor, `parada` (en-camino, fallo). La operación
+entra en la huella de la confirmación, así que confirmar una no ejecuta otra, y la
+auditoría la registra con su propio título (*"Ajustar inventario"*).
 
 Las acciones usan los mismos servicios que la pantalla (`despacho`, `pedidos`,
 `inventario`, `planificacion`, `solicitudes`), así que aplican las mismas reglas,
@@ -377,7 +383,6 @@ asistente de voz"*. La lista completa de funciones, con sus parámetros, está e
 |---|---|---|
 | Conductor | Confirmar una entrega | Exige la prueba de entrega (PoD) en pantalla y descuenta inventario (RF5) |
 | Gestor | Importar CSV, crear o eliminar rutas | Necesitan revisar una vista previa o un mapa; una ruta finalizada tampoco se reabre al agregarle paradas: se crea una nueva en pantalla |
-| Gestor | Ajustes de inventario | Fijan el stock a un valor absoluto: solo el administrador puede hacerlo |
 | Gestor y admin | Crear clientes o sedes | Por voz solo se usan los registrados, para no duplicarlos con otra escritura |
 | Gestor y admin | Marcar atendida una solicitud de contacto | Se hace en la pantalla *Solicitudes*, después de contactar al cliente |
 | Admin | Usuarios, roles, contraseñas y activación de cuentas | Afectan el acceso al sistema; no hay ninguna función de voz para eso y el agente indica que se hace en *Usuarios* |
@@ -669,7 +674,7 @@ movimiento posterior:
   "accion": "Anular pedido",
   "entidad": "pedido",
   "resumen": "Voy a anular el pedido PED-20261006-004 de Tienda La Esquina por: Duplicado.",
-  "detalle": "funcion: gestor/anular-pedido\ndatos / pedido: PED-20261006-004\ndatos / motivo: Duplicado\nrespuesta: Listo, anulé el pedido PED-20261006-004.",
+  "detalle": "funcion: gestor/pedidos:anular\ndatos / operacion: anular\ndatos / pedido: PED-20261006-004\ndatos / motivo: Duplicado\nrespuesta: Listo, anulé el pedido PED-20261006-004.",
   "resultado": "exito",
   "hora": "2026-10-06 11:20",
   "correo_destino": "operaciones@ejemplo.com",

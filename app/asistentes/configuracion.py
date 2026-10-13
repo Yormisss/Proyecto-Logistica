@@ -102,9 +102,7 @@ def herramientas(definicion, url_publica):
         {
             "type": "custom",
             "name": funcion.nombre,
-            "description": funcion.descripcion
-            + (" Modifica datos: llamala primero sin 'confirmar' para obtener el resumen."
-               if funcion.accion else ""),
+            "description": funcion.descripcion_completa,
             "url": f"{url_publica}{funcion.ruta}",
             "method": "POST",
             "parameters": parametros(funcion),

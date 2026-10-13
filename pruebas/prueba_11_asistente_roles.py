@@ -256,18 +256,18 @@ with app.app_context():
 
 CALL_C = llamadas[Rol.CONDUCTOR]
 antes = huella()
-for nombre, args in (("marcar-en-camino", {"orden": 1}), ("registrar-fallo", {"orden": 1, "motivo": "x"}),
-                     ("marcar-en-camino", {"orden": 2, "confirmar": True})):
+for nombre, args in (("parada", {"operacion": "en-camino", "orden": 1}), ("parada", {"operacion": "fallo", "orden": 1, "motivo": "x"}),
+                     ("parada", {"operacion": "en-camino", "orden": 2, "confirmar": True})):
     funcion(f"conductor/{nombre}", CALL_C, args)
 check(huella() == antes,
       "resumir, pedir un fallo invalido o confirmar sin resumen no cambia ninguna tabla")
-funcion("conductor/marcar-en-camino", CALL_C, {"orden": 2, "confirmar": True})
+funcion("conductor/parada", CALL_C, {"operacion": "en-camino", "orden": 2, "confirmar": True})
 check(huella() != antes, "confirmar el resumen pendiente si la cambia")
 with app.app_context():
     estados = {p.codigo: p.estado for p in db.session.query(Pedido).filter(Pedido.codigo.like("ROLES-%"))}
 check(estados == {"ROLES-001": EstadoPedido.ASIGNADO, "ROLES-002": EstadoPedido.EN_RUTA},
       f"solo la parada confirmada paso a EN_RUTA {estados}")
-s = funcion("conductor/marcar-en-camino", CALL_C, {"orden": 2})
+s = funcion("conductor/parada", CALL_C, {"operacion": "en-camino", "orden": 2})
 check("No pude" in mensaje(s) and not mensaje(s).endswith("¿confirmas?"),
       "una transicion imposible se explica sin pedir confirmacion")
 
@@ -406,13 +406,13 @@ rechazos = [
      "una fecha anterior a hoy"),
 ]
 for args, esperado, que in rechazos:
-    s = accion("gestor/crear-pedido", CALL_G, args)
+    s = accion("gestor/pedidos", CALL_G, {"operacion": "crear", **args})
     check(esperado in mensaje(s) and not mensaje(s).endswith("¿confirmas?"), f"rechaza {que}: {mensaje(s)}")
-s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "cliente": "tienda"})
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "crear", **pedido_voz, "cliente": "tienda"})
 check(mensaje(s).startswith("Encontré 3 clientes"), "un cliente ambiguo se pregunta")
-s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "sede": ""})
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "crear", **pedido_voz, "sede": ""})
 check("Encontré 2 sedes de Supermercado El Portal" in mensaje(s), "sin sede y con dos sedes, pregunta cual")
-s = funcion("gestor/crear-pedido", CALL_G, pedido_voz)
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "crear", **pedido_voz})
 check(mensaje(s) == "Voy a crear un pedido para Supermercado El Portal, sede Sede Toberin, en "
       f"Av. Cra 19 #166-30, para el {fecha_larga(hoy())} con prioridad media: "
       "3 de Caja bebidas 12 und y 2 de Bolsa arroz 5 kg. ¿confirmas?",
@@ -421,13 +421,13 @@ check(fecha_larga(date(2026, 10, 6), date(2026, 10, 6)) == "martes 6 de octubre"
       and fecha_larga(date(2027, 1, 4), date(2026, 10, 6)) == "lunes 4 de enero de 2027",
       "las fechas se leen con el dia de la semana, y el año solo si no es el actual")
 manana = hoy() + timedelta(days=1)
-s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "fecha": manana.isoformat()})
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "crear", **pedido_voz, "fecha": manana.isoformat()})
 check(f"para el {fecha_larga(manana)} con prioridad" in mensaje(s), "una fecha futura se acepta y se lee larga")
 # Ese resumen reemplazo al de hoy: se vuelve a pedir antes de confirmar.
-funcion("gestor/crear-pedido", CALL_G, pedido_voz)
+funcion("gestor/pedidos", CALL_G, {"operacion": "crear", **pedido_voz})
 check(huella() == antes, "ningun rechazo ni el resumen crean nada (tampoco clientes ni sedes)")
 
-s = funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "confirmar": True})
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "crear", **pedido_voz, "confirmar": True})
 creado = re.search(r"creé el pedido (\S+) para", mensaje(s))
 check(creado is not None, f"con confirmar=true crea el pedido: {mensaje(s)}")
 with app.app_context():
@@ -447,14 +447,14 @@ with app.app_context():
     check(db.session.query(Pedido).count() == pedidos_antes + 1
           and db.session.query(Cliente).count() == clientes_antes, "un solo pedido nuevo y ningun cliente nuevo")
     pid_voz, codigo_voz = nuevo.id, nuevo.codigo
-funcion("gestor/crear-pedido", CALL_G, {**pedido_voz, "confirmar": True})
+funcion("gestor/pedidos", CALL_G, {"operacion": "crear", **pedido_voz, "confirmar": True})
 with app.app_context():
     check(db.session.query(Pedido).count() == pedidos_antes + 1, "repetir la confirmacion no crea otro")
 
 
 print("\n== 8. Gestor: demas acciones ==")
 # Prioridad
-s = accion("gestor/cambiar-prioridad", CALL_G, {"pedido": codigo_voz, "prioridad": 1})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": codigo_voz, "prioridad": 1})
 check("prioridad alta" in mensaje(s), f"cambiar-prioridad: {mensaje(s)}")
 with app.app_context():
     p = db.session.get(Pedido, pid_voz)
@@ -465,9 +465,9 @@ html = clientes_web[Rol.CLIENTE].get(f"/portal/pedido/{pid_voz}").data.decode()
 linea = re.search(r'<ol class="linea-tiempo">(.*?)</ol>', html, re.S)
 check(linea is not None and linea.group(1).count("<li>") == 1 and "Prioridad cambiada" not in html,
       "el portal del cliente no muestra el cambio de prioridad como hito")
-s = accion("gestor/cambiar-prioridad", CALL_G, {"pedido": f"PED-{D}-003", "prioridad": 1})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": f"PED-{D}-003", "prioridad": 1})
 check("pendientes o asignados" in mensaje(s), "no se cambia la prioridad de un pedido en ruta")
-s = accion("gestor/cambiar-prioridad", CALL_G, {"pedido": codigo_voz, "prioridad": 5})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": codigo_voz, "prioridad": 5})
 check("debe ser 1" in mensaje(s), "prioridad fuera de 1 a 3")
 
 # Agregar a ruta (OSRM sin red: respaldo local)
@@ -475,12 +475,12 @@ with app.app_context():
     c3 = Usuario(nombre="Sergio Vargas", correo="conductor3@sgds.com", rol=Rol.CONDUCTOR, activo=True)
     c3.establecer_contrasena("Conductor123*")
     db.session.add(c3); db.session.commit()
-s = accion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "sergio"})
+s = accion("gestor/rutas", CALL_G, {"operacion": "agregar-parada", "pedido": codigo_voz, "conductor": "sergio"})
 check("no tiene ruta hoy" in mensaje(s) and "pantalla" in mensaje(s), "un conductor sin ruta: se crea en pantalla")
-s = funcion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "diego"})
+s = funcion("gestor/rutas", CALL_G, {"operacion": "agregar-parada", "pedido": codigo_voz, "conductor": "diego"})
 check(mensaje(s) == f"Voy a agregar el pedido {codigo_voz} de Supermercado El Portal a la ruta RUT-ROLES-01 "
       "de Diego Pardo y recalcular la secuencia. ¿confirmas?", "agregar-a-ruta resume antes")
-s = funcion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "diego", "confirmar": True})
+s = funcion("gestor/rutas", CALL_G, {"operacion": "agregar-parada", "pedido": codigo_voz, "conductor": "diego", "confirmar": True})
 check("quedó como parada" in mensaje(s), f"y con confirmar lo agrega: {mensaje(s)}")
 with app.app_context():
     p = db.session.get(Pedido, pid_voz)
@@ -490,7 +490,7 @@ with app.app_context():
     check(ordenes == list(range(1, len(ruta.pedidos) + 1)), f"la secuencia se recalculo sin huecos {ordenes}")
     check(sorted(p.eventos, key=lambda e: e.id)[-1].nota == f"Asignado a la ruta RUT-ROLES-01. {NOTA}",
           "con su evento en la bitacora")
-s = accion("gestor/agregar-a-ruta", CALL_G, {"pedido": codigo_voz, "conductor": "diego"})
+s = accion("gestor/rutas", CALL_G, {"operacion": "agregar-parada", "pedido": codigo_voz, "conductor": "diego"})
 check("solo se pueden agregar pedidos pendientes" in mensaje(s), "un pedido ya asignado no se agrega")
 
 # Ruta finalizada: no se reabre por voz.
@@ -506,7 +506,7 @@ with app.app_context():
                           creado_por_id=c2_id))
     db.session.commit()
 antes = huella()
-s = accion("gestor/agregar-a-ruta", CALL_G, {"pedido": "ROLES-PEND", "conductor": "diego"})
+s = accion("gestor/rutas", CALL_G, {"operacion": "agregar-parada", "pedido": "ROLES-PEND", "conductor": "diego"})
 check("ya está finalizada y no se reabre" in mensaje(s) and huella() == antes,
       "con la ruta de hoy finalizada responde que se hace en pantalla y no cambia nada")
 
@@ -516,10 +516,10 @@ with app.app_context():
     reabrir = next(x for x in ruta.pedidos if x.codigo == "ROLES-001")
     reabrir.estado = EstadoPedido.FALLIDO
     db.session.commit()
-s = funcion("gestor/reintentar-pedido", CALL_G, {"pedido": "ROLES-001"})
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "reintentar", "pedido": "ROLES-001"})
 check(mensaje(s).endswith("La ruta RUT-ROLES-01 está finalizada y se reabrirá. ¿confirmas?"),
       f"el resumen avisa que la ruta finalizada se reabrira: {mensaje(s)}")
-funcion("gestor/reintentar-pedido", CALL_G, {"pedido": "ROLES-001", "confirmar": True})
+funcion("gestor/pedidos", CALL_G, {"operacion": "reintentar", "pedido": "ROLES-001", "confirmar": True})
 with app.app_context():
     ruta = db.session.query(Ruta).filter_by(codigo="RUT-ROLES-01").one()
     check(ruta.estado == EstadoRuta.EN_CURSO
@@ -527,7 +527,7 @@ with app.app_context():
           "y al confirmar la ruta vuelve a EN_CURSO, igual que con la pantalla del conductor")
 
 # Reintentar un fallido de hoy
-s = accion("gestor/reintentar-pedido", CALL_G, {"pedido": f"PED-{D}-005"})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "reintentar", "pedido": f"PED-{D}-005"})
 check("quedó asignado para un nuevo intento" in mensaje(s), f"reintentar-pedido: {mensaje(s)}")
 with app.app_context():
     p = db.session.query(Pedido).filter_by(codigo=f"PED-{D}-005").one()
@@ -535,17 +535,17 @@ with app.app_context():
           "el fallido vuelve a ASIGNADO con la nota del asistente")
     viejo = db.session.query(Pedido).filter(Pedido.estado == EstadoPedido.FALLIDO,
                                             Pedido.fecha_despacho < hoy()).first().codigo
-s = accion("gestor/reintentar-pedido", CALL_G, {"pedido": viejo})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "reintentar", "pedido": viejo})
 check("ruta de hoy" in mensaje(s), "un fallido de otro dia no se reintenta por voz")
-s = accion("gestor/reintentar-pedido", CALL_G, {"pedido": codigo_voz})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "reintentar", "pedido": codigo_voz})
 check("Solo se reintenta un pedido fallido" in mensaje(s), "ni un pedido que no esta fallido")
 
 # Entrada de inventario
-s = accion("gestor/registrar-entrada", CALL_G, {"producto": "SKU-1001", "cantidad": -3})
+s = accion("gestor/productos", CALL_G, {"operacion": "entrada", "producto": "SKU-1001", "cantidad": -3})
 check("mayor que cero" in mensaje(s), "una entrada negativa se rechaza")
-s = funcion("gestor/registrar-entrada", CALL_G, {"producto": "SKU-1001", "cantidad": 50, "motivo": "Remision 88"})
+s = funcion("gestor/productos", CALL_G, {"operacion": "entrada", "producto": "SKU-1001", "cantidad": 50, "motivo": "Remision 88"})
 check(f"pasa de {stock_1001} a {stock_1001 + 50}" in mensaje(s), "la confirmacion lee el stock antes y despues")
-funcion("gestor/registrar-entrada", CALL_G, {"producto": "SKU-1001", "cantidad": 50, "motivo": "Remision 88",
+funcion("gestor/productos", CALL_G, {"operacion": "entrada", "producto": "SKU-1001", "cantidad": 50, "motivo": "Remision 88",
                                             "confirmar": True})
 with app.app_context():
     from app.models import MovimientoInventario, TipoMovimiento
@@ -561,13 +561,13 @@ with app.app_context():
                           direccion="Av. Cra 68 #75-50", fecha_despacho=hoy(), estado=EstadoPedido.PENDIENTE,
                           creado_por_id=c2_id))
     db.session.commit()
-s = accion("gestor/anular-pedido", CALL_G, {"pedido": "ROLES-ANULAR", "motivo": ""})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "anular", "pedido": "ROLES-ANULAR", "motivo": ""})
 check("Necesito el motivo" in mensaje(s), "anular exige motivo")
 envios_antes = len(envios_make)
-funcion("gestor/anular-pedido", CALL_G, {"pedido": "ROLES-ANULAR", "motivo": "Duplicado"})
+funcion("gestor/pedidos", CALL_G, {"operacion": "anular", "pedido": "ROLES-ANULAR", "motivo": "Duplicado"})
 notificaciones.esperar_envios()
 check(len(envios_make) == envios_antes, "el resumen de la anulacion no envia avisos")
-funcion("gestor/anular-pedido", CALL_G, {"pedido": "ROLES-ANULAR", "motivo": "Duplicado", "confirmar": True})
+funcion("gestor/pedidos", CALL_G, {"operacion": "anular", "pedido": "ROLES-ANULAR", "motivo": "Duplicado", "confirmar": True})
 notificaciones.esperar_envios()
 avisos = [e for e in envios_make[envios_antes:] if e.get("codigo") == "ROLES-ANULAR"]
 check(len(avisos) == 1 and avisos[0]["tipo"] == "pedido_estado" and avisos[0]["estado"] == "CANCELADO"
@@ -578,9 +578,9 @@ with app.app_context():
     check(p.estado == EstadoPedido.CANCELADO
           and sorted(p.eventos, key=lambda e: e.id)[-1].nota == f"Pedido anulado: Duplicado. {NOTA}",
           "queda CANCELADO con la nota del asistente")
-s = accion("gestor/anular-pedido", CALL_G, {"pedido": f"PED-{D}-003", "motivo": "x"})
+s = accion("gestor/pedidos", CALL_G, {"operacion": "anular", "pedido": f"PED-{D}-003", "motivo": "x"})
 check("No puedo anular" in mensaje(s), "las mismas reglas que la pantalla: un pedido en ruta no se anula")
-s = accion("gestor/crear-pedido", CALL_A, {**pedido_voz, "productos": [{"producto": "SKU-1002", "cantidad": 1}]})
+s = accion("gestor/pedidos", CALL_A, {"operacion": "crear", **pedido_voz, "productos": [{"producto": "SKU-1002", "cantidad": 1}]})
 check("creé el pedido" in mensaje(s), "el admin tambien puede usar las funciones del gestor")
 
 
@@ -618,31 +618,34 @@ check(f"{rend['muestras']} mediciones" in mensaje(s) and "percentil 95" in mensa
       f"resumen del panel de rendimiento, con lo que supera el limite: {mensaje(s)}")
 
 
-print("\n== 10. Admin: ajuste de inventario ==")
+print("\n== 10. Ajuste de inventario (gestor y admin) ==")
 app.config["CORREO_OPERACIONES"] = "operaciones@sgds.invalid"
 with app.app_context():
     sku = db.session.query(Producto).filter_by(sku="SKU-1001").one()
     stock_antes, minimo = sku.stock_actual, sku.stock_minimo
 antes = huella()
-s = funcion("admin/ajustar-inventario", CALL_G, {"producto": "SKU-1001", "valor": 5, "motivo": "Conteo"})
-check(s[0] == 403, "un ajuste de inventario desde una sesion de gestor: 403")
+s = funcion("gestor/productos", CALL_G, {"operacion": "ajuste", "producto": "SKU-1001", "nuevo_stock": 5,
+                                        "motivo": "Conteo"})
+check(mensaje(s).endswith("¿confirmas?"), f"el gestor tambien puede ajustar el inventario: {mensaje(s)}")
 for args, esperado, que in (
-        ({"producto": "SKU-1001", "valor": 5, "motivo": ""}, "Necesito el motivo", "sin motivo"),
-        ({"producto": "SKU-1001", "valor": -1, "motivo": "Conteo"}, "mayor o igual a cero", "valor negativo"),
-        ({"producto": "SKU-1001", "valor": stock_antes, "motivo": "Conteo"}, "no hay nada que ajustar",
+        ({"producto": "SKU-1001", "nuevo_stock": 5, "motivo": ""}, "Me falta el motivo del ajuste", "sin motivo"),
+        ({"producto": "SKU-1001", "motivo": "Conteo"}, "Me falta el nuevo stock", "sin el nuevo stock"),
+        ({"producto": "SKU-1001", "nuevo_stock": -1, "motivo": "Conteo"}, "mayor o igual a cero", "valor negativo"),
+        ({"producto": "SKU-1001", "nuevo_stock": stock_antes, "motivo": "Conteo"}, "no hay nada que ajustar",
          "al mismo valor"),
-        ({"producto": "galletas", "valor": 5, "motivo": "Conteo"}, "No encontré el producto", "producto inexistente")):
-    s = accion("admin/ajustar-inventario", CALL_A, args)
+        ({"producto": "galletas", "nuevo_stock": 5, "motivo": "Conteo"}, "No encontré el producto",
+         "producto inexistente")):
+    s = accion("gestor/productos", CALL_A, {"operacion": "ajuste", **args})
     check(esperado in mensaje(s), f"rechaza un ajuste {que}")
-s = funcion("admin/ajustar-inventario", CALL_A, {"producto": "SKU-1001", "valor": minimo - 10,
-                                                "motivo": "Conteo fisico de octubre"})
-check(mensaje(s) == f"Voy a ajustar el inventario de SKU-1001, Caja bebidas 12 und: el stock pasa de "
-      f"{stock_antes} a {minimo - 10}, por: Conteo fisico de octubre. ¿confirmas?",
+s = funcion("gestor/productos", CALL_A, {"operacion": "ajuste", "producto": "SKU-1001", "nuevo_stock": minimo - 10,
+                                        "motivo": "Conteo fisico de octubre"})
+check(mensaje(s) == f"Voy a ajustar el inventario de SKU-1001, Caja bebidas 12 und: el stock actual es "
+      f"{stock_antes} y el nuevo será {minimo - 10}, por: Conteo fisico de octubre. ¿confirmas?",
       "la confirmacion lee el stock actual, el nuevo valor y el motivo")
-check(huella() == antes, "ni el 403, ni los rechazos, ni el resumen cambian datos")
+check(huella() == antes, "ni los rechazos ni los resumenes cambian datos")
 envios_antes = len(envios_make)
-s = funcion("admin/ajustar-inventario", CALL_A, {"producto": "SKU-1001", "valor": minimo - 10,
-                                                "motivo": "Conteo fisico de octubre", "confirmar": True})
+s = funcion("gestor/productos", CALL_A, {"operacion": "ajuste", "producto": "SKU-1001", "nuevo_stock": minimo - 10,
+                                        "motivo": "Conteo fisico de octubre", "confirmar": True})
 notificaciones.esperar_envios()
 with app.app_context():
     from app.models import MovimientoInventario, TipoMovimiento
