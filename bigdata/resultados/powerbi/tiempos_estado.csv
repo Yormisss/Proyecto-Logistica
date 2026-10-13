@@ -1,0 +1,4 @@
+﻿estado,transiciones,minutos_promedio,minutos_p90
+EN_RUTA,291144,155.0,155.0
+ENTREGADO,241644,25.0,25.0
+FALLIDO,49500,25.0,25.0

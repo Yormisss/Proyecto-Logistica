@@ -2,12 +2,25 @@
 {% block titulo %}Tablero de control | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
-<div class="encabezado-pagina">
+<div class="encabezado-pagina fila-encabezado">
   <div>
     <h1 class="titulo-pagina">Tablero de control</h1>
     <p class="subtitulo-pagina">{{ cd_nombre }} &middot; Operacion del {{ kpis.fecha.strftime('%d/%m/%Y') }}</p>
   </div>
+  {% if bd %}<a class="enlace-tabla" href="#operacion-hoy">Operacion de hoy &darr;</a>{% endif %}
 </div>
+
+{% if bd %}
+  {% include "admin/_bigdata.html" %}
+{% else %}
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Big Data: aun no hay resultados</h2>
+  <p>Ejecute el pipeline para generarlos:</p>
+  <pre>.venv\Scripts\python bigdata\pipeline.py</pre>
+</section>
+{% endif %}
+
+<h2 class="titulo-seccion" id="operacion-hoy">Operacion de hoy</h2>
 
 <!-- RF6 - Tres KPIs fundamentales del prototipo -->
 <section class="rejilla-kpis">
@@ -80,3 +93,5 @@
   </section>
 </div>
 {% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/graficas.js') }}"></script>{% endblock %}

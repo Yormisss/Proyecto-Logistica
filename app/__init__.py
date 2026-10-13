@@ -147,6 +147,7 @@ def _registrar_controladores(app):
     from app.controllers.automatizacion_api import automatizacion_api_bp
     from app.controllers.auth import auth_bp
     from app.controllers.admin import admin_bp
+    from app.controllers.bigdata import bigdata_bp
     from app.controllers.cliente import cliente_bp
     from app.controllers.clientes_admin import clientes_admin_bp
     from app.controllers.conductor import conductor_bp
@@ -159,6 +160,7 @@ def _registrar_controladores(app):
     app.register_blueprint(principal_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(bigdata_bp, url_prefix="/admin/bigdata")
     app.register_blueprint(pedidos_bp, url_prefix="/pedidos")
     app.register_blueprint(rutas_bp, url_prefix="/rutas")
     app.register_blueprint(inventario_bp, url_prefix="/inventario")

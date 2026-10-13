@@ -214,7 +214,7 @@ body {
 }
 
 /* ==========================================================================
-   Paso 2 — Pedidos e inventario
+   Paso 2 â€” Pedidos e inventario
    ========================================================================== */
 
 .fila-encabezado { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
@@ -323,7 +323,7 @@ body {
 }
 
 /* ==========================================================================
-   Paso 3 — Rutas y mapa (RF3)
+   Paso 3 â€” Rutas y mapa (RF3)
    ========================================================================== */
 
 .mapa {
@@ -365,7 +365,7 @@ body {
 .leaflet-popup-content { font-size: .85rem; line-height: 1.4; }
 
 /* ==========================================================================
-   Paso 4 — Operacion en terreno (RF4 / RF5)
+   Paso 4 â€” Operacion en terreno (RF4 / RF5)
    ========================================================================== */
 
 .titulo-seccion {
@@ -426,7 +426,7 @@ body {
 }
 
 /* ==========================================================================
-   Paso 5 — Analitica y rendimiento
+   Paso 5 â€” Analitica y rendimiento
    Paleta de datos validada con el verificador de la guia de visualizacion
    (superficie #ffffff): CVD deltaE 24.7 protan, normal 33.6, contraste >= 3:1.
    No se usa verde/rojo para distinguir series: ese par falla la separacion
@@ -599,4 +599,101 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .asistente[data-estado="escuchando"] .asistente-boton { animation: none; }
+}
+
+/* ==========================================================================
+   Tablero de Big Data
+   Reutiliza la paleta validada del Paso 5 (--serie-1 / --serie-2). La magnitud
+   (mapa de calor, matriz, clases ABC) usa un solo tono, de claro a oscuro.
+   ========================================================================== */
+
+.rejilla-par { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin-bottom: 1rem; }
+.rejilla-par > .tarjeta { margin-bottom: 0; min-width: 0; }
+.rejilla-par.interna { margin: 1rem 0 0; gap: 1.5rem; }
+.rejilla-par.interna .titulo-seccion { margin-top: 0; }
+.nota-grafica { font-size: .82rem; color: var(--gris-600); }
+
+.barras-anchas .fila-barra { grid-template-columns: 150px 1fr 72px; }
+
+/* --- Columnas mensuales: el rotulo trimestral puede exceder su banda --- */
+.grafica-columnas.mensual .etiqueta-dia { max-width: none; overflow: visible; }
+
+/* --- Lineas: el SVG se estira con la tarjeta; los rotulos son HTML para no deformarse --- */
+.grafica-lineas { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .5rem; padding-top: .4rem; }
+.grafica-lineas .eje-y { position: relative; height: 180px; min-width: 2.7rem; }
+.grafica-lineas .eje-y span {
+  position: absolute; right: 0; transform: translateY(50%);
+  font-size: .68rem; color: var(--gris-600); white-space: nowrap;
+}
+.lienzo { height: 180px; }
+.lienzo svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.linea-grilla { stroke: var(--grilla); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.linea-serie {
+  fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.banda { fill: transparent; }
+.banda:hover, .banda:focus { fill: rgba(15, 37, 64, .07); outline: none; }
+.grafica-lineas .eje-x { grid-column: 2; display: flex; margin-top: .4rem; }
+.grafica-lineas .eje-x span {
+  flex: 1; min-width: 0; display: flex; justify-content: center;
+  font-size: .68rem; color: var(--gris-600); white-space: nowrap;
+}
+
+/* --- Mapa de calor y matriz de confusion --- */
+.mapa-calor { width: 100%; border-collapse: separate; border-spacing: 2px; table-layout: fixed; font-size: .8rem; }
+.mapa-calor th { font-weight: 600; color: var(--gris-600); font-size: .75rem; padding: .3rem .2rem; }
+.mapa-calor th[scope=row] { text-align: left; width: 5.5rem; }
+.celda-calor {
+  background: rgba(42, 120, 214, var(--i)); color: var(--gris-900);
+  text-align: center; font-weight: 600; height: 40px; border-radius: 4px;
+}
+.celda-calor.oscura { color: var(--blanco); }
+.celda-calor:hover, .celda-calor:focus { outline: 2px solid var(--azul-900); outline-offset: -2px; }
+.celda-total, .celda-vacia { text-align: center; color: var(--gris-600); font-weight: 600; }
+.escala-calor { display: flex; align-items: center; gap: .4rem; font-size: .75rem; color: var(--gris-600); }
+.escala-rampa {
+  width: 70px; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, rgba(42, 120, 214, .1), rgba(42, 120, 214, 1));
+}
+.matriz .celda-calor { height: 68px; }
+.matriz .celda-calor strong { display: block; font-size: 1.1rem; line-height: 1.2; }
+.matriz .celda-calor small { font-size: .72rem; font-weight: 500; }
+
+/* --- Un punto por conductor --- */
+.grafica-puntos { position: relative; height: 74px; margin: 0 10px; border-bottom: 1px solid var(--grilla); }
+.punto {
+  position: absolute; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
+  background: var(--serie-1); box-shadow: 0 0 0 2px var(--blanco);
+}
+.punto:hover, .punto:focus { filter: brightness(.8); outline: none; z-index: 1; }
+.marca-mediana { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--gris-400); }
+.eje-puntos { position: relative; height: 1.3rem; margin: .4rem 10px 0; }
+.eje-puntos span {
+  position: absolute; transform: translateX(-50%);
+  font-size: .68rem; color: var(--gris-600); white-space: nowrap;
+}
+
+/* --- Clasificacion ABC: tres clases ordenadas, un solo tono --- */
+.segmentos-abc { display: flex; gap: 2px; height: 14px; margin: 1.1rem 0 .6rem; }
+.segmento-abc { flex-basis: 0; border-radius: 3px; }
+.abc-a { background: rgba(42, 120, 214, 1); }
+.abc-b { background: rgba(42, 120, 214, .55); }
+.abc-c { background: rgba(42, 120, 214, .25); }
+
+.metricas-modelo { grid-template-columns: repeat(2, 1fr); gap: .8rem; }
+
+@media (min-width: 720px) {
+  .rejilla-kpis.cuatro { grid-template-columns: repeat(2, 1fr); }
+  .metricas-modelo { grid-template-columns: repeat(4, 1fr); }
+}
+@media (min-width: 960px) {
+  .rejilla-kpis.cuatro { grid-template-columns: repeat(4, 1fr); }
+  .kpi-valor.compacto { font-size: 1.8rem; }
+  .rejilla-par { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 719px) {
+  .barras-anchas .fila-barra { grid-template-columns: 104px 1fr 62px; }
+  .mapa-calor th[scope=row] { width: 4.6rem; }
+  .eje-puntos span:nth-child(even) { display: none; }
 }
