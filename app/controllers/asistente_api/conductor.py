@@ -2,8 +2,9 @@
 
 Solo operan sobre la ruta de hoy del conductor de la llamada y aplican las
 transiciones con `app.services.despacho`, igual que la vista movil. La entrega
-por voz exige el nombre y el documento de quien recibe; la llamada no envia la
-ubicacion del telefono, y la prueba de entrega lo dice en su observacion.
+por voz exige el nombre y el documento de quien recibe. La llamada no envia la
+ubicacion del telefono: la prueba de entrega (o del fallo) lo dice en su
+observacion, seguida de la observacion que dicte el conductor, si la hay.
 
 Las acciones son de rutina y de alto volumen: quedan en la auditoria sin el
 correo accion_asistente (avisar=False); su historial esta en los eventos.
@@ -30,12 +31,14 @@ PENDIENTES = (EstadoPedido.ASIGNADO, EstadoPedido.EN_RUTA)
 
 SIN_RUTA = "No tienes una ruta activa para hoy."
 
-# Observacion de la prueba de una entrega hecha por voz: la llamada no envia la
-# ubicacion del telefono, como si lo hace la pantalla.
-OBSERVACION_ENTREGA_VOZ = "Registrada por el asistente de voz, sin ubicación"
-# Mismos largos que el formulario de entrega de la pantalla.
+# Observacion de la prueba de una entrega o un fallo hecho por voz: la llamada no
+# envia la ubicacion del telefono, como si lo hace la pantalla. Lo que el
+# conductor dicte se agrega despues: "... sin ubicación. Observación: ...".
+OBSERVACION_VOZ = "Registrada por el asistente de voz, sin ubicación"
+# Mismos largos que los formularios de entrega y fallo de la pantalla.
 LARGO_RECEPTOR = 160
 LARGO_DOCUMENTO = 40
+LARGO_OBSERVACION = 1000
 # Rutas que lee mi-historial (la pantalla lista 30).
 LIMITE_HISTORIAL = 5
 
@@ -55,6 +58,23 @@ def _ventana(pedido):
 
 def _ruta():
     return ruta_del_dia(g.usuario.id)
+
+
+def _observacion():
+    """(observacion para la prueba, lo dictado, error): el texto fijo de voz mas
+    la observacion opcional que dicto el conductor."""
+    dictada = texto("observacion")
+    if not dictada:
+        return OBSERVACION_VOZ, "", None
+    completa = f"{OBSERVACION_VOZ}. Observación: {dictada}"
+    if len(completa) > LARGO_OBSERVACION:
+        return None, dictada, (f"La observación es muy larga: admite hasta "
+                               f"{LARGO_OBSERVACION - len(OBSERVACION_VOZ) - 15} caracteres.")
+    return completa, dictada, None
+
+
+def _leer_observacion(dictada):
+    return f" Observación: {dictada.rstrip('.')}." if dictada else ""
 
 
 def _parada(ruta):
@@ -219,6 +239,8 @@ parada = funcion_agrupada(
         "motivo": {"type": "string", "description": "fallo: por que no se pudo entregar."},
         "recibe": {"type": "string", "description": "entregar: nombre de quien recibe."},
         "documento": {"type": "string", "description": "entregar: documento de quien recibe."},
+        "observacion": {"type": "string",
+                        "description": "entregar y fallo: observacion que dicte el conductor (opcional)."},
     },
 )
 
@@ -260,7 +282,7 @@ def marcar_en_camino():
 @parada("fallo", "Registrar entrega fallida",
         "pasa la parada a FALLIDO con el motivo, sin tocar el inventario; el motivo se compara "
         "con el catalogo y, si no coincide, queda como 'Otro' con lo dicho; requiere orden y "
-        "motivo", avisar=False)
+        "motivo; acepta una observacion dictada opcional", avisar=False)
 def registrar_fallo():
     ruta = _ruta()
     if ruta is None:
@@ -277,6 +299,9 @@ def registrar_fallo():
         return responder(str(error))
     como = (f"por otro motivo: {motivo}" if motivo_catalogo.es_otro
             else f"por: {motivo}")
+    observacion, dictada, error = _observacion()
+    if error:
+        return responder(error)
 
     try:
         validar_transicion(pedido.estado, EstadoPedido.FALLIDO)
@@ -287,7 +312,7 @@ def registrar_fallo():
 
     pendiente = exigir_confirmacion(
         f"Voy a registrar la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}, "
-        f"como no entregada {como}."
+        f"como no entregada {como}.{_leer_observacion(dictada)}"
     )
     if pendiente:
         return pendiente
@@ -300,6 +325,7 @@ def registrar_fallo():
             nota=NOTA_ASISTENTE,
             motivo_fallo=motivo,
             motivo_id=motivo_catalogo.id,
+            observacion=observacion,
         )
     except TransicionInvalida as causa:
         db.session.rollback()
@@ -316,7 +342,8 @@ def registrar_fallo():
 
 @parada("entregar", "Confirmar entrega",
         "confirma la entrega de la parada y descuenta el inventario, como en pantalla; requiere "
-        "orden, el nombre (recibe) y el documento de quien recibe", avisar=False)
+        "orden, el nombre (recibe) y el documento de quien recibe; acepta una observacion dictada "
+        "opcional", avisar=False)
 def confirmar_entrega():
     ruta = _ruta()
     if ruta is None:
@@ -333,6 +360,9 @@ def confirmar_entrega():
     if len(recibe) > LARGO_RECEPTOR or len(documento) > LARGO_DOCUMENTO:
         return responder(f"El nombre admite hasta {LARGO_RECEPTOR} caracteres y el documento "
                          f"hasta {LARGO_DOCUMENTO}.")
+    observacion, dictada, error = _observacion()
+    if error:
+        return responder(error)
 
     try:
         validar_transicion(pedido.estado, EstadoPedido.ENTREGADO)
@@ -343,7 +373,7 @@ def confirmar_entrega():
     pendiente = exigir_confirmacion(
         f"Voy a confirmar la entrega de la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}, "
         f"recibida por {recibe}, documento {documento}. Se descuentan "
-        f"{cantidad(unidades, 'unidad', 'unidades')} del inventario."
+        f"{cantidad(unidades, 'unidad', 'unidades')} del inventario.{_leer_observacion(dictada)}"
     )
     if pendiente:
         return pendiente
@@ -356,7 +386,7 @@ def confirmar_entrega():
             nota=NOTA_ASISTENTE,
             receptor_nombre=recibe,
             receptor_documento=documento,
-            observacion=OBSERVACION_ENTREGA_VOZ,
+            observacion=observacion,
         )
     except TransicionInvalida as motivo:
         db.session.rollback()

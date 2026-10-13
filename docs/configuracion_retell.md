@@ -48,6 +48,8 @@ Acciones, siempre con confirmación:
 - Confirmar la entrega de una parada. Exige el nombre y el documento de quien recibe: pídeselos si no los dijo, nunca los inventes. Descuenta el inventario, como en pantalla, y queda registrada sin ubicación.
 - Registrar que una parada no se pudo entregar, con el motivo.
 
+Al entregar o registrar un fallo, si el conductor dicta una observación (por ejemplo, "dejé el pedido en portería"), envíala en "observacion". No se la pidas si no la menciona: es opcional.
+
 Las paradas se identifican por su número en la ruta de hoy, el mismo que el conductor ve en "Mi ruta". Si no te dice el número, pregúntaselo.
 
 ## Lo que no puedes hacer por voz
@@ -109,7 +111,7 @@ Nunca envíes "confirmar": true sin haberle leído antes el resumen al usuario y
 | `mi-historial` | `/api/asistente/conductor/mi-historial` | Ultimas rutas del conductor, de la mas reciente a la mas antigua: fecha, estado y cuantas paradas entrego y cuantas fallaron. |
 | `siguiente-parada` | `/api/asistente/conductor/siguiente-parada` | Primera parada pendiente de la ruta de hoy: cliente, direccion y ventana horaria. |
 | `detalle-parada` | `/api/asistente/conductor/detalle-parada` | Detalle de una parada de la ruta de hoy: cliente, direccion, ventana, estado, unidades, telefono y observaciones. |
-| `parada` | `/api/asistente/conductor/parada` | Acciones sobre una parada de la ruta de hoy, por su numero. Operaciones: 'en-camino': pasa la parada a EN_RUTA; tambien sirve para reintentar una fallida; requiere orden (modifica datos); 'fallo': pasa la parada a FALLIDO con el motivo, sin tocar el inventario; el motivo se compara con el catalogo y, si no coincide, queda como 'Otro' con lo dicho; requiere orden y motivo (modifica datos); 'entregar': confirma la entrega de la parada y descuenta el inventario, como en pantalla; requiere orden, el nombre (recibe) y el documento de quien recibe (modifica datos). Las que modifican datos: llamala primero sin 'confirmar' para obtener el resumen. |
+| `parada` | `/api/asistente/conductor/parada` | Acciones sobre una parada de la ruta de hoy, por su numero. Operaciones: 'en-camino': pasa la parada a EN_RUTA; tambien sirve para reintentar una fallida; requiere orden (modifica datos); 'fallo': pasa la parada a FALLIDO con el motivo, sin tocar el inventario; el motivo se compara con el catalogo y, si no coincide, queda como 'Otro' con lo dicho; requiere orden y motivo; acepta una observacion dictada opcional (modifica datos); 'entregar': confirma la entrega de la parada y descuenta el inventario, como en pantalla; requiere orden, el nombre (recibe) y el documento de quien recibe; acepta una observacion dictada opcional (modifica datos). Las que modifican datos: llamala primero sin 'confirmar' para obtener el resumen. |
 
 Parámetros (JSON schema) de cada función:
 
@@ -201,6 +203,10 @@ Parámetros (JSON schema) de cada función:
     "documento": {
       "type": "string",
       "description": "entregar: documento de quien recibe."
+    },
+    "observacion": {
+      "type": "string",
+      "description": "entregar y fallo: observacion que dicte el conductor (opcional)."
     },
     "confirmar": {
       "type": "boolean",

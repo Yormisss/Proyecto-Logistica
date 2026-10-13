@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               1623 verificaciones automatizadas en 18 suites (MySQL)
+├── pruebas/               1627 verificaciones automatizadas en 18 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -383,7 +383,7 @@ confirmación y quedan en la auditoría).
 
 | Rol | Funciones | Total |
 |---|---|---|
-| **Conductor** | Consultas: `mi-ruta`, `siguiente-parada`, `detalle-parada`, `mi-historial` (últimas 5 rutas). `iniciar-ruta` (M). `parada`: `en-camino` (M, también reintenta una fallida), `fallo` (M, con el catálogo o "Otro"), `entregar` (M, con nombre y documento de quien recibe) | 6 |
+| **Conductor** | Consultas: `mi-ruta`, `siguiente-parada`, `detalle-parada`, `mi-historial` (últimas 5 rutas). `iniciar-ruta` (M). `parada`: `en-camino` (M, también reintenta una fallida), `fallo` (M, con el catálogo o "Otro"), `entregar` (M, con nombre y documento de quien recibe); `entregar` y `fallo` aceptan una observación dictada | 6 |
 | **Gestor logístico** | Consultas: `resumen-dia`, `pendientes-sin-ruta`, `avance-rutas`, `buscar-pedido`, `stock-producto`, `productos-bajo-minimo`, `fallidos-hoy`, `solicitudes-contacto-pendientes`. Analítica, con los periodos del panel: `tiempo-promedio-entrega`, `cumplimiento-ventana`, `productividad-conductores`, `causas-fallo`. `atender-solicitud` (M). `pedidos`: crear, editar, anular, reintentar (M). `productos`: crear, editar, activar, desactivar, entrada, ajuste (M). `rutas`: consultar, crear, agregar-parada, quitar-parada, recalcular, eliminar (M salvo consultar). `clientes` y `sedes`: consultar, crear, editar, activar, desactivar (M salvo consultar). `vehiculos`: consultar, crear, editar, activar, desactivar (M salvo consultar) | 19 |
 | **Administrador** | Todas las del gestor; `resumen-rendimiento` (el panel de rendimiento, solo suyo como en pantalla); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (últimos registros, con filtros por fecha, usuario y entidad) | 23 |
 | **Cliente** | Consultas: `pedidos-en-curso`, `pedidos-recientes`, `estado-pedido`, `ventana-entrega`, `motivo-fallo`, `mis-sedes`. Acciones: `cancelar-pedido` (M, solo PENDIENTE), `solicitar-contacto` (M, una pendiente a la vez) | 8 |
@@ -413,9 +413,10 @@ Reglas que el servidor aplica igual que la pantalla, porque usa los mismos servi
   conductor, un cliente que pierde el portal); ver [Salvaguardas](#salvaguardas).
 - **Entregas.** El conductor confirma una entrega por voz solo con el nombre y el
   documento de quien recibe; descuenta el inventario igual que la pantalla. La llamada
-  no envía la ubicación del teléfono, así que la prueba de entrega queda sin
-  coordenadas y con la observación *"Registrada por el asistente de voz, sin
-  ubicación"*. Iniciar la ruta, en camino, entregar y fallo quedan en la auditoría sin
+  no envía la ubicación del teléfono, así que la prueba de la entrega o del fallo queda
+  sin coordenadas y con la observación *"Registrada por el asistente de voz, sin
+  ubicación"*; si el conductor dicta una observación, se agrega después (*"... sin
+  ubicación. Observación: dejé el pedido en portería"*). Iniciar la ruta, en camino, entregar y fallo quedan en la auditoría sin
   el correo `accion_asistente`: son de rutina y su historial está en los eventos.
 - **Pruebas de entrega de solo agregar.** Cada cierre (entrega o intento fallido)
   agrega su prueba: un pedido que falla, se reintenta y se entrega conserva todas. El
@@ -439,8 +440,7 @@ sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_rete
 | Todos | Iniciar y cerrar sesión, cambiar la propia contraseña, el botón que abre la llamada | La llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
 | Gestor y admin | Importar pedidos desde CSV | Exige subir un archivo; no tiene equivalente hablado |
 | Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
-| Conductor | La ubicación del teléfono y la observación escrita al entregar o registrar un fallo | La llamada no envía la ubicación; la prueba de entrega por voz lo dice en su observación |
-| Conductor | Rutas de otros días (salvo su historial) o de otros conductores | Igual que en pantalla: solo opera su ruta de hoy |
+| Conductor | La ubicación del teléfono al entregar o registrar un fallo | La llamada no envía la ubicación; la prueba de entrega por voz lo dice en su observación |
 | Cliente | Cancelar un pedido ya programado | Desde ASIGNADO ya hay una ruta planificada: el asistente ofrece solicitar contacto con el gestor |
 | Cliente | Rutas, conductores, stock, datos de otros clientes | El mismo aislamiento del portal: un pedido ajeno se responde igual que uno inexistente |
 
@@ -1102,7 +1102,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**1623 verificaciones en 18 suites contra MySQL 8.0, todas pasando, en unos dos
+**1627 verificaciones en 18 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1138,7 +1138,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 87 |
 | `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 289 |
 | `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración y bitácora (admin); resúmenes, rechazos y auditoría | 94 |
-| `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba | 78 |
+| `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba, con la observación dictada | 82 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
@@ -1193,7 +1193,7 @@ en tabla.
 
 ## MySQL y MySQL Workbench (fase piloto)
 
-**La migración está verificada:** las 17 tablas se crean correctamente y las 1623
+**La migración está verificada:** las 17 tablas se crean correctamente y las 1627
 verificaciones (incluidas las propias de MySQL: claves ajenas y precisión de las
 coordenadas) pasan íntegras contra MySQL 8.0.46.
 

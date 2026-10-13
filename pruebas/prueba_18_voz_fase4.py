@@ -241,7 +241,14 @@ with app.app_context():
 _, final = confirma("conductor/parada", C, {"operacion": "en-camino", "orden": 1})
 check(final is not None and parada_de(1).estado == EstadoPedido.EN_RUTA, "la parada 1 se reintenta por voz")
 envios_antes = len(envios)
-confirma("conductor/parada", C, {"operacion": "fallo", "orden": 2, "motivo": "cliente ausente"})
+FALLO_OBS = {"operacion": "fallo", "orden": 2, "motivo": "cliente ausente",
+             "observacion": "Nadie abrio, se dejo aviso en porteria"}
+r = dice("conductor/parada", C, {**FALLO_OBS, "observacion": "x" * 1000})
+check(r.startswith("La observación es muy larga") and not r.endswith("¿confirmas?"),
+      "una observacion dictada demasiado larga se rechaza")
+r, _ = confirma("conductor/parada", C, FALLO_OBS)
+check(r.endswith("como no entregada por: Cliente ausente. Observación: Nadie abrio, se dejo aviso en porteria. "
+                 "¿confirmas?"), f"el resumen del fallo lee la observacion dictada: {r}")
 confirma("conductor/parada", C, {"operacion": "en-camino", "orden": 2})
 confirma("conductor/parada", C, {"operacion": "fallo", "orden": 2, "motivo": "direccion incorrecta"})
 fallidos = [e for e in eventos("pedido_estado", envios_antes) if e["estado"] == EstadoPedido.FALLIDO]
@@ -261,12 +268,20 @@ check("Direccion incorrecta" in html and "Cliente ausente" not in html,
       "el portal muestra el motivo del intento mas reciente")
 
 confirma("conductor/parada", C, {"operacion": "en-camino", "orden": 2})
-_, final = confirma("conductor/parada", C, {"operacion": "entregar", "orden": 2, "recibe": "Luis Pardo",
-                                            "documento": "79888777"})
+r, final = confirma("conductor/parada", C, {"operacion": "entregar", "orden": 2, "recibe": "Luis Pardo",
+                                            "documento": "79888777", "observacion": "Recibido en bodega."})
+check(r.endswith("del inventario. Observación: Recibido en bodega. ¿confirmas?"),
+      f"el resumen de la entrega lee la observacion dictada: {r}")
 check(final is not None and final.startswith("Listo, registré la entrega de la parada 2"),
       "tras el reintento, la entrega se confirma por voz")
 with app.app_context():
     pedido = db.session.get(Pedido, parada2.id)
+    observaciones = [p.observacion for p in pedido.pruebas_entrega]
+    check(observaciones == [
+        "Registrada por el asistente de voz, sin ubicación. Observación: Nadie abrio, se dejo aviso en porteria",
+        "Registrada por el asistente de voz, sin ubicación",
+        "Registrada por el asistente de voz, sin ubicación. Observación: Recibido en bodega."],
+          f"cada prueba por voz lleva el texto fijo y, si se dicto, la observacion despues ({observaciones})")
     pruebas = [(p.motivo_fallo, p.receptor_nombre) for p in pedido.pruebas_entrega]
     check(pruebas == [("Cliente ausente", None), ("Direccion incorrecta", None), (None, "Luis Pardo")],
           f"el pedido conserva las tres pruebas, en orden ({pruebas})")
