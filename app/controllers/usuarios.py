@@ -238,7 +238,7 @@ def editar(usuario_id):
 
     if formulario.validate_on_submit():
         try:
-            cambios, abiertas = editar_usuario(usuario, formulario.datos(), actor=current_user)
+            cambios, consecuencias = editar_usuario(usuario, formulario.datos(), actor=current_user)
         except DatosInvalidos as error:
             db.session.rollback()
             _mostrar_errores(formulario, error)
@@ -252,12 +252,8 @@ def editar(usuario_id):
                 )
             db.session.commit()
             flash(f"Cuenta de {usuario.nombre} actualizada.", "exito")
-            if abiertas:
-                flash(
-                    f"Atencion: {abiertas} ruta(s) sin cerrar siguen asignadas a "
-                    f"{usuario.nombre}. Reasignelas antes de continuar la operacion.",
-                    "advertencia",
-                )
+            for consecuencia in consecuencias:
+                flash(consecuencia[0].upper() + consecuencia[1:] + ".", "advertencia")
             return redirect(url_for("usuarios.lista"))
 
     return render_template(
@@ -283,7 +279,7 @@ def alternar_estado(usuario_id):
         return redirect(url_for("usuarios.lista"))
 
     try:
-        abiertas = cambiar_estado_usuario(usuario, not usuario.activo, actor=current_user)
+        cambiar_estado_usuario(usuario, not usuario.activo, actor=current_user)
     except DatosInvalidos as error:
         flash(str(error), "error")
         return redirect(url_for("usuarios.lista"))
@@ -300,8 +296,6 @@ def alternar_estado(usuario_id):
         + ("activada." if usuario.activo else "desactivada. No podra iniciar sesion."),
         "exito",
     )
-    if abiertas:
-        flash(f"{usuario.nombre} tenia {abiertas} ruta(s) sin cerrar; reasignelas.", "advertencia")
     return redirect(url_for("usuarios.lista"))
 
 

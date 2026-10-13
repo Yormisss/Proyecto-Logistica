@@ -197,7 +197,10 @@ clientes, referenciados por `pedidos.cliente_id`.
 | Un administrador intenta cambiarse el rol | Bloqueado: perdería la capacidad de revertirlo |
 | Un administrador intenta desactivar su propia cuenta | Bloqueado, tanto editando como con la acción rápida |
 | Se desactiva o degrada al último administrador activo | Bloqueado: debe quedar al menos uno |
-| Se cambia el rol de un conductor con rutas sin cerrar | Se permite, pero avisa cuántas hay que reasignar |
+| Se cambia el rol o se desactiva un conductor con rutas sin cerrar (PLANIFICADA o EN_CURSO) | Bloqueado: la ruta quedaría sin quien la cierre. Se eliminan las que no han salido o se espera a que se cierren |
+| Un conductor sin rutas abiertas deja de serlo | Se permite; su vehículo queda sin conductor y la pantalla (o el resumen de voz) lo avisa |
+| Una cuenta de cliente pasa a un rol interno, o una interna pasa a cliente | Bloqueado: son personas distintas, una externa y otra interna; se crea otra cuenta |
+| Una cuenta de cliente cambia a otro cliente disponible | Se permite; el cliente anterior queda sin acceso al portal y se avisa |
 | Se registra un cliente homónimo de otro y ninguno tiene NIT | Bloqueado: casi siempre es un duplicado por error de escritura |
 | Se agrega una sede que ya existe escrita distinto | Se detecta por dirección normalizada y se rechaza |
 

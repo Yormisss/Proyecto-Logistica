@@ -7,12 +7,13 @@ que un administrador se deje a si mismo sin acceso.
 
 import pathlib
 import re
+from datetime import date
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from run import app
 from app.extensions import db
-from app.models import Cliente, Rol, Usuario
+from app.models import Cliente, EstadoRuta, Rol, Ruta, Usuario, Vehiculo
 
 fallos = []
 def check(cond, msg):
@@ -148,24 +149,43 @@ with app.app_context():
     todavia = db.session.get(Cliente, id_tomado)
     check(todavia.usuario.correo == correo_tomado, "el vinculo original quedo intacto")
 
-print("\n== 7. Cambiar el rol desvincula el portal ==")
+print("\n== 7. Cuentas de cliente: no pasan a un rol interno; si cambian de cliente, avisa ==")
 with app.app_context():
     cuenta = db.session.query(Usuario).filter_by(correo="portal.nuevo@empresa.com").one()
     id_cuenta = cuenta.id
+    otro_libre = db.session.query(Cliente).filter(Cliente.usuario_id.is_(None), Cliente.id != id_libre).first()
+    id_otro, nombre_otro = otro_libre.id, otro_libre.nombre
+    id_nuevo_conductor = db.session.query(Usuario).filter_by(correo="nuevo.conductor@sgds.com").one().id
 
 r = admin.post(f"/admin/usuarios/{id_cuenta}/editar",
-               data=datos_usuario(nombre="Ahora Despachador",
-                                  correo="portal.nuevo@empresa.com",
+               data=datos_usuario(nombre="Ahora Despachador", correo="portal.nuevo@empresa.com",
                                   rol=Rol.DESPACHADOR, cliente_id="0"),
                follow_redirects=True)
-check(b"actualizada" in r.data, "el cambio de rol se guarda")
+check("Las cuentas de cliente no cambian a un rol interno ni al revés" in r.data.decode(),
+      "una cuenta de cliente no pasa a un rol interno")
 with app.app_context():
-    check(db.session.get(Cliente, id_libre).usuario_id is None,
-          "el cliente queda sin cuenta al dejar la cuenta de ser CLIENTE")
-    check(db.session.get(Usuario, id_cuenta).rol == Rol.DESPACHADOR, "la cuenta tiene el rol nuevo")
+    check(db.session.get(Usuario, id_cuenta).rol == Rol.CLIENTE
+          and db.session.get(Cliente, id_libre).usuario_id == id_cuenta, "y sigue igual, con su portal")
+r = admin.post(f"/admin/usuarios/{id_nuevo_conductor}/editar",
+               data=datos_usuario(nombre="Nuevo Conductor", correo="nuevo.conductor@sgds.com",
+                                  rol=Rol.CLIENTE, cliente_id=str(id_otro)),
+               follow_redirects=True)
+with app.app_context():
+    check("Las cuentas de cliente no cambian a un rol interno ni al revés" in r.data.decode()
+          and db.session.get(Usuario, id_nuevo_conductor).rol == Rol.CONDUCTOR
+          and db.session.get(Cliente, id_otro).usuario_id is None, "ni una cuenta interna pasa a cliente")
 
-r = sesion("portal.nuevo@empresa.com", clave_portal).get("/portal/")
-check(r.status_code == 403, "esa cuenta ya no entra al portal del cliente")
+r = admin.post(f"/admin/usuarios/{id_cuenta}/editar",
+               data=datos_usuario(nombre=nombre_libre, correo="portal.nuevo@empresa.com",
+                                  rol=Rol.CLIENTE, cliente_id=str(id_otro)),
+               follow_redirects=True)
+html = r.data.decode()
+check("actualizada" in html and f"{nombre_libre} queda sin acceso al portal." in html,
+      "cambiar de cliente se permite y avisa que el anterior queda sin portal")
+with app.app_context():
+    check(db.session.get(Cliente, id_libre).usuario_id is None
+          and db.session.get(Cliente, id_otro).usuario_id == id_cuenta,
+          "el cliente anterior queda sin cuenta y el nuevo la tiene")
 
 print("\n== 8. Un administrador no puede dejarse sin acceso ==")
 with app.app_context():
@@ -279,14 +299,57 @@ check(b"ya tiene registrada esa direccion" in r.data, "rechaza la sede duplicada
 with app.app_context():
     check(len(db.session.get(Cliente, id_sur).direcciones) == antes + 1, "no se agrego una segunda vez")
 
+print("\n== 12b. Un conductor con rutas sin cerrar no cambia de rol ni se desactiva ==")
+with app.app_context():
+    conductor1 = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").one()
+    id_conductor1 = conductor1.id
+    abiertas = db.session.query(Ruta).filter(
+        Ruta.conductor_id == id_conductor1,
+        Ruta.estado.in_((EstadoRuta.PLANIFICADA, EstadoRuta.EN_CURSO))).count()
+check(abiertas >= 1, f"conductor1 tiene rutas sin cerrar en la demo ({abiertas})")
+datos_c1 = datos_usuario(nombre="Andres Molina", correo="conductor1@sgds.com", rol=Rol.DESPACHADOR)
+html = admin.post(f"/admin/usuarios/{id_conductor1}/editar", data=datos_c1, follow_redirects=True).data.decode()
+check("sin cerrar; elimínelas si no han salido o espere a que se cierren" in html,
+      "cambiarle el rol se rechaza con el motivo")
+html = admin.post(f"/admin/usuarios/{id_conductor1}/alternar-estado", follow_redirects=True).data.decode()
+check("sin cerrar; elimínelas si no han salido o espere a que se cierren" in html,
+      "desactivarlo tambien")
+html = admin.post(f"/admin/usuarios/{id_conductor1}/editar",
+                  data={**datos_c1, "rol": Rol.CONDUCTOR, "activo": ""}, follow_redirects=True).data.decode()
+check("sin cerrar; elimínelas" in html, "ni desde el formulario de edicion")
+with app.app_context():
+    c1 = db.session.get(Usuario, id_conductor1)
+    check(c1.rol == Rol.CONDUCTOR and c1.activo, "sigue siendo conductor y activo")
+
+# Sin rutas abiertas, cambiar de rol libera el vehiculo.
+with app.app_context():
+    vehiculo = Vehiculo(placa="TST999", tipo="Furgon", capacidad_kg=500, capacidad_unidades=100,
+                        conductor_id=id_nuevo_conductor, activo=True)
+    db.session.add(vehiculo)
+    db.session.commit()
+    id_vehiculo = vehiculo.id
+html = admin.post(f"/admin/usuarios/{id_nuevo_conductor}/editar",
+                  data=datos_usuario(nombre="Nuevo Conductor", correo="nuevo.conductor@sgds.com",
+                                     rol=Rol.DESPACHADOR), follow_redirects=True).data.decode()
+with app.app_context():
+    check("actualizada" in html and "El vehículo TST999 queda sin conductor." in html
+          and db.session.get(Vehiculo, id_vehiculo).conductor_id is None
+          and db.session.get(Usuario, id_nuevo_conductor).rol == Rol.DESPACHADOR,
+          "un conductor sin rutas abiertas cambia de rol y su vehiculo queda sin conductor")
+admin.post(f"/admin/usuarios/{id_nuevo_conductor}/editar",
+           data=datos_usuario(nombre="Nuevo Conductor", correo="nuevo.conductor@sgds.com"), follow_redirects=True)
+
 print("\n== 13. Las cuentas no se eliminan, se desactivan ==")
 with app.app_context():
-    conductor = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").one()
+    conductor = db.session.get(Usuario, id_nuevo_conductor)
     id_conductor = conductor.id
+    db.session.add(Ruta(codigo="RUTA-HIST-08", fecha=date(2026, 1, 5), conductor_id=id_conductor,
+                        estado=EstadoRuta.FINALIZADA))
+    db.session.commit()
     rutas_previas = conductor.rutas.count()
 
 r = admin.post(f"/admin/usuarios/{id_conductor}/alternar-estado", follow_redirects=True)
-check(b"desactivada" in r.data, "la cuenta se desactiva")
+check(b"desactivada" in r.data, "la cuenta de un conductor sin rutas abiertas se desactiva")
 with app.app_context():
     db.session.expire_all()
     conductor = db.session.get(Usuario, id_conductor)
@@ -296,20 +359,18 @@ with app.app_context():
           "su historico de rutas se conserva intacto (trazabilidad del RF6)")
 
 r = app.test_client().post("/auth/login",
-                           data={"correo": "conductor1@sgds.com", "contrasena": "Conductor123*"},
+                           data={"correo": "nuevo.conductor@sgds.com", "contrasena": clave_generada},
                            follow_redirects=True)
 check(b"inactiva" in r.data, "el login avisa que la cuenta esta inactiva")
 
 r = admin.post(f"/admin/usuarios/{id_conductor}/alternar-estado", follow_redirects=True)
 check(b"activada" in r.data, "se puede reactivar")
-r = sesion("conductor1@sgds.com", "Conductor123*").get("/conductor/", follow_redirects=True)
+r = sesion("nuevo.conductor@sgds.com", clave_generada).get("/conductor/", follow_redirects=True)
 check(b"Mi ruta" in r.data, "y vuelve a operar con su clave original")
 
 print("\n== 13b. Una sesion abierta pierde acceso al desactivar la cuenta ==")
-with app.app_context():
-    id_conductor1 = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").one().id
-
-sesion_abierta = sesion("conductor1@sgds.com", "Conductor123*")
+id_conductor1 = id_conductor
+sesion_abierta = sesion("nuevo.conductor@sgds.com", clave_generada)
 r = sesion_abierta.get("/conductor/", follow_redirects=True)
 check(b"Mi ruta" in r.data, "la sesion arranca con acceso normal")
 

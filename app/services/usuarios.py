@@ -6,6 +6,14 @@ si mismo, y siempre queda al menos un administrador activo. El correo de
 inicio de sesion y la contrasena solo los maneja el admin en pantalla; por voz
 nunca se dicen ni se aceptan (el asistente no los envia a estas funciones).
 
+Cambio de rol y desactivacion (iguales en pantalla y por voz):
+- Un conductor con rutas sin cerrar (PLANIFICADA o EN_CURSO) no cambia de rol
+  ni se desactiva: la ruta quedaria sin quien la cierre.
+- Un conductor que deja de serlo libera su vehiculo.
+- Una cuenta de cliente no pasa a un rol interno ni al reves: son personas
+  distintas (una externa y otra interna), y se crea otra cuenta. Si cambia a
+  otro cliente disponible, el anterior queda sin acceso al portal.
+
 Ninguna funcion hace commit.
 """
 
@@ -59,6 +67,15 @@ def rutas_abiertas(usuario):
                 Ruta.estado.in_((EstadoRuta.PLANIFICADA, EstadoRuta.EN_CURSO)))
         .scalar()
     )
+
+
+def _rutas_sin_cerrar(usuario, abiertas):
+    return (f"{usuario.nombre} tiene {abiertas} {'ruta' if abiertas == 1 else 'rutas'} sin cerrar; "
+            "elimínelas si no han salido o espere a que se cierren.")
+
+
+CAMBIO_CLIENTE_INTERNO = ("Las cuentas de cliente no cambian a un rol interno ni al revés; "
+                          "cree una cuenta nueva.")
 
 
 def clientes_disponibles(usuario=None):
@@ -121,6 +138,15 @@ def validar_usuario(datos, usuario=None, actor=None):
         elif cliente_id not in {c.id for c in clientes_disponibles(usuario)}:
             v.invalido("cliente_id", "El cliente seleccionado no esta disponible.")
 
+    if usuario is not None and rol in Rol.ETIQUETAS and rol != usuario.rol:
+        if (rol == Rol.CLIENTE) != (usuario.rol == Rol.CLIENTE):
+            v.invalido("rol", CAMBIO_CLIENTE_INTERNO)
+        elif usuario.rol == Rol.CONDUCTOR and (abiertas := rutas_abiertas(usuario)):
+            v.invalido("rol", _rutas_sin_cerrar(usuario, abiertas))
+    if usuario is not None and usuario.activo and not activo and usuario.rol == Rol.CONDUCTOR \
+            and (abiertas := rutas_abiertas(usuario)):
+        v.invalido(None, _rutas_sin_cerrar(usuario, abiertas))
+
     # Protecciones: nadie se quita el acceso a si mismo, y no se queda el
     # sistema sin administradores activos.
     if usuario is not None and actor is not None and usuario.id == actor.id:
@@ -174,25 +200,43 @@ def crear_usuario(datos, actor=None):
     return usuario, generada, cliente
 
 
+def consecuencias_edicion(usuario, limpios):
+    """Frases con lo que arrastra un cambio ya validado, para avisarlo antes.
+
+    "el vehiculo ABC123 queda sin conductor", "Tienda Sur queda sin acceso al
+    portal". La voz las lee en el resumen y la pantalla las muestra al guardar.
+    """
+    frases = []
+    if usuario.rol == Rol.CONDUCTOR and limpios["rol"] != Rol.CONDUCTOR and usuario.vehiculo is not None:
+        frases.append(f"el vehículo {usuario.vehiculo.placa} queda sin conductor")
+    anterior = usuario.cliente
+    if anterior is not None and limpios["rol"] == Rol.CLIENTE and limpios["cliente_id"] != anterior.id:
+        frases.append(f"{anterior.nombre} queda sin acceso al portal")
+    return frases
+
+
 def editar_usuario(usuario, datos, actor=None):
-    """Aplica los cambios. Devuelve ({campo: (antes, despues)}, rutas_abiertas)."""
+    """Aplica los cambios. Devuelve ({campo: (antes, despues)}, consecuencias)."""
     antes = {campo: getattr(usuario, campo) for campo in CAMPOS_USUARIO}
     antes["cliente_id"] = usuario.cliente.id if usuario.cliente is not None else None
     limpios = validar_usuario(datos, usuario, actor)
-    abiertas = rutas_abiertas(usuario) if limpios["rol"] != usuario.rol else 0
+    consecuencias = consecuencias_edicion(usuario, limpios)
     cambios = {campo: (antes[campo], limpios[campo]) for campo in (*CAMPOS_USUARIO, "cliente_id")
                if antes[campo] != limpios[campo]}
+    if usuario.rol == Rol.CONDUCTOR and limpios["rol"] != Rol.CONDUCTOR and usuario.vehiculo is not None:
+        cambios["vehiculo"] = (usuario.vehiculo.placa, None)
+        usuario.vehiculo.conductor_id = None
     for campo in CAMPOS_USUARIO:
         setattr(usuario, campo, limpios[campo])
     if limpios["contrasena"]:
         usuario.establecer_contrasena(limpios["contrasena"])
         cambios["contrasena"] = ("(oculta)", "(cambiada)")
     _vincular_cliente(usuario, limpios["cliente_id"])
-    return cambios, abiertas
+    return cambios, consecuencias
 
 
-def cambiar_estado_usuario(usuario, activo, actor=None):
-    """Activa o desactiva la cuenta. Devuelve las rutas abiertas que deja un conductor."""
+def verificar_cambio_estado(usuario, activo, actor=None):
+    """Lanza DatosInvalidos si la cuenta no puede quedar `activo`. No cambia nada."""
     if usuario.activo == activo:
         raise DatosInvalidos([(None, f"La cuenta de {usuario.nombre} ya está "
                                      f"{'activa' if activo else 'inactiva'}.")])
@@ -200,9 +244,14 @@ def cambiar_estado_usuario(usuario, activo, actor=None):
         raise DatosInvalidos([(None, "No puede desactivar su propia cuenta.")])
     if not activo and usuario.rol == Rol.ADMIN and administradores_activos(usuario.id) == 0:
         raise DatosInvalidos([(None, "Debe quedar al menos un administrador activo en el sistema.")])
-    abiertas = rutas_abiertas(usuario) if not activo else 0
+    if not activo and (abiertas := rutas_abiertas(usuario)):
+        raise DatosInvalidos([(None, _rutas_sin_cerrar(usuario, abiertas))])
+
+
+def cambiar_estado_usuario(usuario, activo, actor=None):
+    """Activa o desactiva la cuenta (ver `verificar_cambio_estado`)."""
+    verificar_cambio_estado(usuario, activo, actor)
     usuario.activo = activo
-    return abiertas
 
 
 def restablecer_contrasena(usuario):

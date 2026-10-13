@@ -20,8 +20,9 @@
 
 {% if rutas_abiertas %}
 <div class="alerta alerta-advertencia">
-  Este conductor tiene {{ rutas_abiertas }} ruta(s) sin cerrar. Si le cambia el rol o
-  desactiva la cuenta, reasignelas primero.
+  Este conductor tiene {{ rutas_abiertas }} ruta(s) sin cerrar: mientras las tenga no se
+  le puede cambiar el rol ni desactivar la cuenta. Elimínelas si no han salido o espere a
+  que se cierren.
 </div>
 {% endif %}
 
