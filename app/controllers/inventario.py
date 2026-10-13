@@ -14,19 +14,41 @@ from wtforms.validators import DataRequired, Length, NumberRange, Optional
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import MovimientoInventario, Producto, Rol, TipoMovimiento
-from app.services.inventario import registrar_movimiento
+from app.services.inventario import (
+    crear_producto, editar_producto, registrar_movimiento, sku_fijo,
+)
+from app.services.validacion import DatosInvalidos
 
 inventario_bp = Blueprint("inventario", __name__)
 
 
 class FormularioProducto(FlaskForm):
-    sku = StringField("SKU", validators=[DataRequired("Indique el SKU."), Length(max=40)])
-    nombre = StringField("Nombre", validators=[DataRequired("Indique el nombre."), Length(max=160)])
-    descripcion = TextAreaField("Descripcion", validators=[Optional(), Length(max=255)])
-    unidad = StringField("Unidad", validators=[Optional(), Length(max=20)], default="UND")
-    stock_actual = IntegerField("Stock actual", validators=[DataRequired(), NumberRange(min=0)], default=0)
-    stock_minimo = IntegerField("Stock minimo", validators=[DataRequired(), NumberRange(min=0)], default=0)
+    # Sin validadores propios: las reglas las aplica app.services.inventario, las
+    # mismas que usa el asistente de voz. En el alta, "stock actual" es el
+    # stock inicial, que entra como ENTRADA.
+    sku = StringField("SKU", validators=[Optional()])
+    nombre = StringField("Nombre", validators=[Optional()])
+    descripcion = TextAreaField("Descripcion", validators=[Optional()])
+    unidad = StringField("Unidad", validators=[Optional()], default="UND")
+    stock_actual = StringField("Stock actual", validators=[Optional()], default="0")
+    stock_minimo = StringField("Stock minimo", validators=[Optional()], default="0")
     activo = BooleanField("Producto activo", default=True)
+
+    def datos(self):
+        return {"sku": self.sku.data, "nombre": self.nombre.data, "descripcion": self.descripcion.data,
+                "unidad": self.unidad.data, "stock_minimo": self.stock_minimo.data,
+                "activo": self.activo.data}
+
+
+def _mostrar_errores(formulario, error):
+    """Ubica cada error del servicio junto a su campo, o como aviso general."""
+    alias = {"stock_inicial": "stock_actual"}
+    for campo, mensaje in error.errores:
+        destino = getattr(formulario, alias.get(campo, campo), None) if campo else None
+        if destino is not None:
+            destino.errors = list(destino.errors) + [mensaje]
+        else:
+            flash(mensaje, "error")
 
 
 class FormularioMovimiento(FlaskForm):
@@ -74,35 +96,19 @@ def nuevo():
     formulario = FormularioProducto()
 
     if formulario.validate_on_submit():
-        sku = formulario.sku.data.strip().upper()
-        if db.session.query(Producto).filter_by(sku=sku).first():
-            formulario.sku.errors = list(formulario.sku.errors) + ["Ya existe un producto con este SKU."]
+        try:
+            producto = crear_producto({**formulario.datos(), "stock_inicial": formulario.stock_actual.data},
+                                      current_user.id)
+        except DatosInvalidos as error:
+            db.session.rollback()
+            _mostrar_errores(formulario, error)
         else:
-            # El producto nace en cero y el stock inicial entra como movimiento,
-            # de modo que todo el stock quede respaldado por su trazabilidad.
-            producto = Producto(
-                sku=sku,
-                nombre=formulario.nombre.data.strip(),
-                descripcion=formulario.descripcion.data or None,
-                unidad=formulario.unidad.data or "UND",
-                stock_actual=0,
-                stock_minimo=formulario.stock_minimo.data,
-                activo=formulario.activo.data,
-            )
-            db.session.add(producto)
-            db.session.flush()
-
-            if formulario.stock_actual.data:
-                registrar_movimiento(
-                    producto, TipoMovimiento.ENTRADA, formulario.stock_actual.data,
-                    current_user.id, motivo="Stock inicial",
-                )
-
             db.session.commit()
             flash(f"Producto {producto.sku} creado.", "exito")
             return redirect(url_for("inventario.lista"))
 
-    return render_template("inventario/formulario.html", formulario=formulario, producto=None)
+    return render_template("inventario/formulario.html", formulario=formulario, producto=None,
+                           sku_fijo=False)
 
 
 @inventario_bp.route("/<int:producto_id>/editar", methods=["GET", "POST"])
@@ -116,34 +122,19 @@ def editar(producto_id):
     formulario = FormularioProducto(obj=producto)
 
     if formulario.validate_on_submit():
-        sku = formulario.sku.data.strip().upper()
-        existente = db.session.query(Producto).filter(
-            Producto.sku == sku, Producto.id != producto.id
-        ).first()
-
-        if existente:
-            formulario.sku.errors = list(formulario.sku.errors) + ["Ya existe otro producto con este SKU."]
+        try:
+            editar_producto(producto, {**formulario.datos(), "stock_actual": formulario.stock_actual.data},
+                            current_user.id)
+        except DatosInvalidos as error:
+            db.session.rollback()
+            _mostrar_errores(formulario, error)
         else:
-            stock_anterior = producto.stock_actual
-
-            producto.sku = sku
-            producto.nombre = formulario.nombre.data.strip()
-            producto.descripcion = formulario.descripcion.data or None
-            producto.unidad = formulario.unidad.data or "UND"
-            producto.stock_minimo = formulario.stock_minimo.data
-            producto.activo = formulario.activo.data
-
-            if formulario.stock_actual.data != stock_anterior:
-                registrar_movimiento(
-                    producto, TipoMovimiento.AJUSTE, formulario.stock_actual.data,
-                    current_user.id, motivo="Ajuste desde edicion del producto",
-                )
-
             db.session.commit()
             flash(f"Producto {producto.sku} actualizado.", "exito")
             return redirect(url_for("inventario.lista"))
 
-    return render_template("inventario/formulario.html", formulario=formulario, producto=producto)
+    return render_template("inventario/formulario.html", formulario=formulario, producto=producto,
+                           sku_fijo=sku_fijo(producto))
 
 
 @inventario_bp.route("/<int:producto_id>", methods=["GET", "POST"])

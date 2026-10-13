@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar vehiculo' if vehiculo else 'Nuevo vehiculo' }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('vehiculos.lista') }}">&lsaquo; Volver a vehiculos</a>
+  <h1 class="titulo-pagina">{{ vehiculo.placa if vehiculo else 'Nuevo vehiculo' }}</h1>
+</div>
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+  <section class="tarjeta">
+    <div class="rejilla-campos">
+      <div class="campo">
+        {{ formulario.placa.label }}
+        {% if vehiculo %}
+          {{ formulario.placa(readonly=True) }}
+          <small class="ayuda-campo">La placa queda fija una vez creado el vehiculo.</small>
+        {% else %}
+          {{ formulario.placa(placeholder="ABC123") }}
+        {% endif %}
+        {% for e in formulario.placa.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      {% for campo in (formulario.tipo, formulario.capacidad_kg, formulario.capacidad_unidades, formulario.conductor_id) %}
+        <div class="campo">
+          {{ campo.label }}
+          {{ campo() }}
+          {% for e in campo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        </div>
+      {% endfor %}
+      <div class="campo campo-ancho">
+        <label class="campo-inline">{{ formulario.activo() }} <span>Vehiculo activo</span></label>
+        {% for e in formulario.activo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">No se puede desactivar un vehiculo que esta en una ruta abierta.</small>
+      </div>
+    </div>
+  </section>
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('vehiculos.lista') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">{{ 'Guardar cambios' if vehiculo else 'Registrar vehiculo' }}</button>
+  </div>
+</form>
+{% endblock %}

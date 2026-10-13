@@ -24,12 +24,17 @@
       </div>
       <div class="campo">
         {{ formulario.documento.label }}
-        {{ formulario.documento(placeholder="900123456-1") }}
+        {% if cliente and cliente.documento %}
+          {{ formulario.documento(readonly=True) }}
+          <small class="ayuda-campo">El NIT queda fijo una vez registrado.</small>
+        {% else %}
+          {{ formulario.documento(placeholder="900123456-1") }}
+          <small class="ayuda-campo">
+            Clave mas confiable que el nombre: identifica al cliente aunque el ERP
+            reescriba la razon social. Una vez registrado, no se puede cambiar.
+          </small>
+        {% endif %}
         {% for e in formulario.documento.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
-        <small class="ayuda-campo">
-          Clave mas confiable que el nombre: identifica al cliente aunque el ERP
-          reescriba la razon social.
-        </small>
       </div>
       <div class="campo">
         {{ formulario.telefono.label }}

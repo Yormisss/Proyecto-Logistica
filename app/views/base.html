@@ -34,6 +34,8 @@
            class="{{ 'activo' if request.endpoint == 'admin.analitica_operacion' }}">Analitica</a>
         <a href="{{ url_for('solicitudes.lista') }}"
            class="{{ 'activo' if request.blueprint == 'solicitudes' }}">Solicitudes</a>
+        <a href="{{ url_for('vehiculos.lista') }}"
+           class="{{ 'activo' if request.blueprint == 'vehiculos' }}">Vehiculos</a>
         {% if current_user.es_admin %}
         <a href="{{ url_for('usuarios.lista') }}"
            class="{{ 'activo' if request.blueprint == 'usuarios' }}">Usuarios</a>

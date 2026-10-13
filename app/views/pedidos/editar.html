@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block titulo %}Editar {{ pedido.codigo }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('pedidos.detalle', pedido_id=pedido.id) }}">&lsaquo; Volver al pedido</a>
+  <h1 class="titulo-pagina">Editar {{ pedido.codigo }}</h1>
+  <p class="subtitulo-pagina">
+    <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
+    &middot; {{ pedido.cliente_nombre }}
+  </p>
+</div>
+
+{% if pedido.estado == EstadoPedido.ASIGNADO %}
+  <div class="alerta alerta-advertencia">
+    El pedido ya esta en una ruta: solo se cambian la ventana, la prioridad y las observaciones.
+    {{ aviso_recalcular }}
+  </div>
+{% endif %}
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+  <section class="tarjeta">
+    <div class="rejilla-campos">
+      {% if 'fecha_despacho' in editables %}
+      <div class="campo">
+        {{ formulario.fecha_despacho.label }}
+        {{ formulario.fecha_despacho(type="date") }}
+        {% for e in formulario.fecha_despacho.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">No puede ser anterior a hoy.</small>
+      </div>
+      {% endif %}
+      {% if 'sede_id' in editables %}
+      <div class="campo campo-ancho">
+        {{ formulario.sede_id.label }}
+        {% if formulario.sede_id.choices %}
+          {{ formulario.sede_id() }}
+          <small class="ayuda-campo">Solo sedes activas del mismo cliente; actualiza la direccion del pedido.</small>
+        {% else %}
+          <p class="vacio">El pedido no tiene un cliente con sedes activas registradas.</p>
+        {% endif %}
+        {% for e in formulario.sede_id.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      {% endif %}
+      <div class="campo">
+        {{ formulario.ventana_inicio.label }}
+        {{ formulario.ventana_inicio(type="time") }}
+      </div>
+      <div class="campo">
+        {{ formulario.ventana_fin.label }}
+        {{ formulario.ventana_fin(type="time") }}
+        {% for e in formulario.ventana_fin.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.prioridad.label }}
+        {{ formulario.prioridad() }}
+        {% for e in formulario.prioridad.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo campo-ancho">
+        {{ formulario.observaciones.label }}
+        {{ formulario.observaciones(rows=2) }}
+        {% for e in formulario.observaciones.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {% if 'items' in editables %}
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Productos</h2>
+    <table class="tabla tabla-items">
+      <thead><tr><th>Producto</th><th style="width:130px">Cantidad</th><th style="width:60px"></th></tr></thead>
+      <tbody id="cuerpo-items"></tbody>
+    </table>
+    <button type="button" class="boton boton-secundario" id="agregar-item">+ Agregar producto</button>
+  </section>
+  {% endif %}
+
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('pedidos.detalle', pedido_id=pedido.id) }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">Guardar cambios</button>
+  </div>
+</form>
+
+{% if 'items' in editables %}
+<template id="plantilla-item">
+  <tr>
+    <td>
+      <select name="producto_id" required>
+        <option value="">Seleccione un producto</option>
+        {% for producto in productos %}
+          <option value="{{ producto.id }}">{{ producto.sku }} — {{ producto.nombre }}</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td><input type="number" name="cantidad" min="1" value="1" required></td>
+    <td><button type="button" class="boton-quitar" title="Quitar">&times;</button></td>
+  </tr>
+</template>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if 'items' in editables %}
+<script>
+(function () {
+  const cuerpo = document.getElementById("cuerpo-items");
+  const plantilla = document.getElementById("plantilla-item");
+  const boton = document.getElementById("agregar-item");
+  if (!cuerpo || !plantilla) return;
+  function agregarFila(productoId, cantidad) {
+    const fila = plantilla.content.cloneNode(true);
+    if (productoId) fila.querySelector("select").value = productoId;
+    if (cantidad) fila.querySelector("input").value = cantidad;
+    fila.querySelector(".boton-quitar").addEventListener("click", function (evento) {
+      const tr = evento.target.closest("tr");
+      if (cuerpo.rows.length > 1) tr.remove();
+    });
+    cuerpo.appendChild(fila);
+  }
+  boton.addEventListener("click", function () { agregarFila(); });
+  const previos = {{ items_enviados|tojson }};
+  if (previos.length) { previos.forEach(function (par) { agregarFila(par[0], par[1]); }); }
+  else { agregarFila(); }
+})();
+</script>
+{% endif %}
+{% endblock %}

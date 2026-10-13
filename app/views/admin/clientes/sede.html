@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Editar sede | {{ nombre_sistema }}{% endblock %}
+
+{% macro campo(f, ancho=False) %}
+  <div class="campo{{ ' campo-ancho' if ancho }}">
+    {{ f.label }}
+    {{ f(**kwargs) }}
+    {% for e in f.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+  </div>
+{% endmacro %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('clientes_admin.detalle', cliente_id=cliente.id) }}">&lsaquo; Volver a {{ cliente.nombre }}</a>
+  <h1 class="titulo-pagina">Sede {{ sede.etiqueta }}</h1>
+  <p class="subtitulo-pagina">Los pedidos ya creados conservan la direccion con la que salieron.</p>
+</div>
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+  <section class="tarjeta">
+    <div class="rejilla-campos">
+      {{ campo(formulario.etiqueta) }}
+      {{ campo(formulario.ciudad) }}
+      {{ campo(formulario.direccion, ancho=True) }}
+      {{ campo(formulario.ventana_inicio, type="time") }}
+      {{ campo(formulario.ventana_fin, type="time") }}
+      {{ campo(formulario.latitud, inputmode="decimal", placeholder="Opcional") }}
+      {{ campo(formulario.longitud, inputmode="decimal", placeholder="Opcional") }}
+    </div>
+  </section>
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('clientes_admin.detalle', cliente_id=cliente.id) }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">Guardar sede</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block titulo %}Vehiculos | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Vehiculos</h1>
+    <p class="subtitulo-pagina">{{ vehiculos|length }} vehiculo(s) &middot; la placa queda fija al crearse</p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-primario" href="{{ url_for('vehiculos.nuevo') }}">Nuevo vehiculo</a>
+  </div>
+</div>
+
+<section class="tarjeta">
+  {% if vehiculos %}
+  <table class="tabla">
+    <thead>
+      <tr><th>Placa</th><th>Tipo</th><th class="derecha">Capacidad</th><th>Conductor</th><th>Estado</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for vehiculo in vehiculos %}
+      <tr>
+        <td class="mono">{{ vehiculo.placa }}</td>
+        <td>{{ vehiculo.tipo }}</td>
+        <td class="derecha">{{ '%.0f'|format(vehiculo.capacidad_kg or 0) }} kg &middot; {{ vehiculo.capacidad_unidades or 0 }} und</td>
+        <td>{{ vehiculo.conductor.nombre if vehiculo.conductor else '—' }}</td>
+        <td>
+          <span class="etiqueta etiqueta-{{ 'entregado' if vehiculo.activo else 'cancelado' }}">
+            {{ 'Activo' if vehiculo.activo else 'Inactivo' }}</span>
+          {% if abiertas[vehiculo.id] %}<small>en {{ abiertas[vehiculo.id] }} ruta(s) abierta(s)</small>{% endif %}
+        </td>
+        <td class="acciones-fila">
+          <a class="enlace-tabla" href="{{ url_for('vehiculos.editar', vehiculo_id=vehiculo.id) }}">Editar</a>
+          <form method="post" action="{{ url_for('vehiculos.alternar', vehiculo_id=vehiculo.id) }}">
+            {{ formulario.hidden_tag() }}
+            <button type="submit" class="boton-enlace">{{ 'Desactivar' if vehiculo.activo else 'Activar' }}</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="vacio">No hay vehiculos registrados.</p>
+  {% endif %}
+</section>
+{% endblock %}

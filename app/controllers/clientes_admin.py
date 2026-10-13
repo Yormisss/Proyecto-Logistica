@@ -15,71 +15,74 @@ from flask import (
 from flask_login import login_required
 from flask_wtf import FlaskForm
 from sqlalchemy import func, or_
-from wtforms import BooleanField, StringField, TimeField
-from wtforms.validators import DataRequired, Email, Length, Optional
+from wtforms import BooleanField, StringField
+from wtforms.validators import Optional
 
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
-from app.models import (
-    Cliente, DireccionCliente, EstadoPedido, Pedido, Rol, normalizar_texto,
+from app.models import Cliente, DireccionCliente, EstadoPedido, Pedido, Rol
+from app.services.clientes import (
+    cambiar_estado_sede, crear_cliente, crear_sede, editar_cliente, editar_sede,
 )
+from app.services.validacion import DatosInvalidos
 
 clientes_admin_bp = Blueprint("clientes_admin", __name__)
 
 
 class FormularioCliente(FlaskForm):
-    nombre = StringField(
-        "Razon social",
-        validators=[DataRequired("Indique el nombre del cliente."), Length(max=160)],
-    )
-    documento = StringField("NIT o documento", validators=[Optional(), Length(max=30)])
-    telefono = StringField("Telefono", validators=[Optional(), Length(max=30)])
-    correo = StringField(
-        "Correo", validators=[Optional(), Email("Correo no valido."), Length(max=120)]
-    )
+    # Sin validadores propios: las reglas las aplica app.services.clientes, las
+    # mismas que usa el asistente de voz.
+    nombre = StringField("Nombre o razon social", validators=[Optional()])
+    documento = StringField("NIT o documento", validators=[Optional()])
+    telefono = StringField("Telefono", validators=[Optional()])
+    correo = StringField("Correo", validators=[Optional()])
     activo = BooleanField("Cliente activo", default=True)
+
+    def datos(self):
+        return {"nombre": self.nombre.data, "documento": self.documento.data,
+                "telefono": self.telefono.data, "correo": self.correo.data, "activo": self.activo.data}
 
 
 class FormularioSede(FlaskForm):
-    etiqueta = StringField("Etiqueta", validators=[Optional(), Length(max=80)])
-    direccion = StringField(
-        "Direccion", validators=[DataRequired("Indique la direccion."), Length(max=255)]
-    )
-    ciudad = StringField("Ciudad", validators=[Optional(), Length(max=80)], default="Bogota")
-    ventana_inicio = TimeField("Ventana desde", validators=[Optional()])
-    ventana_fin = TimeField("Ventana hasta", validators=[Optional()])
+    etiqueta = StringField("Etiqueta", validators=[Optional()])
+    direccion = StringField("Direccion", validators=[Optional()])
+    ciudad = StringField("Ciudad", validators=[Optional()], default="Bogota")
+    latitud = StringField("Latitud", validators=[Optional()])
+    longitud = StringField("Longitud", validators=[Optional()])
+    ventana_inicio = StringField("Ventana desde", validators=[Optional()])
+    ventana_fin = StringField("Ventana hasta", validators=[Optional()])
+
+    def datos(self):
+        return {campo: getattr(self, campo).data for campo in
+                ("etiqueta", "direccion", "ciudad", "latitud", "longitud", "ventana_inicio", "ventana_fin")}
 
 
-def _validar_unicidad(formulario, cliente=None):
-    """El NIT es unico en el esquema; el nombre normalizado solo se advierte."""
-    propio = cliente.id if cliente else None
-    documento = (formulario.documento.data or "").strip()
+class FormularioAccion(FlaskForm):
+    """Solo aporta el token CSRF."""
 
-    if documento:
-        choque = db.session.query(Cliente).filter(Cliente.documento == documento)
-        if propio:
-            choque = choque.filter(Cliente.id != propio)
-        if choque.first():
-            formulario.documento.errors = list(formulario.documento.errors) + [
-                "Ya existe un cliente con este NIT."
-            ]
-            return False
 
-    # Un homonimo con NIT distinto es legitimo, pero casi siempre es un duplicado
-    # por error de escritura: se bloquea el alta cuando no hay NIT que los separe.
-    clave = normalizar_texto(formulario.nombre.data)
-    choque = db.session.query(Cliente).filter(Cliente.nombre_normalizado == clave)
-    if propio:
-        choque = choque.filter(Cliente.id != propio)
-    gemelo = choque.first()
-    if gemelo is not None and not (documento and gemelo.documento):
-        formulario.nombre.errors = list(formulario.nombre.errors) + [
-            f"'{gemelo.nombre}' ya existe y no se distingue de este nombre. "
-            "Indique el NIT de ambos si son empresas distintas."
-        ]
-        return False
+def _mostrar_errores(formulario, error, todo_como_aviso=False):
+    """Ubica cada error del servicio junto a su campo, o como aviso general."""
+    for campo, mensaje in error.errores:
+        destino = getattr(formulario, campo, None) if campo and not todo_como_aviso else None
+        if destino is not None:
+            destino.errors = list(destino.errors) + [mensaje]
+        else:
+            flash(mensaje, "error")
 
-    return True
+
+def _cliente(cliente_id):
+    cliente = db.session.get(Cliente, cliente_id)
+    if cliente is None:
+        abort(404)
+    return cliente
+
+
+def _sede(cliente, sede_id):
+    sede = db.session.get(DireccionCliente, sede_id)
+    if sede is None or sede.cliente_id != cliente.id:
+        abort(404)
+    return sede
 
 
 @clientes_admin_bp.route("/")
@@ -146,18 +149,15 @@ def nuevo():
     """
     formulario = FormularioCliente()
 
-    if formulario.validate_on_submit() and _validar_unicidad(formulario):
-        cliente = Cliente(
-            nombre=formulario.nombre.data.strip(),
-            documento=(formulario.documento.data or "").strip() or None,
-            telefono=(formulario.telefono.data or "").strip() or None,
-            correo=(formulario.correo.data or "").strip() or None,
-            activo=formulario.activo.data,
-        )
-        db.session.add(cliente)
-        db.session.commit()
-        flash(f"Cliente {cliente.nombre} registrado.", "exito")
-        return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
+    if formulario.validate_on_submit():
+        try:
+            cliente = crear_cliente(formulario.datos())
+        except DatosInvalidos as error:
+            _mostrar_errores(formulario, error)
+        else:
+            db.session.commit()
+            flash(f"Cliente {cliente.nombre} registrado.", "exito")
+            return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
 
     return render_template("admin/clientes/formulario.html", formulario=formulario, cliente=None)
 
@@ -166,34 +166,17 @@ def nuevo():
 @login_required
 @requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
 def detalle(cliente_id):
-    cliente = db.session.get(Cliente, cliente_id)
-    if cliente is None:
-        abort(404)
+    cliente = _cliente(cliente_id)
 
     formulario_sede = FormularioSede()
     if formulario_sede.validate_on_submit():
-        direccion = formulario_sede.direccion.data.strip()
-        ciudad = (formulario_sede.ciudad.data or "Bogota").strip()
-        clave = normalizar_texto(direccion)
-
-        duplicada = any(
-            d.direccion_normalizada == clave
-            and normalizar_texto(d.ciudad) == normalizar_texto(ciudad)
-            for d in cliente.direcciones
-        )
-        if duplicada:
-            flash("El cliente ya tiene registrada esa direccion.", "error")
+        try:
+            sede = crear_sede(cliente, formulario_sede.datos())
+        except DatosInvalidos as error:
+            # El formulario de la sede vive dentro de un desplegable: los errores
+            # se muestran como avisos para que no queden ocultos.
+            _mostrar_errores(formulario_sede, error, todo_como_aviso=True)
         else:
-            sede = DireccionCliente(
-                cliente_id=cliente.id,
-                etiqueta=(formulario_sede.etiqueta.data or "").strip()
-                or f"Sede {len(cliente.direcciones) + 1}",
-                direccion=direccion,
-                ciudad=ciudad,
-                ventana_inicio=formulario_sede.ventana_inicio.data,
-                ventana_fin=formulario_sede.ventana_fin.data,
-            )
-            db.session.add(sede)
             db.session.commit()
             flash(f"Sede '{sede.etiqueta}' agregada.", "exito")
             return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
@@ -212,6 +195,7 @@ def detalle(cliente_id):
         pedidos=pedidos,
         total_pedidos=cliente.pedidos.count(),
         formulario_sede=formulario_sede,
+        formulario_accion=FormularioAccion(),
     )
 
 
@@ -219,25 +203,64 @@ def detalle(cliente_id):
 @login_required
 @requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
 def editar(cliente_id):
-    cliente = db.session.get(Cliente, cliente_id)
-    if cliente is None:
-        abort(404)
-
+    cliente = _cliente(cliente_id)
     formulario = FormularioCliente(obj=cliente)
 
-    if formulario.validate_on_submit() and _validar_unicidad(formulario, cliente):
-        # `renombrar` mantiene sincronizada la clave de deduplicacion; asignar
-        # `nombre` a secas la dejaria apuntando al nombre viejo.
-        cliente.renombrar(formulario.nombre.data.strip())
-        cliente.documento = (formulario.documento.data or "").strip() or None
-        cliente.telefono = (formulario.telefono.data or "").strip() or None
-        cliente.correo = (formulario.correo.data or "").strip() or None
-        cliente.activo = formulario.activo.data
-
-        db.session.commit()
-        flash(f"Cliente {cliente.nombre} actualizado.", "exito")
-        return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
+    if formulario.validate_on_submit():
+        try:
+            editar_cliente(cliente, formulario.datos())
+        except DatosInvalidos as error:
+            db.session.rollback()
+            _mostrar_errores(formulario, error)
+        else:
+            db.session.commit()
+            flash(f"Cliente {cliente.nombre} actualizado.", "exito")
+            return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
 
     return render_template(
         "admin/clientes/formulario.html", formulario=formulario, cliente=cliente
     )
+
+
+@clientes_admin_bp.route("/<int:cliente_id>/sedes/<int:sede_id>/editar", methods=["GET", "POST"])
+@login_required
+@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+def editar_sede_vista(cliente_id, sede_id):
+    cliente = _cliente(cliente_id)
+    sede = _sede(cliente, sede_id)
+    formulario = FormularioSede(obj=sede)
+    if formulario.validate_on_submit():
+        try:
+            editar_sede(sede, formulario.datos())
+        except DatosInvalidos as error:
+            db.session.rollback()
+            _mostrar_errores(formulario, error)
+        else:
+            db.session.commit()
+            flash(f"Sede '{sede.etiqueta}' actualizada. Los pedidos ya creados conservan su "
+                  "direccion.", "exito")
+            return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
+    elif not formulario.is_submitted():
+        formulario.ventana_inicio.data = sede.ventana_inicio.strftime("%H:%M") if sede.ventana_inicio else ""
+        formulario.ventana_fin.data = sede.ventana_fin.strftime("%H:%M") if sede.ventana_fin else ""
+    return render_template("admin/clientes/sede.html", formulario=formulario, cliente=cliente, sede=sede)
+
+
+@clientes_admin_bp.route("/<int:cliente_id>/sedes/<int:sede_id>/estado", methods=["POST"])
+@login_required
+@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+def alternar_sede(cliente_id, sede_id):
+    cliente = _cliente(cliente_id)
+    sede = _sede(cliente, sede_id)
+    if not FormularioAccion().validate_on_submit():
+        flash("Solicitud invalida. Intente nuevamente.", "error")
+        return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
+    try:
+        cambiar_estado_sede(sede, not sede.activa)
+    except DatosInvalidos as error:
+        flash(str(error), "error")
+        return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
+    db.session.commit()
+    flash(f"Sede '{sede.etiqueta}' " + ("activada." if sede.activa else
+          "desactivada: no se ofrece para pedidos nuevos."), "exito")
+    return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))

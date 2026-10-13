@@ -57,7 +57,7 @@
       <h2 class="tarjeta-titulo">Sedes de entrega</h2>
       {% if cliente.direcciones %}
       <table class="tabla">
-        <thead><tr><th>Etiqueta</th><th>Direccion</th><th>Ventana</th><th>Coordenadas</th></tr></thead>
+        <thead><tr><th>Etiqueta</th><th>Direccion</th><th>Ventana</th><th>Coordenadas</th><th>Estado</th><th></th></tr></thead>
         <tbody>
         {% for sede in cliente.direcciones %}
           <tr>
@@ -72,6 +72,17 @@
               {% if sede.tiene_coordenadas %}
                 <span class="mono">{{ '%.4f'|format(sede.latitud) }}, {{ '%.4f'|format(sede.longitud) }}</span>
               {% else %}<span class="aviso-inline">Sin geolocalizar</span>{% endif %}
+            </td>
+            <td>
+              <span class="etiqueta etiqueta-{{ 'entregado' if sede.activa else 'cancelado' }}">
+                {{ 'Activa' if sede.activa else 'Desactivada' }}</span>
+            </td>
+            <td class="acciones-fila">
+              <a class="enlace-tabla" href="{{ url_for('clientes_admin.editar_sede_vista', cliente_id=cliente.id, sede_id=sede.id) }}">Editar</a>
+              <form method="post" action="{{ url_for('clientes_admin.alternar_sede', cliente_id=cliente.id, sede_id=sede.id) }}">
+                {{ formulario_accion.hidden_tag() }}
+                <button type="submit" class="boton-enlace">{{ 'Desactivar' if sede.activa else 'Activar' }}</button>
+              </form>
             </td>
           </tr>
         {% endfor %}
@@ -101,11 +112,19 @@
             </div>
             <div class="campo">
               {{ formulario_sede.ventana_inicio.label }}
-              {{ formulario_sede.ventana_inicio() }}
+              {{ formulario_sede.ventana_inicio(type="time") }}
             </div>
             <div class="campo">
               {{ formulario_sede.ventana_fin.label }}
-              {{ formulario_sede.ventana_fin() }}
+              {{ formulario_sede.ventana_fin(type="time") }}
+            </div>
+            <div class="campo">
+              {{ formulario_sede.latitud.label }}
+              {{ formulario_sede.latitud(inputmode="decimal", placeholder="Opcional") }}
+            </div>
+            <div class="campo">
+              {{ formulario_sede.longitud.label }}
+              {{ formulario_sede.longitud(inputmode="decimal", placeholder="Opcional") }}
             </div>
           </div>
           <div class="acciones-formulario">
@@ -113,8 +132,9 @@
           </div>
         </form>
         <p class="nota-pie">
-          Las coordenadas se toman del primer pedido geolocalizado que use la sede;
-          sin ellas el pedido queda al final del trazado automatico.
+          Las coordenadas son opcionales; si no se registran, se toman del primer pedido
+          geolocalizado que use la sede. Sin ellas el pedido queda al final del trazado
+          automatico.
         </p>
       </details>
     </section>

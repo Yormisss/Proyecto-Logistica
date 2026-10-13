@@ -12,6 +12,9 @@
   </div>
   <div class="acciones-encabezado">
     <a class="boton boton-plano" href="{{ url_for('pedidos.lista') }}">Volver</a>
+    {% if editable %}
+    <a class="boton boton-secundario" href="{{ url_for('pedidos.editar', pedido_id=pedido.id) }}">Editar</a>
+    {% endif %}
     {% if pedido.estado in (EstadoPedido.PENDIENTE, EstadoPedido.ASIGNADO, EstadoPedido.FALLIDO) %}
     <form method="post" action="{{ url_for('pedidos.anular', pedido_id=pedido.id) }}"
           class="formulario-anular"

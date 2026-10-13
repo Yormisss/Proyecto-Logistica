@@ -13,7 +13,13 @@
     <div class="rejilla-campos">
       <div class="campo">
         {{ formulario.sku.label }}
-        {{ formulario.sku(placeholder="SKU-1007") }}
+        {% if sku_fijo %}
+          {{ formulario.sku(readonly=True) }}
+          <small class="ayuda-campo">El SKU queda fijo porque el producto ya tiene movimientos de inventario.</small>
+        {% else %}
+          {{ formulario.sku(placeholder="SKU-1007") }}
+          <small class="ayuda-campo">Con stock inicial o con cualquier movimiento, el SKU queda fijo.</small>
+        {% endif %}
         {% for e in formulario.sku.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
       </div>
       <div class="campo">
