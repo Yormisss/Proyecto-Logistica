@@ -32,6 +32,7 @@ SUITES = [
     ("prueba_14_reglas_pantalla.py", "RF1/RF2/RF3 · Reglas de pantalla en servicios"),
     ("prueba_15_auditoria.py", "RF1/RF4 · Auditoria, bitacora y eventos"),
     ("prueba_16_cobertura_voz.py", "RF4 · Cobertura por voz de la pantalla"),
+    ("prueba_17_voz_fase3.py", "RF1/RF4 · Voz: maestros, rutas, usuarios y config."),
 ]
 
 

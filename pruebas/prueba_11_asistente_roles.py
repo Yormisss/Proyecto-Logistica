@@ -392,8 +392,8 @@ rechazos = [
      "una sede que no es del cliente"),
     ({**pedido_voz, "productos": [{"producto": "galletas", "cantidad": 1}]}, "No encontré el producto galletas",
      "un producto inexistente"),
-    ({**pedido_voz, "cliente": "Ferreteria Nueva"}, "solo se crean pedidos para clientes registrados",
-     "un cliente que no existe"),
+    ({**pedido_voz, "cliente": "Ferreteria Nueva"}, "¿Quieres que lo registre ahora? Después retomamos el pedido",
+     "un cliente que no existe (y ofrece registrarlo)"),
     ({**pedido_voz, "productos": [{"producto": "arroz", "cantidad": 0}]}, "entero mayor que cero", "cantidad cero"),
     ({**pedido_voz, "productos": [{"producto": "arroz", "cantidad": 2.5}]}, "entero mayor que cero",
      "cantidad no entera"),
@@ -454,21 +454,27 @@ with app.app_context():
 
 print("\n== 8. Gestor: demas acciones ==")
 # Prioridad
-s = accion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": codigo_voz, "prioridad": 1})
-check("prioridad alta" in mensaje(s), f"cambiar-prioridad: {mensaje(s)}")
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": codigo_voz, "prioridad": 1})
+check("la prioridad de media a alta" in mensaje(s) and mensaje(s).endswith("¿confirmas?"),
+      f"editar la prioridad resume antes: {mensaje(s)}")
+s = funcion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": codigo_voz, "prioridad": 1,
+                                       "confirmar": True})
+check(mensaje(s) == f"Listo, actualicé el pedido {codigo_voz}.", f"y con confirmar la cambia: {mensaje(s)}")
 with app.app_context():
     p = db.session.get(Pedido, pid_voz)
     ultimo = sorted(p.eventos, key=lambda e: e.id)[-1]
     check(p.prioridad == 1 and ultimo.estado_anterior == ultimo.estado_nuevo == EstadoPedido.PENDIENTE
-          and "media a alta" in ultimo.nota and NOTA in ultimo.nota, "queda en la bitacora sin cambio de estado")
+          and "prioridad: media -> alta" in ultimo.nota and NOTA in ultimo.nota,
+          "queda en la bitacora sin cambio de estado")
 html = clientes_web[Rol.CLIENTE].get(f"/portal/pedido/{pid_voz}").data.decode()
 linea = re.search(r'<ol class="linea-tiempo">(.*?)</ol>', html, re.S)
 check(linea is not None and linea.group(1).count("<li>") == 1 and "Prioridad cambiada" not in html,
       "el portal del cliente no muestra el cambio de prioridad como hito")
 s = accion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": f"PED-{D}-003", "prioridad": 1})
-check("pendientes o asignados" in mensaje(s), "no se cambia la prioridad de un pedido en ruta")
+check("solo se editan los pendientes y los asignados" in mensaje(s), "no se edita un pedido en ruta")
 s = accion("gestor/pedidos", CALL_G, {"operacion": "editar", "pedido": codigo_voz, "prioridad": 5})
-check("debe ser 1" in mensaje(s), "prioridad fuera de 1 a 3")
+check("La prioridad debe estar" in mensaje(s) and not mensaje(s).endswith("¿confirmas?"),
+      f"prioridad fuera de 1 a 3: {mensaje(s)}")
 
 # Agregar a ruta (OSRM sin red: respaldo local)
 with app.app_context():
@@ -476,7 +482,8 @@ with app.app_context():
     c3.establecer_contrasena("Conductor123*")
     db.session.add(c3); db.session.commit()
 s = accion("gestor/rutas", CALL_G, {"operacion": "agregar-parada", "pedido": codigo_voz, "conductor": "sergio"})
-check("no tiene ruta hoy" in mensaje(s) and "pantalla" in mensaje(s), "un conductor sin ruta: se crea en pantalla")
+check("no tiene ruta hoy" in mensaje(s) and "¿Quieres que le cree una" in mensaje(s),
+      "un conductor sin ruta: ofrece crearle una")
 s = funcion("gestor/rutas", CALL_G, {"operacion": "agregar-parada", "pedido": codigo_voz, "conductor": "diego"})
 check(mensaje(s) == f"Voy a agregar el pedido {codigo_voz} de Supermercado El Portal a la ruta RUT-ROLES-01 "
       "de Diego Pardo y recalcular la secuencia. ¿confirmas?", "agregar-a-ruta resume antes")
@@ -659,8 +666,11 @@ check(len(stock_bajo) == 1 and stock_bajo[0]["sku"] == "SKU-1001" and stock_bajo
       "al cruzar el minimo envia el mismo aviso stock_bajo que la pantalla")
 
 nombres = [f"{f.espacio}/{f.nombre}" for f in FUNCIONES.values()]
-check(not [n for n in nombres if re.search(r"usuario|rol|contrasena|clave|activar|cuenta", n)],
-      "no hay ninguna funcion de voz sobre usuarios, roles, contrasenas o cuentas")
+check([n for n in nombres if re.search(r"usuario|contrasena|cuenta", n)] == ["admin/usuarios"]
+      and FUNCIONES[("admin", "usuarios")].roles == (Rol.ADMIN,),
+      "las cuentas solo se administran por voz con admin/usuarios, solo para el administrador")
+check(not any("contrasena" in p for f in FUNCIONES.values() for p in f.parametros),
+      "ninguna funcion recibe una contrasena")
 check(not any(f.espacio == "admin" and Rol.DESPACHADOR in f.roles for f in FUNCIONES.values()),
       "ninguna funcion del espacio admin admite al gestor")
 

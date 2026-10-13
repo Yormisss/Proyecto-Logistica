@@ -81,6 +81,45 @@ def me_falta(etiquetas):
     return f"Me falta{'n' if plural else ''} {enumerar(etiquetas)}."
 
 
+def dichos(*campos):
+    """{campo: valor} de los argumentos que el usuario dijo; los vacios no cuentan.
+
+    Las ediciones por voz son parciales: solo cambia lo que se dijo.
+    """
+    return {campo: g.argumentos[campo] for campo in campos
+            if g.argumentos.get(campo) not in (None, "")}
+
+
+def valor_leido(valor):
+    """Un valor para leerlo en voz alta en un resumen."""
+    if valor is None or valor == "":
+        return "sin dato"
+    if isinstance(valor, bool):
+        return "sí" if valor else "no"
+    if isinstance(valor, date):
+        return fecha_larga(valor)
+    if hasattr(valor, "strftime"):            # hora de una ventana
+        return valor.strftime("%H:%M")
+    if isinstance(valor, float):
+        # Hasta 7 decimales: una coordenada no pierde precision (4.6482837).
+        return f"{valor:.7f}".rstrip("0").rstrip(".").replace(".", ",")
+    return str(valor)
+
+
+def leer_cambios(cambios, etiquetas):
+    """"el teléfono de sin dato a 3001234567 y el correo de a@b.co a c@d.co"."""
+    return enumerar([
+        f"{etiquetas.get(campo, campo.replace('_', ' '))} de {valor_leido(antes)} a {valor_leido(despues)}"
+        for campo, (antes, despues) in cambios.items()
+    ])
+
+
+def diferencias(actuales, limpios, campos):
+    """{campo: (antes, despues)} de los `campos` que cambian."""
+    return {campo: (actuales.get(campo), limpios.get(campo)) for campo in campos
+            if actuales.get(campo) != limpios.get(campo)}
+
+
 def frase_datos_invalidos(error):
     """Lo que falta y lo que no es valido de un DatosInvalidos, para leer en voz alta.
 

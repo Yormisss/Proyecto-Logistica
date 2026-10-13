@@ -19,27 +19,34 @@ from app.controllers.asistente_api import (
     NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_agrupada, funcion_asistente, responder,
 )
 from app.controllers.asistente_api.comun import (
-    LARGO_MAXIMO_MOTIVO, entero, enumerar, fecha_iso, fecha_larga, fecha_voz, me_falta, pedido_texto,
-    porcentaje, resolver, texto,
+    LARGO_MAXIMO_MOTIVO, dichos, entero, enumerar, fecha_iso, fecha_larga, fecha_voz,
+    frase_datos_invalidos, me_falta, pedido_texto, porcentaje, resolver, texto, valor_leido,
 )
 from app.extensions import db
-from app.models import EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, TipoMovimiento
+from app.models import (
+    DireccionCliente, EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, TipoMovimiento, normalizar_texto,
+)
 from app.services import analitica
 from app.services.busqueda_voz import (
-    buscar_clientes, buscar_conductores, buscar_pedidos, buscar_productos, buscar_sedes,
+    buscar_clientes, buscar_conductores, buscar_pedidos, buscar_productos, buscar_rutas, buscar_sedes,
+    buscar_vehiculos,
 )
 from app.services.despacho import (
-    PRIORIDADES, TransicionInvalida, anular_pedido, cambiar_prioridad, reintentar_entrega,
-    ruta_del_dia, ruta_finalizada_del_dia, validar_transicion, verificar_anulacion,
-    verificar_cambio_prioridad, verificar_reintento,
+    PRIORIDADES, TransicionInvalida, anular_pedido, reintentar_entrega, ruta_del_dia,
+    ruta_finalizada_del_dia, validar_transicion, verificar_anulacion, verificar_reintento,
 )
 from app.services.inventario import registrar_movimiento
 from app.services.pedidos import (
-    PRIORIDAD_POR_DEFECTO, PedidoInvalido, crear_pedido, destino_de_sede, validar_pedido,
+    PRIORIDAD_POR_DEFECTO, PedidoInvalido, campos_editables, crear_pedido, destino_de_sede,
+    editar_pedido, validar_edicion, validar_pedido,
 )
 from app.services.planificacion import (
-    PlanificacionInvalida, agregar_a_ruta, verificar_agregar_a_ruta,
+    PlanificacionInvalida, agregar_a_ruta, crear_ruta, eliminar_ruta, quitar_parada,
+    recalcular_secuencia, validar_ruta, verificar_agregar_a_ruta, verificar_eliminar_ruta,
+    verificar_quitar_parada,
 )
+from app.services.ruteo import ESTRATEGIA_DISTANCIA, ESTRATEGIA_VENTANA, ESTRATEGIAS
+from app.services.validacion import DatosInvalidos
 from app.services.solicitudes import pendientes as pendientes_de_contacto
 from app.tiempo import hoy
 
@@ -75,6 +82,36 @@ def _producto(solo_activos=True):
     return resolver(buscar_productos(buscado, solo_activos=solo_activos),
                     lambda p: f"{p.sku}, {p.nombre}", "productos",
                     f"No encontré el producto {buscado}.")
+
+
+def _sede_texto(sede):
+    return f"{sede.etiqueta}, en {sede.direccion}"
+
+
+def _leer_productos(lineas):
+    """(items, lo que se lee, error) de la lista de productos dicha por voz.
+
+    `items` es [(producto_id, cantidad)], como lo esperan los servicios.
+    """
+    items, leidos = [], []
+    for linea in lineas:
+        if not isinstance(linea, dict):
+            return None, None, "No entendí la lista de productos."
+        nombre = str(linea.get("producto") or "").strip()
+        unidades = entero(linea.get("cantidad"))
+        if not nombre:
+            return None, None, "Falta el nombre de uno de los productos."
+        if unidades is None or unidades <= 0:
+            return None, None, f"La cantidad de {nombre} debe ser un número entero mayor que cero."
+        producto, error = resolver(
+            buscar_productos(nombre), lambda p: f"{p.sku}, {p.nombre}",
+            f"productos para {nombre}", f"No encontré el producto {nombre}.",
+        )
+        if producto is None:
+            return None, None, error
+        items.append((producto.id, unidades))
+        leidos.append(f"{unidades} de {producto.nombre}")
+    return items, leidos, None
 
 
 def _prioridad_texto(prioridad):
@@ -305,11 +342,12 @@ pedidos = funcion_agrupada(
         **PARAMETRO_PEDIDO,
         "cliente": {"type": "string", "description": "crear: nombre del cliente registrado."},
         "sede": {"type": "string",
-                 "description": "crear: etiqueta o direccion de la sede. Opcional si el cliente "
-                                "tiene una sola."},
+                 "description": "crear y editar: etiqueta o direccion de la sede. Al crear, "
+                                "opcional si el cliente tiene una sola."},
         "productos": {
             "type": "array",
-            "description": "crear: productos del pedido.",
+            "description": "crear: productos del pedido. editar: la lista completa nueva, que "
+                           "reemplaza la anterior.",
             "items": {
                 "type": "object",
                 "properties": {
@@ -320,10 +358,14 @@ pedidos = funcion_agrupada(
             },
         },
         "fecha": {"type": "string",
-                  "description": "crear: fecha de despacho AAAA-MM-DD. Por defecto, hoy."},
+                  "description": "crear y editar: fecha de despacho AAAA-MM-DD, no anterior a hoy. "
+                                 "Al crear, por defecto hoy."},
         "prioridad": {"type": "integer",
                       "description": "crear y editar: 1 alta, 2 media, 3 baja (por defecto al "
                                      "crear)."},
+        "ventana_inicio": {"type": "string", "description": "editar: inicio de la ventana, HH:MM."},
+        "ventana_fin": {"type": "string", "description": "editar: fin de la ventana, HH:MM."},
+        "observaciones": {"type": "string", "description": "editar: observaciones del pedido."},
         "motivo": {"type": "string", "description": "anular: motivo de la anulacion."},
     },
 )
@@ -342,44 +384,28 @@ def crear_pedido_voz():
         return responder(me_falta(faltan))
     cliente, error = resolver(
         buscar_clientes(nombre_cliente), lambda c: c.nombre, "clientes",
-        f"No encontré el cliente {nombre_cliente}. Por voz solo se crean pedidos para "
-        "clientes registrados.",
+        f"No encontré el cliente {nombre_cliente}: los pedidos se crean para clientes registrados. "
+        "¿Quieres que lo registre ahora? Después retomamos el pedido con lo que ya me dijiste.",
     )
     if cliente is None:
         return responder(error)
 
-    def sede_texto(s):
-        return f"{s.etiqueta}, en {s.direccion}"
-
     sedes = buscar_sedes(cliente, texto("sede"))
     if sedes.vacio and not [s for s in cliente.direcciones if s.activa]:
-        return responder(f"{cliente.nombre} no tiene sedes registradas; regístrela en pantalla.")
+        return responder(f"{cliente.nombre} no tiene sedes registradas. ¿Quieres que le agregue una? "
+                         "Después retomamos el pedido.")
     sede, error = resolver(
-        sedes, sede_texto, f"sedes de {cliente.nombre}",
+        sedes, _sede_texto, f"sedes de {cliente.nombre}",
         f"No encontré esa sede de {cliente.nombre}. Sus sedes son: "
-        + enumerar([sede_texto(s) for s in cliente.direcciones if s.activa]) + ".",
+        + enumerar([_sede_texto(s) for s in cliente.direcciones if s.activa])
+        + ". Si es una sede nueva, puedo agregarla.",
     )
     if sede is None:
         return responder(error)
 
-    items, leidos = [], []
-    for linea in lineas:
-        if not isinstance(linea, dict):
-            return responder("No entendí la lista de productos.")
-        nombre = str(linea.get("producto") or "").strip()
-        unidades = entero(linea.get("cantidad"))
-        if not nombre:
-            return responder("Falta el nombre de uno de los productos.")
-        if unidades is None or unidades <= 0:
-            return responder(f"La cantidad de {nombre} debe ser un número entero mayor que cero.")
-        producto, error = resolver(
-            buscar_productos(nombre), lambda p: f"{p.sku}, {p.nombre}",
-            f"productos para {nombre}", f"No encontré el producto {nombre}.",
-        )
-        if producto is None:
-            return responder(error)
-        items.append((producto.id, unidades))
-        leidos.append(f"{unidades} de {producto.nombre}")
+    items, leidos, error = _leer_productos(lineas)
+    if error:
+        return responder(error)
 
     fecha = fecha_iso(g.argumentos.get("fecha"), hoy())
     if fecha is None:
@@ -402,7 +428,7 @@ def crear_pedido_voz():
         return responder("No puedo crear el pedido: " + " ".join(m for _, m in errores))
 
     pendiente = exigir_confirmacion(
-        f"Voy a crear un pedido para {cliente.nombre}, sede {sede_texto(sede)}, para el "
+        f"Voy a crear un pedido para {cliente.nombre}, sede {_sede_texto(sede)}, para el "
         f"{fecha_larga(fecha)} con prioridad {_prioridad_texto(prioridad)}: "
         f"{enumerar(leidos)}."
     )
@@ -558,44 +584,362 @@ def ajustar_inventario():
     return responder(f"Listo, el stock de {producto.sku} quedó en {valor}.")
 
 
+QUE_SE_EDITA = {
+    EstadoPedido.PENDIENTE: "la fecha, la sede, la ventana, la prioridad, las observaciones o los productos",
+    EstadoPedido.ASIGNADO: "la ventana, la prioridad o las observaciones",
+}
+
+
+def _datos_edicion(pedido):
+    """(datos para validar_edicion, productos leidos, error) de lo que se dijo."""
+    datos, leidos = {}, None
+    if g.argumentos.get("fecha") not in (None, ""):
+        fecha = fecha_iso(g.argumentos.get("fecha"), None)
+        if fecha is None:
+            return None, None, "No entendí la fecha; dímela como año, mes y día."
+        datos["fecha_despacho"] = fecha
+    if texto("sede"):
+        if pedido.cliente is None:
+            return None, None, "El pedido no tiene un cliente registrado; su sede no se puede cambiar."
+        sede, error = resolver(buscar_sedes(pedido.cliente, texto("sede")), _sede_texto,
+                               f"sedes de {pedido.cliente.nombre}",
+                               f"No encontré esa sede de {pedido.cliente.nombre}.")
+        if sede is None:
+            return None, None, error
+        datos["sede_id"] = sede.id
+    ventana = dichos("ventana_inicio", "ventana_fin")
+    if ventana:
+        # Si se dijo solo un extremo, el otro se conserva.
+        datos["ventana_inicio"] = ventana.get(
+            "ventana_inicio", pedido.ventana_inicio.strftime("%H:%M") if pedido.ventana_inicio else "")
+        datos["ventana_fin"] = ventana.get(
+            "ventana_fin", pedido.ventana_fin.strftime("%H:%M") if pedido.ventana_fin else "")
+    if g.argumentos.get("prioridad") not in (None, ""):
+        datos["prioridad"] = g.argumentos.get("prioridad")
+    if g.argumentos.get("observaciones") is not None:
+        datos["observaciones"] = texto("observaciones")
+    lineas = g.argumentos.get("productos")
+    if isinstance(lineas, list) and lineas:
+        datos["items"], leidos, error = _leer_productos(lineas)
+        if error:
+            return None, None, error
+    return datos, leidos, None
+
+
+def _leer_edicion(pedido, cambios, leidos):
+    partes = []
+    for campo, (antes, despues) in cambios.items():
+        if campo == "fecha_despacho":
+            partes.append(f"la fecha del {fecha_larga(antes)} al {fecha_larga(despues)}")
+        elif campo == "sede_id":
+            nueva = db.session.get(DireccionCliente, despues)
+            partes.append(f"la sede a {_sede_texto(nueva)}")
+        elif campo in ("ventana_inicio", "ventana_fin"):
+            continue
+        elif campo == "prioridad":
+            partes.append(f"la prioridad de {_prioridad_texto(antes)} a {_prioridad_texto(despues)}")
+        elif campo == "observaciones":
+            partes.append(f"las observaciones a «{despues}»" if despues else "quitar las observaciones")
+        elif campo == "items":
+            partes.append(f"los productos a {enumerar(leidos)}")
+    if "ventana_inicio" in cambios or "ventana_fin" in cambios:
+        inicio = cambios.get("ventana_inicio", (None, pedido.ventana_inicio))[1]
+        fin = cambios.get("ventana_fin", (None, pedido.ventana_fin))[1]
+        partes.append(f"la ventana a {inicio.strftime('%H:%M')} - {fin.strftime('%H:%M')}"
+                      if inicio and fin else "quitar la ventana horaria")
+    return enumerar(partes)
+
+
 @pedidos("editar", "Editar pedido",
-         "cambia la prioridad de un pedido pendiente o asignado; requiere pedido y prioridad")
+         "edita un pedido: PENDIENTE (fecha, sede del mismo cliente, ventana, prioridad, "
+         "observaciones y productos) o ASIGNADO (solo ventana, prioridad y observaciones); "
+         "requiere pedido")
 def editar_pedido_voz():
     pedido, error = _pedido()
     if pedido is None:
         return responder(error)
-    prioridad = entero(g.argumentos.get("prioridad"))
+    if not campos_editables(pedido):
+        return responder(f"El pedido {pedido.codigo} está {pedido.estado_etiqueta.lower()} y no se puede "
+                         "editar; solo se editan los pendientes y los asignados.")
+    datos, leidos, error = _datos_edicion(pedido)
+    if error:
+        return responder(error)
+    if not datos:
+        return responder(f"¿Qué quieres cambiar del pedido {pedido.codigo}? Puedo cambiar "
+                         f"{QUE_SE_EDITA[pedido.estado]}.")
     try:
-        verificar_cambio_prioridad(pedido, prioridad)
-    except TransicionInvalida as causa:
-        return responder(f"No puedo cambiar la prioridad del pedido {pedido.codigo}. {causa}")
+        cambios, _ = validar_edicion(pedido, datos)
+    except DatosInvalidos as error:
+        return responder(frase_datos_invalidos(error))
 
+    aviso = ""
+    if pedido.estado == EstadoPedido.ASIGNADO and pedido.ruta is not None:
+        aviso = (f" El pedido ya está en la ruta {pedido.ruta.codigo}: después conviene recalcularla "
+                 "para que la secuencia tenga en cuenta el cambio.")
     pendiente = exigir_confirmacion(
-        f"Voy a cambiar la prioridad del pedido {pedido_texto(pedido)} de "
-        f"{_prioridad_texto(pedido.prioridad)} a {_prioridad_texto(prioridad)}."
+        f"Voy a cambiar en el pedido {pedido_texto(pedido)} {_leer_edicion(pedido, cambios, leidos)}.{aviso}"
     )
     if pendiente:
         return pendiente
 
     try:
-        cambiar_prioridad(pedido, prioridad, g.usuario.id, origen=NOTA_ASISTENTE)
-    except TransicionInvalida as causa:
+        editar_pedido(pedido, datos, g.usuario.id, origen=NOTA_ASISTENTE)
+    except DatosInvalidos as error:
         db.session.rollback()
-        return responder(f"No pude cambiar la prioridad. {causa}")
+        return responder(frase_datos_invalidos(error))
     db.session.commit()
-    return responder(
-        f"Listo, el pedido {pedido.codigo} quedó con prioridad {_prioridad_texto(prioridad)}."
-    )
+    return responder(f"Listo, actualicé el pedido {pedido.codigo}."
+                     + (" ¿Recalculo la ruta?" if aviso else ""))
 
 
 rutas = funcion_agrupada(
     ESPACIO, "rutas", roles=ROLES, entidad="ruta",
     descripcion="Rutas de reparto. Para el avance de las rutas de hoy usa avance-rutas.",
     parametros={
+        "ruta": {"type": "string",
+                 "description": "consultar, quitar-parada, recalcular, eliminar: codigo de la ruta o "
+                                "nombre de su conductor (su ruta de la fecha)."},
         **PARAMETRO_PEDIDO,
-        "conductor": {"type": "string", "description": "agregar-parada: nombre del conductor."},
+        "conductor": {"type": "string", "description": "crear y agregar-parada: nombre del conductor."},
+        "fecha": {"type": "string",
+                  "description": "crear: fecha AAAA-MM-DD (por defecto hoy). consultar y demas: la "
+                                 "fecha de la ruta del conductor (por defecto hoy)."},
+        "vehiculo": {"type": "string", "description": "crear: placa del vehiculo (opcional)."},
+        "criterio": {"type": "string", "enum": ["distancia", "ventana"],
+                     "description": "crear y recalcular: 'distancia' (por defecto, optimiza la "
+                                    "distancia total) o 'ventana' (respeta las ventanas horarias)."},
+        "pedidos": {"type": "array", "items": {"type": "string"},
+                    "description": "crear: codigos o clientes de los pedidos pendientes de la fecha."},
+        "todos_los_pendientes": {"type": "boolean",
+                                 "description": "crear: true para incluir todos los pedidos pendientes "
+                                                "sin ruta de la fecha."},
     },
 )
+
+CRITERIOS = {"distancia": ESTRATEGIA_DISTANCIA, "ventana": ESTRATEGIA_VENTANA}
+
+
+def _criterio():
+    """(estrategia, error). Por defecto, distancia, como en pantalla."""
+    dicho = normalizar_texto(texto("criterio"))
+    if not dicho:
+        return ESTRATEGIA_DISTANCIA, None
+    for clave, estrategia in CRITERIOS.items():
+        if clave in dicho:
+            return estrategia, None
+    return None, "El criterio debe ser distancia o ventana horaria."
+
+
+def _criterio_texto(estrategia):
+    return ESTRATEGIAS[estrategia].replace(" (recomendada)", "").lower()
+
+
+def _fecha_dicha():
+    return fecha_iso(g.argumentos.get("fecha"), hoy())
+
+
+def _ruta():
+    buscado = texto("ruta")
+    if not buscado:
+        return None, me_falta(["la ruta (su código o el nombre del conductor)"])
+    fecha = _fecha_dicha()
+    if fecha is None:
+        return None, "No entendí la fecha; dímela como año, mes y día."
+    return resolver(buscar_rutas(buscado, fecha),
+                    lambda r: f"{r.codigo} de {r.conductor.nombre}, del {fecha_voz(r.fecha)}", "rutas",
+                    f"No encontré una ruta para {buscado}.")
+
+
+@rutas("consultar", "Consultar ruta",
+       "conductor, vehiculo, estado y paradas en orden de una ruta; requiere ruta", modifica=False)
+def consultar_ruta():
+    ruta, error = _ruta()
+    if ruta is None:
+        return responder(error)
+    paradas = sorted(ruta.pedidos, key=lambda p: p.orden_en_ruta or 0)
+    return responder(
+        f"La ruta {ruta.codigo} del {fecha_larga(ruta.fecha)} es de {ruta.conductor.nombre}, "
+        + (f"con el vehículo {ruta.vehiculo.placa}" if ruta.vehiculo else "sin vehículo")
+        + f", y está {ruta.estado_etiqueta.lower()}. "
+        + (f"Tiene {cantidad(len(paradas), 'parada')}: "
+           + "; ".join(f"{p.orden_en_ruta}, {pedido_texto(p)}, {p.estado_etiqueta.lower()}"
+                       for p in paradas[:10])
+           + (f"; y {len(paradas) - 10} más" if len(paradas) > 10 else "") + "."
+           if paradas else "No tiene paradas.")
+    )
+
+
+@rutas("crear", "Crear ruta",
+       "crea una ruta con pedidos pendientes sin ruta de la fecha y calcula su secuencia; requiere "
+       "conductor y pedidos (o todos_los_pendientes); fecha, vehiculo y criterio opcionales")
+def crear_ruta_voz():
+    nombre = texto("conductor")
+    lista = g.argumentos.get("pedidos")
+    todos = g.argumentos.get("todos_los_pendientes") in (True, "true", "True")
+    faltan = ([] if nombre else ["el conductor"]) + \
+        ([] if todos or (isinstance(lista, list) and lista) else ["los pedidos"])
+    if faltan:
+        return responder(me_falta(faltan))
+    conductor, error = resolver(buscar_conductores(nombre), lambda c: c.nombre, "conductores",
+                                f"No encontré un conductor activo llamado {nombre}.")
+    if conductor is None:
+        return responder(error)
+    fecha = _fecha_dicha()
+    if fecha is None:
+        return responder("No entendí la fecha; dímela como año, mes y día.")
+    estrategia, error = _criterio()
+    if error:
+        return responder(error)
+
+    vehiculo = None
+    if texto("vehiculo"):
+        vehiculo, error = resolver(buscar_vehiculos(texto("vehiculo")), lambda v: v.placa, "vehículos",
+                                   f"No encontré un vehículo con la placa {texto('vehiculo')}.")
+        if vehiculo is None:
+            return responder(error)
+
+    sin_ruta = (db.session.query(Pedido)
+                .filter(Pedido.estado == EstadoPedido.PENDIENTE, Pedido.ruta_id.is_(None),
+                        Pedido.fecha_despacho == fecha)
+                .order_by(Pedido.prioridad, Pedido.codigo).all())
+    if todos:
+        elegidos = sin_ruta
+        if not elegidos:
+            return responder(f"No hay pedidos pendientes sin ruta para el {fecha_larga(fecha)}.")
+    else:
+        elegidos = []
+        for dicho in lista:
+            pedido, error = resolver(buscar_pedidos(str(dicho), fecha=fecha), pedido_texto, "pedidos",
+                                     f"No encontré el pedido {dicho}.")
+            if pedido is None:
+                return responder(error)
+            if pedido not in sin_ruta:
+                return responder(f"El pedido {pedido_texto(pedido)} no se puede incluir: debe estar "
+                                 f"pendiente, sin ruta y para el {fecha_larga(fecha)}.")
+            if pedido not in elegidos:
+                elegidos.append(pedido)
+    datos = {"fecha": fecha, "conductor_id": conductor.id, "vehiculo_id": vehiculo.id if vehiculo else None,
+             "estrategia": estrategia, "pedidos": [p.id for p in elegidos]}
+    try:
+        validar_ruta(datos)
+    except DatosInvalidos as error:
+        return responder(frase_datos_invalidos(error))
+
+    if vehiculo:
+        con_vehiculo = f"con el vehículo {vehiculo.placa}"
+    elif conductor.vehiculo is not None:
+        con_vehiculo = (f"sin vehículo; {conductor.nombre} tiene asignado el {conductor.vehiculo.placa}, "
+                        "dímelo si quieres usarlo")
+    else:
+        con_vehiculo = "sin vehículo"
+    pendiente = exigir_confirmacion(
+        f"Voy a crear una ruta para el {fecha_larga(fecha)} con {conductor.nombre}, {con_vehiculo}, "
+        f"con {cantidad(len(elegidos), 'parada')}: {enumerar([p.codigo for p in elegidos][:5])}"
+        + (f" y {len(elegidos) - 5} más" if len(elegidos) > 5 else "")
+        + f"; ordenada para {_criterio_texto(estrategia)}."
+    )
+    if pendiente:
+        return pendiente
+    try:
+        ruta, resultado = crear_ruta(datos, g.usuario.id, origen=NOTA_ASISTENTE)
+    except DatosInvalidos as error:
+        db.session.rollback()
+        return responder(frase_datos_invalidos(error))
+    db.session.commit()
+    return responder(
+        f"Listo, creé la ruta {ruta.codigo} con {cantidad(len(ruta.pedidos), 'parada')}, "
+        f"{valor_leido(float(ruta.distancia_km or 0))} kilómetros estimados."
+        + (" " + " ".join(resultado.advertencias) if resultado.advertencias else "")
+    )
+
+
+@rutas("quitar-parada", "Quitar parada de ruta",
+       "devuelve un pedido no entregado de la ruta a pendiente sin ruta; requiere ruta y pedido")
+def quitar_parada_voz():
+    ruta, error = _ruta()
+    if ruta is None:
+        return responder(error)
+    pedido, error = _pedido()
+    if pedido is None:
+        return responder(error)
+    try:
+        verificar_quitar_parada(ruta, pedido)
+    except PlanificacionInvalida as causa:
+        return responder(str(causa))
+    pendiente = exigir_confirmacion(
+        f"Voy a quitar el pedido {pedido_texto(pedido)}, parada {pedido.orden_en_ruta}, de la ruta "
+        f"{ruta.codigo}; vuelve a pendiente sin ruta."
+    )
+    if pendiente:
+        return pendiente
+    try:
+        quitar_parada(ruta, pedido, g.usuario.id, origen=NOTA_ASISTENTE)
+    except PlanificacionInvalida as causa:
+        db.session.rollback()
+        return responder(str(causa))
+    db.session.commit()
+    return responder(f"Listo, el pedido {pedido.codigo} volvió a pendiente.")
+
+
+@rutas("recalcular", "Recalcular ruta",
+       "reordena las paradas que siguen abiertas; requiere ruta; criterio opcional")
+def recalcular_ruta_voz():
+    ruta, error = _ruta()
+    if ruta is None:
+        return responder(error)
+    estrategia, error = _criterio()
+    if error:
+        return responder(error)
+    if ruta.estado == EstadoRuta.FINALIZADA:
+        return responder(f"La ruta {ruta.codigo} está finalizada; no se recalcula.")
+    abiertas = [p for p in ruta.pedidos if p.estado in EstadoPedido.ABIERTOS]
+    if not abiertas:
+        return responder(f"La ruta {ruta.codigo} no tiene paradas pendientes por reordenar.")
+    pendiente = exigir_confirmacion(
+        f"Voy a recalcular la ruta {ruta.codigo} de {ruta.conductor.nombre} para "
+        f"{_criterio_texto(estrategia)}: se {'reordena' if len(abiertas) == 1 else 'reordenan'} "
+        f"{cantidad(len(abiertas), 'parada pendiente', 'paradas pendientes')}."
+    )
+    if pendiente:
+        return pendiente
+    try:
+        resultado = recalcular_secuencia(ruta, estrategia)
+    except PlanificacionInvalida as causa:
+        db.session.rollback()
+        return responder(str(causa))
+    db.session.commit()
+    return responder(
+        f"Listo, recalculé la ruta {ruta.codigo}: {valor_leido(float(ruta.distancia_km or 0))} kilómetros "
+        "estimados." + (" " + " ".join(resultado.advertencias) if resultado and resultado.advertencias else "")
+    )
+
+
+@rutas("eliminar", "Eliminar ruta",
+       "elimina una ruta sin entregas; sus pedidos vuelven a pendiente; requiere ruta")
+def eliminar_ruta_voz():
+    ruta, error = _ruta()
+    if ruta is None:
+        return responder(error)
+    try:
+        verificar_eliminar_ruta(ruta)
+    except PlanificacionInvalida as causa:
+        return responder(f"No puedo eliminar la ruta {ruta.codigo}. {causa}")
+    paradas = len(ruta.pedidos)
+    pendiente = exigir_confirmacion(
+        f"Voy a eliminar la ruta {ruta.codigo} de {ruta.conductor.nombre}, del {fecha_larga(ruta.fecha)}: "
+        + (f"{cantidad(paradas, 'parada vuelve', 'paradas vuelven')} a pendiente."
+           if paradas else "no tiene paradas.")
+    )
+    if pendiente:
+        return pendiente
+    try:
+        codigo, devueltos = eliminar_ruta(ruta, g.usuario.id, origen=NOTA_ASISTENTE)
+    except PlanificacionInvalida as causa:
+        db.session.rollback()
+        return responder(str(causa))
+    db.session.commit()
+    return responder(f"Listo, eliminé la ruta {codigo}; {cantidad(devueltos, 'pedido volvió', 'pedidos volvieron')} "
+                     "a pendiente.")
 
 
 @rutas("agregar-parada", "Agregar parada a ruta",
@@ -619,11 +963,10 @@ def agregar_a_ruta_voz():
         if finalizada is not None:
             return responder(
                 f"La ruta de hoy de {conductor.nombre}, la {finalizada.codigo}, ya está finalizada "
-                "y no se reabre por voz. Para asignarle más pedidos hoy, cree una ruta nueva en "
-                "pantalla."
+                "y no se reabre. Para asignarle más pedidos hoy, puedo crearle una ruta nueva."
             )
         return responder(
-            f"{conductor.nombre} no tiene ruta hoy. Crear rutas se hace en pantalla."
+            f"{conductor.nombre} no tiene ruta hoy. ¿Quieres que le cree una con este pedido?"
         )
     try:
         verificar_agregar_a_ruta(pedido, ruta)

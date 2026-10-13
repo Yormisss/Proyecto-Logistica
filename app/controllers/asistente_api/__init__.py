@@ -144,7 +144,9 @@ def funcion_agrupada(espacio, nombre, *, roles, descripcion, entidad, parametros
 
     `operacion` es un parametro mas: entra en la huella de la confirmacion, de
     modo que confirmar "editar" no ejecuta "anular". `modifica=False` marca las
-    operaciones de solo consulta, que no piden confirmacion.
+    operaciones de solo consulta, que no piden confirmacion. Las operaciones
+    que se declaran en otro modulo agregan sus parametros con
+    `decorador.agregar_parametros({...})`.
     """
     parametros = {
         "operacion": {"type": "string", "enum": [], "description": "Que hacer."},
@@ -176,6 +178,13 @@ def funcion_agrupada(espacio, nombre, *, roles, descripcion, entidad, parametros
             return vista
         return registrar
 
+    def agregar_parametros(nuevos):
+        for clave, esquema in nuevos.items():
+            if clave in funcion.parametros:
+                raise ValueError(f"Parametro duplicado en {espacio}/{nombre}: {clave}")
+            funcion.parametros[clave] = esquema
+
+    operacion.agregar_parametros = agregar_parametros
     return operacion
 
 
@@ -339,4 +348,6 @@ def exigir_confirmacion(resumen):
 
 
 # Registro de las funciones de cada rol (importan los decoradores de arriba).
-from app.controllers.asistente_api import admin, cliente, conductor, gestor  # noqa: E402,F401
+from app.controllers.asistente_api import (  # noqa: E402,F401
+    admin, administracion, cliente, conductor, gestor, maestros,
+)

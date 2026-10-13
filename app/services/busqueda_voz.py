@@ -21,7 +21,9 @@ from difflib import SequenceMatcher
 from sqlalchemy import func, or_
 
 from app.extensions import db
-from app.models import Cliente, EstadoPedido, Pedido, Producto, Rol, Usuario, normalizar_texto
+from app.models import (
+    Cliente, EstadoPedido, EstadoRuta, Pedido, Producto, Rol, Ruta, Usuario, Vehiculo, normalizar_texto,
+)
 from app.tiempo import MESES, hoy
 
 # Opciones que se leen en voz alta cuando hay varias coincidencias.
@@ -263,13 +265,19 @@ def buscar_productos(texto, solo_activos=True):
 # Clientes y sedes
 # --------------------------------------------------------------------------
 
-def buscar_clientes(texto):
-    """Cliente activo por nombre: identico, que contenga las palabras o parecido."""
+def buscar_clientes(texto, solo_activos=True):
+    """Cliente por nombre: identico, que contenga las palabras o parecido.
+
+    Por omision solo los activos (para pedidos); para editarlos o reactivarlos,
+    `solo_activos=False`.
+    """
     buscado = normalizar_texto(texto)
     if not buscado:
         return Coincidencias([])
 
-    base = db.session.query(Cliente).filter(Cliente.activo.is_(True))
+    base = db.session.query(Cliente)
+    if solo_activos:
+        base = base.filter(Cliente.activo.is_(True))
     identicos = base.filter(Cliente.nombre_normalizado == buscado).all()
     if identicos:
         return Coincidencias(identicos)
@@ -290,13 +298,13 @@ def _texto_sede(sede):
     return f"{normalizar_texto(sede.etiqueta)} {sede.direccion_normalizada}"
 
 
-def buscar_sedes(cliente, texto=None):
-    """Sede activa de `cliente` por etiqueta o direccion.
+def buscar_sedes(cliente, texto=None, solo_activas=True):
+    """Sede de `cliente` por etiqueta o direccion (por omision, solo las activas).
 
     Sin texto, la unica sede del cliente si solo tiene una; si tiene varias,
     todas, para que el agente pregunte cual.
     """
-    sedes = [s for s in cliente.direcciones if s.activa]
+    sedes = [s for s in cliente.direcciones if s.activa or not solo_activas]
     buscado = normalizar_texto(texto)
     if not buscado:
         return Coincidencias(sedes)
@@ -340,6 +348,90 @@ def buscar_conductores(texto):
         return Coincidencias(contienen)
 
     return Coincidencias(_por_parecido(conductores, texto, lambda c: normalizar_texto(c.nombre)))
+
+
+def buscar_usuarios(texto):
+    """Cuenta por correo exacto o por nombre, activa o no (para administrarla)."""
+    buscado = (texto or "").strip().lower()
+    if not buscado:
+        return Coincidencias([])
+    if "@" in buscado:
+        return Coincidencias(db.session.query(Usuario).filter(func.lower(Usuario.correo) == buscado).all())
+
+    usuarios = db.session.query(Usuario).order_by(Usuario.nombre).all()
+    normalizado = normalizar_texto(texto)
+    identicos = [u for u in usuarios if normalizar_texto(u.nombre) == normalizado]
+    if identicos:
+        return Coincidencias(identicos)
+    contienen = [u for u in usuarios if _contiene_palabras(normalizado.split(), normalizar_texto(u.nombre))]
+    if contienen:
+        return Coincidencias(contienen)
+    return Coincidencias(_por_parecido(usuarios, texto, lambda u: normalizar_texto(u.nombre)))
+
+
+def buscar_motivos(texto):
+    """Motivo de fallo del catalogo (activo o no) por nombre aproximado."""
+    from app.models import MotivoFallo
+
+    buscado = normalizar_texto(texto)
+    if not buscado:
+        return Coincidencias([])
+    motivos = db.session.query(MotivoFallo).order_by(MotivoFallo.orden, MotivoFallo.nombre).all()
+    identicos = [m for m in motivos if m.nombre_normalizado == buscado]
+    if identicos:
+        return Coincidencias(identicos)
+    contienen = [m for m in motivos if _contiene_palabras(buscado.split(), m.nombre_normalizado)]
+    if contienen:
+        return Coincidencias(contienen)
+    return Coincidencias(_por_parecido(motivos, texto, lambda m: m.nombre_normalizado))
+
+
+# --------------------------------------------------------------------------
+# Vehiculos y rutas
+# --------------------------------------------------------------------------
+
+def buscar_vehiculos(texto):
+    """Vehiculo por placa dictada ("w g t cuatro ocho dos" ya transcrita: "WGT 482"),
+    exacta o, si no, que la contenga. Incluye los inactivos."""
+    clave = _alfanumerico(texto)
+    if not clave:
+        return Coincidencias([])
+    vehiculos = db.session.query(Vehiculo).order_by(Vehiculo.placa).all()
+    exactos = [v for v in vehiculos if _alfanumerico(v.placa) == clave]
+    if exactos:
+        return Coincidencias(exactos)
+    return Coincidencias([v for v in vehiculos if clave in _alfanumerico(v.placa)])
+
+
+def buscar_rutas(texto, fecha=None):
+    """Ruta por codigo ("RUT-20261006-01", "rut 2026 10 06 01") o por su conductor.
+
+    Por conductor: sus rutas de `fecha` (hoy por omision); si ese dia no tiene,
+    las que siga teniendo abiertas. Nunca las canceladas.
+    """
+    fecha = fecha or hoy()
+    if not (texto or "").strip():
+        return Coincidencias([])
+    base = db.session.query(Ruta).filter(Ruta.estado != EstadoRuta.CANCELADA)
+
+    clave = _alfanumerico(texto)
+    if len(clave) >= 6:
+        exactas = base.filter(_sin_separadores(Ruta.codigo) == clave).all()
+        if exactas:
+            return Coincidencias(exactas)
+
+    conductores = buscar_conductores(texto).elementos
+    if not conductores:
+        return Coincidencias([])
+    ids = [c.id for c in conductores]
+    del_dia = base.filter(Ruta.conductor_id.in_(ids), Ruta.fecha == fecha).order_by(Ruta.codigo).all()
+    if del_dia:
+        return Coincidencias(del_dia)
+    return Coincidencias(
+        base.filter(Ruta.conductor_id.in_(ids),
+                    Ruta.estado.in_((EstadoRuta.PLANIFICADA, EstadoRuta.EN_CURSO)))
+        .order_by(Ruta.fecha, Ruta.codigo).all()
+    )
 
 
 # --------------------------------------------------------------------------

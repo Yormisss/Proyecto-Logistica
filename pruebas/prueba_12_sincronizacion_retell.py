@@ -195,7 +195,7 @@ from retell.types.llm_create_params import GeneralToolCustomTool
 CAMPOS_HERRAMIENTA = set(GeneralToolCustomTool.__annotations__)
 
 print("\n== 1. Configuracion de cada agente ==")
-ESPERADAS = {"conductor": 4, "gestor": 11, "admin": 16, "cliente": 8}
+ESPERADAS = {"conductor": 4, "gestor": 14, "admin": 22, "cliente": 8}
 with app.app_context():
     for definicion in conf.AGENTES:
         tools = conf.herramientas(definicion, URL)
@@ -249,7 +249,7 @@ check(conf.DURACION_MAXIMA_MS == 10 * 60 * 1000 and VIGENCIA_SESION.total_second
 check("Usuarios" in conf.prompt(admin) and "contraseñas" in conf.prompt(admin),
       "el admin explica que usuarios, roles y contraseñas se manejan en pantalla")
 check("Importar pedidos desde un archivo CSV" in conf.prompt(gestor) and "solo lo hace un administrador" not in conf.prompt(gestor)
-      and "Ajustar el inventario" in conf.prompt(gestor),
+      and "ajustar el inventario al valor contado" in conf.prompt(gestor),
       "el gestor explica que importar CSV no va por voz, y que el ajuste de inventario si")
 check("Crear pedidos: todavía no está disponible" in conf.prompt(cliente) and "otras empresas" in conf.prompt(cliente),
       "el cliente explica que no crea pedidos ni ve datos de otros")
@@ -303,7 +303,7 @@ check(all(retell.agentes[a][-1]["voice_id"] == "voz-es" and retell.agentes[a][-1
           and retell.agentes[a][-1]["response_engine"]["version"] == 0 for a in creados),
       "con la voz de RETELL_VOZ_ID, el LLM en la version 0 como el agente, y publicados")
 check([len(llm_de(por_nombre[n])["general_tools"]) for n in ("SGDS - Gestor logistico", "SGDS - Administrador", "SGDS - Cliente")]
-      == [11, 16, 8], "gestor con 11 funciones, admin con 16 (las del gestor y las suyas) y cliente con 8")
+      == [14, 22, 8], "gestor con 14 funciones, admin con 22 (las del gestor y las suyas) y cliente con 8")
 for nombre, variable in (("SGDS - Gestor logistico", "RETELL_AGENTE_GESTOR_ID"),
                          ("SGDS - Administrador", "RETELL_AGENTE_ADMIN_ID"), ("SGDS - Cliente", "RETELL_AGENTE_CLIENTE_ID")):
     check(f"{variable}={por_nombre[nombre]}" in r.output, f"imprime {variable} para el .env")

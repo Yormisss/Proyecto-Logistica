@@ -47,46 +47,50 @@ COBERTURA = {
     # --- Pedidos ---
     "pedidos.nuevo": Cobertura(voz=("gestor/pedidos:crear",)),
     "pedidos.anular": Cobertura(voz=("gestor/pedidos:anular",)),
-    "pedidos.editar": Cobertura(voz=("gestor/pedidos:editar",),
-                                pendiente="Fase 4: editar fecha, sede, ventana, observaciones y productos."),
+    "pedidos.editar": Cobertura(voz=("gestor/pedidos:editar",)),
 
     # --- Inventario ---
     "inventario.detalle": Cobertura(voz=("gestor/productos:entrada", "gestor/productos:ajuste")),
-    "inventario.nuevo": Cobertura(pendiente="Fase 3: crear productos."),
-    "inventario.editar": Cobertura(pendiente="Fase 3: editar y activar o desactivar productos."),
+    "inventario.nuevo": Cobertura(voz=("gestor/productos:crear",)),
+    "inventario.editar": Cobertura(voz=("gestor/productos:editar", "gestor/productos:activar",
+                                        "gestor/productos:desactivar")),
 
     # --- Rutas ---
-    "rutas.nueva": Cobertura(pendiente="Fase 4: crear rutas."),
-    "rutas.recalcular": Cobertura(pendiente="Fase 4: recalcular la secuencia de una ruta."),
-    "rutas.quitar_parada": Cobertura(pendiente="Fase 4: quitar una parada de una ruta."),
-    "rutas.eliminar": Cobertura(pendiente="Fase 4: eliminar una ruta."),
+    "rutas.nueva": Cobertura(voz=("gestor/rutas:crear",)),
+    "rutas.recalcular": Cobertura(voz=("gestor/rutas:recalcular",)),
+    "rutas.quitar_parada": Cobertura(voz=("gestor/rutas:quitar-parada",)),
+    "rutas.eliminar": Cobertura(voz=("gestor/rutas:eliminar",)),
 
     # --- Clientes y sedes ---
-    "clientes_admin.nuevo": Cobertura(pendiente="Fase 3: crear clientes."),
-    "clientes_admin.editar": Cobertura(pendiente="Fase 3: editar clientes y registrar el NIT una vez."),
-    "clientes_admin.detalle": Cobertura(pendiente="Fase 3: agregar sedes."),
-    "clientes_admin.editar_sede_vista": Cobertura(pendiente="Fase 3: editar sedes."),
-    "clientes_admin.alternar_sede": Cobertura(pendiente="Fase 3: activar o desactivar sedes."),
+    "clientes_admin.nuevo": Cobertura(voz=("gestor/clientes:crear",)),
+    "clientes_admin.editar": Cobertura(voz=("gestor/clientes:editar", "gestor/clientes:activar",
+                                            "gestor/clientes:desactivar")),
+    "clientes_admin.detalle": Cobertura(voz=("gestor/sedes:crear",)),
+    "clientes_admin.editar_sede_vista": Cobertura(voz=("gestor/sedes:editar",)),
+    "clientes_admin.alternar_sede": Cobertura(voz=("gestor/sedes:activar", "gestor/sedes:desactivar")),
 
     # --- Solicitudes de contacto ---
     "solicitudes.atender": Cobertura(pendiente="Fase 4: marcar una solicitud como atendida."),
 
     # --- Vehiculos ---
-    "vehiculos.nuevo": Cobertura(pendiente="Fases 3 y 4: crear vehículos."),
-    "vehiculos.editar": Cobertura(pendiente="Fases 3 y 4: editar vehículos."),
-    "vehiculos.alternar": Cobertura(pendiente="Fases 3 y 4: activar o desactivar vehículos."),
+    "vehiculos.nuevo": Cobertura(voz=("gestor/vehiculos:crear",)),
+    "vehiculos.editar": Cobertura(voz=("gestor/vehiculos:editar",)),
+    "vehiculos.alternar": Cobertura(voz=("gestor/vehiculos:activar", "gestor/vehiculos:desactivar")),
 
     # --- Usuarios (administrador) ---
-    "usuarios.nuevo": Cobertura(pendiente="Fase 3: crear usuarios y habilitar el portal."),
-    "usuarios.editar": Cobertura(pendiente="Fase 3: editar nombre y rol."),
-    "usuarios.alternar_estado": Cobertura(pendiente="Fase 3: activar o desactivar usuarios."),
-    "usuarios.restablecer": Cobertura(pendiente="Fase 3: restablecer la contraseña (llega por correo)."),
+    # El correo de inicio de sesion de una cuenta existente se cambia solo en pantalla.
+    "usuarios.nuevo": Cobertura(voz=("admin/usuarios:crear",)),
+    "usuarios.editar": Cobertura(voz=("admin/usuarios:editar", "admin/usuarios:activar",
+                                      "admin/usuarios:desactivar")),
+    "usuarios.alternar_estado": Cobertura(voz=("admin/usuarios:activar", "admin/usuarios:desactivar")),
+    "usuarios.restablecer": Cobertura(voz=("admin/usuarios:restablecer-contrasena",)),
 
     # --- Configuracion del negocio (administrador) ---
-    "configuracion.centro": Cobertura(pendiente="Fase 3: editar el centro de distribución."),
-    "configuracion.agregar_motivo": Cobertura(pendiente="Fase 3: agregar motivos de fallo."),
-    "configuracion.renombrar_motivo": Cobertura(pendiente="Fase 3: renombrar motivos de fallo."),
-    "configuracion.alternar_motivo": Cobertura(pendiente="Fase 3: activar o desactivar motivos de fallo."),
+    "configuracion.centro": Cobertura(voz=("admin/configuracion:editar-centro",)),
+    "configuracion.agregar_motivo": Cobertura(voz=("admin/configuracion:agregar-motivo",)),
+    "configuracion.renombrar_motivo": Cobertura(voz=("admin/configuracion:renombrar-motivo",)),
+    "configuracion.alternar_motivo": Cobertura(voz=("admin/configuracion:activar-motivo",
+                                                    "admin/configuracion:desactivar-motivo")),
 }
 
 # Blueprints que no son pantallas: los llaman Retell y Make, no un usuario.
