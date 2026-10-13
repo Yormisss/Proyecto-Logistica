@@ -5,8 +5,6 @@ gestor, para que ambos reordenen las paradas con la misma regla: las cerradas
 conservan su posicion y solo se reordena lo pendiente.
 """
 
-from flask import current_app
-
 from app.models import EstadoPedido, EstadoRuta, EventoPedido
 from app.extensions import db
 from app.services.ruteo import ESTRATEGIA_DISTANCIA, calcular_ruta
@@ -17,7 +15,11 @@ class PlanificacionInvalida(Exception):
 
 
 def origen_centro_distribucion():
-    return (current_app.config["CD_LAT"], current_app.config["CD_LNG"])
+    """(latitud, longitud) del centro de distribucion de la configuracion del negocio."""
+    from app.services.configuracion import centro_distribucion
+
+    centro = centro_distribucion()
+    return (centro["latitud"], centro["longitud"])
 
 
 def recalcular_secuencia(ruta, estrategia=ESTRATEGIA_DISTANCIA):

@@ -5,6 +5,7 @@ Uso:
     flask --app run sembrar          Carga datos de demostracion
     flask --app run migrar-clientes  Normaliza clientes en una base con datos
     flask --app run migrar-asistente Crea o actualiza las tablas del asistente de voz
+    flask --app run migrar-configuracion  Crea la configuracion del negocio (motivos, centro)
     flask --app run sincronizar-asistentes  Crea o actualiza los agentes en Retell
     flask --app run documentar-asistentes   Regenera docs/configuracion_retell.md
     python run.py                    Levanta el servidor de desarrollo
@@ -27,10 +28,20 @@ def contexto_shell():
     return {"db": db, "models": models}
 
 
+def _configuracion_inicial():
+    """Catalogo de motivos y centro de distribucion iniciales (idempotente)."""
+    from app.services.configuracion import asegurar_catalogo, asegurar_configuracion
+
+    asegurar_catalogo()
+    asegurar_configuracion()
+    db.session.commit()
+
+
 @app.cli.command("init-db")
 def init_db():
     """Crea todas las tablas definidas en la capa de modelos."""
     db.create_all()
+    _configuracion_inicial()
     click.echo("Esquema de base de datos creado.")
 
 
@@ -39,6 +50,7 @@ def reset_db():
     """Elimina y vuelve a crear el esquema (solo desarrollo)."""
     db.drop_all()
     db.create_all()
+    _configuracion_inicial()
     click.echo("Base de datos reiniciada.")
 
 
@@ -72,6 +84,14 @@ def migrar_asistente():
     m002_sesiones_asistente.aplicar()
     m003_confirmacion_asistente.aplicar()
     m004_solicitudes_contacto.aplicar()
+
+
+@app.cli.command("migrar-configuracion")
+def migrar_configuracion():
+    """Crea la configuracion del negocio en una base existente (idempotente)."""
+    from migraciones.m005_configuracion_negocio import aplicar
+
+    aplicar()
 
 
 @app.cli.command("sincronizar-asistentes")

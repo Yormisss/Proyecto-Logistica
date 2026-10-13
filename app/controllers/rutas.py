@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 from flask import (
-    Blueprint, abort, current_app, flash, redirect, render_template, request, url_for,
+    Blueprint, abort, flash, redirect, render_template, request, url_for,
 )
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
@@ -23,6 +23,7 @@ from app.models import (
     EstadoPedido, EstadoRuta, EventoPedido, Pedido, Rol, Ruta, Usuario, Vehiculo,
 )
 from app.services.codigos import generar_codigo_ruta
+from app.services.configuracion import centro_distribucion
 from app.services.planificacion import (
     PlanificacionInvalida, origen_centro_distribucion, recalcular_secuencia,
 )
@@ -230,11 +231,11 @@ def detalle(ruta_id):
     if ruta is None:
         abort(404)
 
-    origen = origen_centro_distribucion()
+    centro = centro_distribucion()
     datos_origen = {
-        "lat": origen[0],
-        "lng": origen[1],
-        "nombre": current_app.config["CD_NOMBRE"],
+        "lat": centro["latitud"],
+        "lng": centro["longitud"],
+        "nombre": centro["nombre"],
     }
 
     # Datos que consume el mapa; se serializan en el controlador para no

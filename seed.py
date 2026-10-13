@@ -123,6 +123,12 @@ def sembrar_datos():
         resolutor.cliente(CLIENTE_CORREO_DEMO).correo = correo_demo
     db.session.flush()
 
+    # --- Configuracion del negocio: motivos de fallo y centro de distribucion ---
+    from app.services.configuracion import asegurar_catalogo, asegurar_configuracion
+
+    asegurar_catalogo()
+    asegurar_configuracion()
+
     # --- Inventario ---
     productos = []
     # Nacen en cero: `_cuadrar_inventario` registra al final la entrada inicial.
@@ -276,9 +282,12 @@ def _generar_historico(usuarios, productos, resolutor, dias=21):
     ]
     despachador = usuarios["despachador@sgds.com"]
 
+    from app.services.configuracion import motivo_por_nombre
+
     bolsa_motivos = []
     for motivo, peso in MOTIVOS_DEMO:
         bolsa_motivos.extend([motivo] * peso)
+    motivos_catalogo = {motivo: motivo_por_nombre(motivo) for motivo, _ in MOTIVOS_DEMO}
 
     consecutivo = 0
 
@@ -370,10 +379,12 @@ def _generar_historico(usuarios, productos, resolutor, dias=21):
                     registrado_en=llegada,
                 ))
 
+                motivo = aleatorio.choice(bolsa_motivos) if fallida else None
                 db.session.add(PruebaEntrega(
                     pedido_id=pedido.id,
                     receptor_nombre=None if fallida else f"Receptor {consecutivo}",
-                    motivo_fallo=aleatorio.choice(bolsa_motivos) if fallida else None,
+                    motivo_fallo=motivo,
+                    motivo_id=motivos_catalogo[motivo].id if motivo else None,
                     registrado_en=llegada,
                 ))
 
@@ -437,11 +448,10 @@ def _cuadrar_inventario(productos, despachador, desde):
 
 def _trazar_ruta_demo(ruta):
     """Calcula la secuencia y geometria de la ruta sembrada."""
-    from flask import current_app
-
+    from app.services.planificacion import origen_centro_distribucion
     from app.services.ruteo import ESTRATEGIA_DISTANCIA, calcular_ruta
 
-    origen = (current_app.config["CD_LAT"], current_app.config["CD_LNG"])
+    origen = origen_centro_distribucion()
     pedidos = [p for p in ruta.pedidos if p.tiene_coordenadas]
     if not pedidos:
         return

@@ -189,9 +189,15 @@ class PruebaEntrega(db.Model):
     receptor_nombre = db.Column(db.String(160))
     receptor_documento = db.Column(db.String(40))
     observacion = db.Column(db.Text)
+    # Copia del motivo al registrar el fallo: el nombre del catalogo, o el texto
+    # escrito cuando el motivo es "Otro". `motivo_id` apunta al catalogo y es lo
+    # que agrupa la analitica aunque el motivo se renombre despues; las pruebas
+    # anteriores al catalogo no lo tienen y se reconocen por el texto.
     motivo_fallo = db.Column(db.String(160))
+    motivo_id = db.Column(db.Integer, db.ForeignKey("motivos_fallo.id"), index=True)
     latitud = db.Column(db.Float)
     longitud = db.Column(db.Float)
     registrado_en = db.Column(db.DateTime, default=ahora)
 
     pedido = db.relationship("Pedido", back_populates="prueba_entrega")
+    motivo = db.relationship("MotivoFallo")

@@ -204,8 +204,13 @@ def cambiar_estado(
     receptor_documento=None,
     motivo_fallo=None,
     observacion=None,
+    motivo_id=None,
 ):
     """Aplica una transicion de estado sobre un pedido (RF4).
+
+    En un FALLIDO, `motivo_fallo` es el texto a guardar (el nombre del motivo
+    del catalogo, o lo escrito si es "Otro") y `motivo_id` el motivo del
+    catalogo; ver `app.services.configuracion`.
 
     Registra el evento en la bitacora, guarda la prueba de entrega cuando
     corresponde, descuenta el inventario si el pedido se marca como entregado
@@ -245,6 +250,7 @@ def cambiar_estado(
         prueba.receptor_documento = receptor_documento or prueba.receptor_documento
         prueba.observacion = observacion or prueba.observacion
         prueba.motivo_fallo = motivo_fallo if nuevo_estado == EstadoPedido.FALLIDO else None
+        prueba.motivo_id = motivo_id if nuevo_estado == EstadoPedido.FALLIDO else None
         prueba.latitud = latitud if latitud is not None else prueba.latitud
         prueba.longitud = longitud if longitud is not None else prueba.longitud
         prueba.registrado_en = ahora()
