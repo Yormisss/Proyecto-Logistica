@@ -79,9 +79,12 @@ def entregar(pedido_id):
     return conductor2.post(f"{url}/entregar", data={"csrf_token": token_csrf(conductor2, url),
                                                      "receptor_nombre": "Recibe"})
 
+CAMPOS_ACTOR = {"realizado_por", "rol_realizado_por", "origen", "realizado_por_publico"}
 CAMPOS_STOCK = {"tipo", "sku", "producto", "stock_actual", "stock_minimo", "negativo", "pedido",
-                "correo_destino", "hora"}
-CAMPOS_PEDIDO = {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora"}
+                "correo_destino", "hora"} | CAMPOS_ACTOR
+CAMPOS_PEDIDO = {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora"} | CAMPOS_ACTOR
+SISTEMA = {"realizado_por": "Sistema SGDS (automático)", "rol_realizado_por": "Sistema",
+           "origen": "automático", "realizado_por_publico": "Sistema"}
 
 
 # ---- Escenario ----
@@ -143,6 +146,12 @@ if recibidos:
           and aviso["stock_actual"] == 10 and aviso["stock_minimo"] == 10,
           "sku, producto, stock_actual y stock_minimo")
     check(aviso["negativo"] is False, "negativo=false")
+    with app.app_context():
+        nombre_gestor = db.session.get(Usuario, desp_id).nombre
+    check((aviso["realizado_por"], aviso["rol_realizado_por"], aviso["origen"],
+           aviso["realizado_por_publico"]) == (nombre_gestor, "Gestor logístico", "pantalla",
+                                              "Gestor logístico"),
+          f"lleva quien hizo el movimiento que cruzo el umbral ({aviso['realizado_por']}, en pantalla)")
     check(aviso["pedido"] is None, "pedido=null en un movimiento manual")
     check(aviso["correo_destino"] == OPERACIONES, "correo_destino es CORREO_OPERACIONES")
 
@@ -175,11 +184,18 @@ check(r.status_code == 302 and len(recibidos) == 1, "SKU-AUTO-B 6 -> 4 (minimo 4
 if recibidos:
     check(recibidos[0]["pedido"] == "AUTO-001" and recibidos[0]["negativo"] is False,
           "con el codigo del pedido entregado y negativo=false")
+    with app.app_context():
+        nombre_c2 = db.session.get(Usuario, c2_id).nombre
+    check(recibidos[0]["realizado_por"] == nombre_c2 and recibidos[0]["rol_realizado_por"] == "Conductor",
+          "en una entrega, quien cruzo el umbral es el conductor que la confirmo")
 estado_entregado = avisos("pedido_estado", inicio)
 check(len(estado_entregado) == 1 and estado_entregado[0]["estado"] == "ENTREGADO",
       "la misma entrega envia tambien su aviso pedido_estado")
 check(estado_entregado and set(estado_entregado[0]) == CAMPOS_PEDIDO,
       "ENTREGADO conserva los campos de siempre, sin motivo")
+check(estado_entregado and estado_entregado[0]["realizado_por_publico"] == "Conductor"
+      and estado_entregado[0]["origen"] == "pantalla",
+      "el aviso al cliente lleva el rol publico de quien entrego, sin nombres del personal")
 
 inicio = len(envios_make)
 entregar(entregas[2])
@@ -329,7 +345,9 @@ with app.app_context():
 app.config["CORREO_OPERACIONES"] = f"  {OPERACIONES} "
 datos = resumen(TOKEN).get_json()
 check(set(datos) == {"fecha", "correo_destino", "kpis", "productos_bajo_minimo",
-                     "fallidos_para_reprogramar", "resumen_html"}, f"campos del resumen {sorted(datos)}")
+                     "fallidos_para_reprogramar", "resumen_html"} | CAMPOS_ACTOR,
+      f"campos del resumen {sorted(datos)}")
+check({k: datos[k] for k in CAMPOS_ACTOR} == SISTEMA, "el resumen lo origina el sistema, automatico")
 check(datos["fecha"] == hoy().isoformat(), "fecha de hoy en formato ISO")
 check(datos["correo_destino"] == OPERACIONES, "correo_destino es CORREO_OPERACIONES (sin espacios)")
 
@@ -380,7 +398,8 @@ check("AUTO-FAL-5" not in fallidos, "excluye los fallidos de otros dias")
 check(all(f["correo"] for f in fallidos.values()), "todos tienen correo")
 check(fallidos.get("AUTO-FAL-1") == {"codigo": "AUTO-FAL-1", "cliente": "Supermercado El Portal",
                                      "correo": "compras@portal.invalid",
-                                     "direccion": "Calle 80 #10-20, Bogota", "motivo": "Cliente ausente"},
+                                     "direccion": "Calle 80 #10-20, Bogota", "motivo": "Cliente ausente",
+                                     **SISTEMA},
       f"con codigo, cliente, correo, direccion y motivo {fallidos.get('AUTO-FAL-1')}")
 
 html = datos["resumen_html"]

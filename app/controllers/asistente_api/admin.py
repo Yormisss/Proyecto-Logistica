@@ -159,7 +159,7 @@ def resumen_rendimiento():
 
 
 @funcion_asistente(
-    ESPACIO, "ajustar-inventario", roles=ROLES, accion=True,
+    ESPACIO, "ajustar-inventario", entidad="producto", roles=ROLES, accion=True,
     descripcion="Ajusta el stock de un producto a un valor absoluto (inventario fisico), con "
                 "motivo obligatorio. Puede disparar el aviso de stock bajo.",
     parametros={

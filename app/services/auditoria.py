@@ -1,0 +1,87 @@
+"""Registro en la auditoria y su aviso a operaciones.
+
+`registrar_auditoria` agrega el registro a la sesion de la base y encola el
+evento `accion_asistente` de Make; ambos se confirman con el commit de quien
+llama, de modo que una accion revertida no deja registro "exitoso".
+
+Las contrasenas y los tokens nunca llegan a la auditoria: cualquier dato cuya
+clave los nombre se reemplaza por "(no se registra)" antes de guardar.
+"""
+
+import json
+
+from app.extensions import db
+from app.models import RESULTADO_ERROR, RESULTADO_EXITO, Auditoria
+from app.services.notificaciones import (
+    ORIGEN_AUTOMATICO,
+    aviso_accion_asistente,
+    origen_actual,
+    usuario_actual,
+)
+from app.tiempo import ahora
+
+# Fragmentos de clave que marcan un dato sensible.
+CLAVES_SENSIBLES = ("contrasena", "contraseña", "password", "clave", "token", "secret",
+                    "api_key", "apikey", "firma", "signature")
+OCULTO = "(no se registra)"
+LARGO_RESUMEN = 500
+
+__all__ = ["RESULTADO_ERROR", "RESULTADO_EXITO", "registrar_auditoria", "limpiar"]
+
+
+def _sensible(clave):
+    clave = str(clave).lower()
+    return any(fragmento in clave for fragmento in CLAVES_SENSIBLES)
+
+
+def limpiar(datos):
+    """Copia de `datos` sin contrasenas ni tokens (recorre dicts y listas)."""
+    if isinstance(datos, dict):
+        return {clave: (OCULTO if _sensible(clave) else limpiar(valor))
+                for clave, valor in datos.items()}
+    if isinstance(datos, (list, tuple)):
+        return [limpiar(valor) for valor in datos]
+    return datos
+
+
+def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RESULTADO_EXITO,
+                        entidad_id=None, usuario=None, origen=None, call_id=None):
+    """Agrega un registro de auditoria (y su evento) a la transaccion en curso.
+
+    `usuario` y `origen` se toman de la peticion si no vienen: el usuario de la
+    llamada de voz o el de la sesion web, y "voz" o "pantalla". Sin usuario el
+    registro es del sistema, automatico.
+    """
+    usuario = usuario if usuario is not None else usuario_actual()
+    origen = origen or origen_actual() or ORIGEN_AUTOMATICO
+    registro = Auditoria(
+        usuario_id=usuario.id if usuario else None,
+        usuario_nombre=usuario.nombre if usuario else "Sistema SGDS",
+        rol=usuario.rol if usuario else None,
+        origen=origen if usuario else ORIGEN_AUTOMATICO,
+        accion=accion[:80],
+        entidad=entidad[:40],
+        entidad_id=str(entidad_id)[:60] if entidad_id is not None else None,
+        resumen=(resumen or accion)[:LARGO_RESUMEN],
+        detalle=json.dumps(limpiar(detalle), ensure_ascii=False, default=str) if detalle else None,
+        resultado=resultado,
+        call_id=call_id,
+        registrado_en=ahora(),
+    )
+    registro.usuario = usuario
+    db.session.add(registro)
+    aviso_accion_asistente(registro)
+    return registro
+
+
+def cambios_legibles(cambios):
+    """{campo: (antes, despues)} con valores que se pueden serializar."""
+    return {campo: [_simple(antes), _simple(despues)] for campo, (antes, despues) in cambios.items()}
+
+
+def _simple(valor):
+    if valor is None or isinstance(valor, (str, int, float, bool)):
+        return valor
+    if hasattr(valor, "strftime"):
+        return valor.strftime("%H:%M") if not hasattr(valor, "year") else valor.isoformat()
+    return str(valor)

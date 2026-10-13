@@ -149,7 +149,7 @@ def _descontar_inventario(pedido, usuario_id):
         )
         db.session.add(movimiento)
         movimientos.append(movimiento)
-        aviso_stock(producto, stock_previo, pedido=pedido.codigo)
+        aviso_stock(producto, stock_previo, pedido=pedido.codigo, usuario_id=usuario_id)
 
         # Un stock negativo revela un descuadre entre el inventario registrado y
         # el fisico. No se bloquea la entrega (la mercancia ya salio), pero se
@@ -272,6 +272,7 @@ def cambiar_estado(
     # despues del commit del controlador, y en segundo plano.
     aviso_estado_pedido(
         pedido, motivo=motivo_fallo if nuevo_estado == EstadoPedido.FALLIDO else None,
+        usuario_id=usuario_id,
     )
 
     _sincronizar_estado_ruta(pedido.ruta)
@@ -323,7 +324,7 @@ def anular_pedido(pedido, usuario_id, motivo, origen=None):
             nota=f"{PREFIJO_ANULACION}{motivo}" + (f". {origen}" if origen else ""),
         )
     )
-    aviso_estado_pedido(pedido, motivo=motivo)
+    aviso_estado_pedido(pedido, motivo=motivo, usuario_id=usuario_id)
 
     _sincronizar_estado_ruta(pedido.ruta)
 

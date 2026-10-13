@@ -479,7 +479,7 @@ def reintentar_pedido():
 
 
 @funcion_asistente(
-    ESPACIO, "registrar-entrada", roles=ROLES, accion=True,
+    ESPACIO, "registrar-entrada", entidad="producto", roles=ROLES, accion=True,
     descripcion="Registra una entrada de mercancia (suma unidades al stock de un producto).",
     parametros={**PARAMETRO_PRODUCTO,
                 "cantidad": {"type": "integer", "description": "Unidades recibidas, entero positivo."},
@@ -512,7 +512,7 @@ def registrar_entrada():
 
 
 @funcion_asistente(
-    ESPACIO, "cambiar-prioridad", roles=ROLES, accion=True,
+    ESPACIO, "cambiar-prioridad", entidad="pedido", roles=ROLES, accion=True,
     descripcion="Cambia la prioridad de un pedido pendiente o asignado (1 alta, 2 media, 3 baja).",
     parametros={**PARAMETRO_PEDIDO,
                 "prioridad": {"type": "integer", "description": "1 alta, 2 media, 3 baja."}},

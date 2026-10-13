@@ -390,8 +390,12 @@ print("\n== 6. Avisos por Make ==")
 aviso = next((e for e in envios_make if e["json"]["codigo"] == "ASIS-001"), None)
 check(aviso is not None, "marcar-en-camino de El Portal envio un aviso a Make")
 if aviso:
-    check(set(aviso["json"]) == {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora"},
-          "el aviso lleva tipo, codigo, estado, cliente, correo, direccion, ventana y hora")
+    check(set(aviso["json"]) == {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora",
+                                 "realizado_por", "rol_realizado_por", "origen", "realizado_por_publico"},
+          "el aviso lleva tipo, codigo, estado, cliente, correo, direccion, ventana, hora y quien lo origino")
+    check(aviso["json"]["origen"] == "voz" and aviso["json"]["rol_realizado_por"] == "Conductor"
+          and aviso["json"]["realizado_por_publico"] == "Conductor" and aviso["json"]["realizado_por"],
+          f"originado por voz por el conductor; al cliente solo su rol {aviso['json']['realizado_por_publico']}")
     check(aviso["json"]["tipo"] == "pedido_estado", "de tipo pedido_estado")
     check(aviso["json"]["estado"] == "EN_RUTA" and aviso["json"]["correo"] == "compras@portal.invalid"
           and aviso["json"]["ventana"] == "08:00 - 11:00", "con los datos del pedido")

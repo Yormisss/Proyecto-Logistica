@@ -43,6 +43,8 @@
            class="{{ 'activo' if request.endpoint == 'admin.rendimiento' }}">Rendimiento</a>
         <a href="{{ url_for('configuracion.inicio') }}"
            class="{{ 'activo' if request.blueprint == 'configuracion' }}">Configuracion</a>
+        <a href="{{ url_for('bitacora.lista') }}"
+           class="{{ 'activo' if request.blueprint == 'bitacora' }}">Bitacora</a>
         {% endif %}
       {% elif current_user.es_cliente %}
         <a href="{{ url_for('cliente.mis_pedidos') }}"

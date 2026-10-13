@@ -11,6 +11,7 @@ usuarios inactivos, asi que desactivar es el equivalente funcional de eliminar
 sin perder el historico.
 
 Las reglas viven en `app.services.usuarios`, que tambien usa el asistente de voz.
+Toda accion sobre una cuenta queda en la auditoria (sin la contrasena).
 """
 
 from flask import (
@@ -25,6 +26,7 @@ from wtforms.validators import Optional
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import Cliente, Rol, Usuario
+from app.services.auditoria import cambios_legibles, registrar_auditoria
 from app.services.usuarios import (
     LONGITUD_MINIMA, cambiar_estado_usuario, clientes_disponibles, crear_usuario,
     editar_usuario, restablecer_contrasena, rutas_abiertas,
@@ -88,6 +90,14 @@ def _mostrar_errores(formulario, error):
             destino.errors = list(destino.errors) + [mensaje]
         else:
             flash(mensaje, "error")
+
+
+def _datos_cuenta(usuario, cliente=None):
+    datos = {"nombre": usuario.nombre, "correo": usuario.correo, "rol": usuario.rol_etiqueta,
+             "activo": usuario.activo}
+    if cliente is not None:
+        datos["cliente"] = cliente.nombre
+    return datos
 
 
 def _usuario(usuario_id):
@@ -186,6 +196,11 @@ def nuevo():
         except DatosInvalidos as error:
             _mostrar_errores(formulario, error)
         else:
+            registrar_auditoria(
+                "Crear usuario", "usuario",
+                f"Creó la cuenta de {usuario.nombre} ({usuario.correo}) como {usuario.rol_etiqueta}.",
+                _datos_cuenta(usuario, cliente), entidad_id=usuario.id,
+            )
             db.session.commit()
             flash(f"Cuenta de {usuario.nombre} creada como {usuario.rol_etiqueta}.", "exito")
             if cliente is not None:
@@ -223,11 +238,18 @@ def editar(usuario_id):
 
     if formulario.validate_on_submit():
         try:
-            _, abiertas = editar_usuario(usuario, formulario.datos(), actor=current_user)
+            cambios, abiertas = editar_usuario(usuario, formulario.datos(), actor=current_user)
         except DatosInvalidos as error:
             db.session.rollback()
             _mostrar_errores(formulario, error)
         else:
+            if cambios:
+                registrar_auditoria(
+                    "Editar usuario", "usuario",
+                    f"Editó la cuenta de {usuario.nombre}: "
+                    + ", ".join(campo.replace("_", " ") for campo in cambios) + ".",
+                    cambios_legibles(cambios), entidad_id=usuario.id,
+                )
             db.session.commit()
             flash(f"Cuenta de {usuario.nombre} actualizada.", "exito")
             if abiertas:
@@ -266,6 +288,12 @@ def alternar_estado(usuario_id):
         flash(str(error), "error")
         return redirect(url_for("usuarios.lista"))
 
+    registrar_auditoria(
+        "Activar usuario" if usuario.activo else "Desactivar usuario", "usuario",
+        f"{'Activó' if usuario.activo else 'Desactivó'} la cuenta de {usuario.nombre}.",
+        {"correo": usuario.correo, "activo": [not usuario.activo, usuario.activo]},
+        entidad_id=usuario.id,
+    )
     db.session.commit()
     flash(
         f"Cuenta de {usuario.nombre} "
@@ -289,6 +317,11 @@ def restablecer(usuario_id):
         return redirect(url_for("usuarios.lista"))
 
     temporal = restablecer_contrasena(usuario)
+    registrar_auditoria(
+        "Restablecer contraseña", "usuario",
+        f"Restableció la contraseña de {usuario.nombre}.",
+        {"correo": usuario.correo}, entidad_id=usuario.id,
+    )
     db.session.commit()
 
     flash(

@@ -6,6 +6,7 @@ Uso:
     flask --app run migrar-clientes  Normaliza clientes en una base con datos
     flask --app run migrar-asistente Crea o actualiza las tablas del asistente de voz
     flask --app run migrar-configuracion  Crea la configuracion del negocio (motivos, centro)
+    flask --app run migrar-auditoria      Crea la tabla de auditoria
     flask --app run sincronizar-asistentes  Crea o actualiza los agentes en Retell
     flask --app run documentar-asistentes   Regenera docs/configuracion_retell.md
     python run.py                    Levanta el servidor de desarrollo
@@ -90,6 +91,14 @@ def migrar_asistente():
 def migrar_configuracion():
     """Crea la configuracion del negocio en una base existente (idempotente)."""
     from migraciones.m005_configuracion_negocio import aplicar
+
+    aplicar()
+
+
+@app.cli.command("migrar-auditoria")
+def migrar_auditoria():
+    """Crea la tabla de auditoria en una base existente (idempotente)."""
+    from migraciones.m006_auditoria import aplicar
 
     aplicar()
 

@@ -141,7 +141,7 @@ def detalle_parada():
 
 
 @funcion_asistente(
-    ESPACIO, "marcar-en-camino", roles=ROLES, accion=True,
+    ESPACIO, "marcar-en-camino", entidad="pedido", roles=ROLES, accion=True,
     descripcion="Pasa una parada de la ruta de hoy a EN_RUTA (tambien sirve para reintentar "
                 "una fallida).",
     parametros=PARAMETRO_ORDEN, requeridos=("orden",),
@@ -178,7 +178,7 @@ def marcar_en_camino():
 
 
 @funcion_asistente(
-    ESPACIO, "registrar-fallo", roles=ROLES, accion=True,
+    ESPACIO, "registrar-fallo", entidad="pedido", roles=ROLES, accion=True,
     descripcion="Pasa una parada de la ruta de hoy a FALLIDO con el motivo; no toca el inventario. "
                 "El motivo se compara con el catalogo; si no coincide, queda como 'Otro' con lo dicho.",
     parametros={

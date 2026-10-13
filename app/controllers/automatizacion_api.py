@@ -10,6 +10,10 @@ AUTOMATIZACION_TOKEN:
 
 Las cifras salen de `app.services.analitica`, las mismas funciones del
 tablero, para que el correo y la pantalla nunca muestren numeros distintos.
+
+Como todo lo que Make envia, la respuesta lleva quien origino la accion; aqui
+es el sistema ("Sistema SGDS (automático)", origen "automático"), tanto en el
+resumen como en cada correo de reprogramacion.
 """
 
 import hmac
@@ -20,6 +24,7 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models import Cliente, EstadoPedido, Pedido
 from app.services import analitica
+from app.services.notificaciones import ORIGEN_AUTOMATICO, datos_actor
 from app.tiempo import hoy
 
 automatizacion_api_bp = Blueprint("automatizacion_api", __name__)
@@ -61,6 +66,7 @@ def _fallidos_para_reprogramar(fecha):
             "correo": correo,
             "direccion": pedido.direccion_completa,
             "motivo": pedido.prueba_entrega.motivo_fallo if pedido.prueba_entrega else None,
+            **datos_actor(origen=ORIGEN_AUTOMATICO),
         })
     return filas
 
@@ -106,4 +112,5 @@ def resumen_diario():
             productos=productos,
             fallidos=fallidos,
         ),
+        **datos_actor(origen=ORIGEN_AUTOMATICO),
     )

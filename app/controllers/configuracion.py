@@ -2,6 +2,7 @@
 
 Centro de distribucion y catalogo de motivos de entrega fallida. Las reglas
 viven en `app.services.configuracion`, que tambien usa el asistente de voz.
+Cada cambio queda en la auditoria.
 """
 
 from flask import Blueprint, abort, flash, redirect, render_template, url_for
@@ -15,6 +16,7 @@ from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import MotivoFallo, PruebaEntrega, Rol
 from app.services import configuracion as servicio
+from app.services.auditoria import registrar_auditoria
 
 configuracion_bp = Blueprint("configuracion", __name__)
 
@@ -79,11 +81,18 @@ def centro():
         flash("Solicitud invalida. Intente nuevamente.", "error")
         return redirect(url_for("configuracion.inicio"))
     try:
-        _, nuevo = servicio.editar_centro(formulario.cd_nombre.data, formulario.cd_latitud.data,
-                                          formulario.cd_longitud.data, current_user.id)
+        anterior, nuevo = servicio.editar_centro(
+            formulario.cd_nombre.data, formulario.cd_latitud.data, formulario.cd_longitud.data,
+            current_user.id,
+        )
     except servicio.ConfiguracionInvalida as error:
         _mostrar_errores(error)
         return redirect(url_for("configuracion.inicio"))
+    registrar_auditoria(
+        "Editar centro de distribución", "configuracion",
+        f"Actualizó el centro de distribución: {nuevo['nombre']}.",
+        {clave: [anterior[clave], nuevo[clave]] for clave in ("nombre", "latitud", "longitud")},
+    )
     db.session.commit()
     flash(f"Centro de distribucion actualizado: {nuevo['nombre']}. Aplica a las rutas nuevas "
           "o recalculadas.", "exito")
@@ -103,6 +112,10 @@ def agregar_motivo():
     except servicio.ConfiguracionInvalida as error:
         _mostrar_errores(error)
         return redirect(url_for("configuracion.inicio"))
+    db.session.flush()
+    registrar_auditoria("Agregar motivo de fallo", "motivo_fallo",
+                        f"Agregó el motivo de fallo «{motivo.nombre}».",
+                        {"motivo": motivo.nombre}, entidad_id=motivo.id)
     db.session.commit()
     flash(f"Motivo '{motivo.nombre}' agregado.", "exito")
     return redirect(url_for("configuracion.inicio"))
@@ -122,6 +135,9 @@ def renombrar_motivo(motivo_id):
     except servicio.ConfiguracionInvalida as error:
         _mostrar_errores(error)
         return redirect(url_for("configuracion.inicio"))
+    registrar_auditoria("Renombrar motivo de fallo", "motivo_fallo",
+                        f"Renombró el motivo de fallo «{anterior}» a «{motivo.nombre}».",
+                        {"motivo": [anterior, motivo.nombre]}, entidad_id=motivo.id)
     db.session.commit()
     flash(f"Motivo '{anterior}' renombrado a '{motivo.nombre}'. Las entregas ya registradas "
           "conservan su texto.", "exito")
@@ -141,6 +157,13 @@ def alternar_motivo(motivo_id):
     except servicio.ConfiguracionInvalida as error:
         _mostrar_errores(error)
         return redirect(url_for("configuracion.inicio"))
+    registrar_auditoria(
+        "Activar motivo de fallo" if motivo.activo else "Desactivar motivo de fallo",
+        "motivo_fallo",
+        f"{'Activó' if motivo.activo else 'Desactivó'} el motivo de fallo «{motivo.nombre}».",
+        {"motivo": motivo.nombre, "activo": [not motivo.activo, motivo.activo]},
+        entidad_id=motivo.id,
+    )
     db.session.commit()
     flash(f"Motivo '{motivo.nombre}' {'activado' if motivo.activo else 'desactivado'}.", "exito")
     return redirect(url_for("configuracion.inicio"))

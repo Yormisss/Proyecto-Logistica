@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block titulo %}Bitacora | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Bitacora</h1>
+  <p class="subtitulo-pagina">{{ total }} registro(s) &middot; acciones confirmadas por voz, cambios de configuracion y acciones sobre usuarios. Solo lectura.</p>
+</div>
+
+<section class="tarjeta">
+  <form method="get" class="barra-filtros">
+    <label class="etiqueta-filtro" for="desde">Desde</label>
+    <input type="date" id="desde" name="desde" value="{{ filtros.desde }}">
+    <label class="etiqueta-filtro" for="hasta">Hasta</label>
+    <input type="date" id="hasta" name="hasta" value="{{ filtros.hasta }}">
+    <select name="usuario">
+      <option value="">Todos los usuarios</option>
+      {% for usuario in usuarios %}
+        <option value="{{ usuario.id }}" {{ 'selected' if filtros.usuario == usuario.id }}>{{ usuario.nombre }}</option>
+      {% endfor %}
+    </select>
+    <select name="origen">
+      <option value="">Todos los origenes</option>
+      {% for origen in origenes %}
+        <option value="{{ origen }}" {{ 'selected' if filtros.origen == origen }}>{{ origen|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <select name="accion">
+      <option value="">Todas las acciones</option>
+      {% for accion in acciones %}
+        <option value="{{ accion }}" {{ 'selected' if filtros.accion == accion }}>{{ accion }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="boton boton-secundario">Filtrar</button>
+    {% if hay_filtros %}
+      <a class="boton boton-plano" href="{{ url_for('bitacora.lista') }}">Limpiar</a>
+    {% endif %}
+  </form>
+
+  {% if registros %}
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr><th>Fecha</th><th>Usuario</th><th>Origen</th><th>Accion</th><th>Resumen</th><th>Resultado</th></tr>
+      </thead>
+      <tbody>
+      {% for registro in registros %}
+        <tr>
+          <td class="mono">{{ registro.registrado_en.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>
+            {{ registro.usuario_nombre }}
+            {% if registro.rol %}<br><small>{{ etiquetas_rol.get(registro.rol, registro.rol) }}</small>{% endif %}
+          </td>
+          <td>{{ registro.origen|capitalize }}</td>
+          <td>{{ registro.accion }}</td>
+          <td>
+            {{ registro.resumen }}
+            {% if registro.detalle %}
+            <details class="tabla-alterna">
+              <summary>Detalle</summary>
+              <pre class="mono">{{ registro.detalle_legible }}</pre>
+              {% if registro.call_id %}<small class="mono">Llamada {{ registro.call_id }}</small>{% endif %}
+            </details>
+            {% endif %}
+          </td>
+          <td>
+            <span class="etiqueta etiqueta-{{ 'entregado' if registro.resultado == 'exito' else 'fallido' }}">
+              {{ 'Exito' if registro.resultado == 'exito' else 'Error' }}
+            </span>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if paginas > 1 %}
+  <p class="paginacion">
+    {% if pagina > 1 %}
+      <a href="{{ url_for('bitacora.lista', pagina=pagina - 1, **filtros) }}">&lsaquo; Mas recientes</a>
+    {% endif %}
+    Pagina {{ pagina }} de {{ paginas }}
+    {% if pagina < paginas %}
+      <a href="{{ url_for('bitacora.lista', pagina=pagina + 1, **filtros) }}">Mas antiguos &rsaquo;</a>
+    {% endif %}
+  </p>
+  {% endif %}
+  {% else %}
+  <p class="vacio">No hay registros{{ ' con estos filtros' if hay_filtros }}.</p>
+  {% endif %}
+</section>
+{% endblock %}

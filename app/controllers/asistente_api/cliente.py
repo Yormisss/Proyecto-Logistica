@@ -299,7 +299,7 @@ def cancelar_pedido():
 
 
 @funcion_asistente(
-    ESPACIO, "solicitar-contacto", roles=ROLES, accion=True,
+    ESPACIO, "solicitar-contacto", entidad="solicitud", roles=ROLES, accion=True,
     descripcion="Registra una solicitud para que el gestor logistico contacte al cliente.",
     parametros={"motivo": {"type": "string", "description": "Para que necesita el contacto."}},
     requeridos=("motivo",),

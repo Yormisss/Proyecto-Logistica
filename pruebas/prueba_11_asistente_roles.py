@@ -762,9 +762,11 @@ with app.app_context():
     sol_id = sol.id
 eventos = [e for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_contacto"]
 check(len(eventos) == 1 and set(eventos[0]) == {"tipo", "cliente", "correo", "telefono", "motivo", "hora",
-                                                 "correo_destino"}
+                                                 "correo_destino", "realizado_por", "rol_realizado_por",
+                                                 "origen", "realizado_por_publico"}
       and eventos[0]["correo_destino"] == "operaciones@sgds.invalid"
-      and eventos[0]["cliente"] == "Supermercado El Portal",
+      and eventos[0]["cliente"] == "Supermercado El Portal"
+      and eventos[0]["origen"] == "voz" and eventos[0]["rol_realizado_por"] == "Cliente",
       f"y envia a Make el evento solicitud_contacto {eventos[0] if eventos else None}")
 
 YA_REGISTRADA = ("Ya tienes una solicitud de contacto registrada; el gestor logístico se comunicará "

@@ -51,7 +51,7 @@ def registrar_movimiento(producto, tipo, cantidad, usuario_id, motivo=None, pedi
         motivo=motivo,
     )
     db.session.add(movimiento)
-    aviso_stock(producto, stock_previo)
+    aviso_stock(producto, stock_previo, usuario_id=usuario_id)
     return movimiento
 
 
