@@ -11,6 +11,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models import NOMBRE_OTRO, ConfiguracionNegocio, MotivoFallo, normalizar_texto
+from app.services.validacion import DatosInvalidos
 from app.tiempo import ahora
 
 LARGO_MAXIMO_MOTIVO = 160
@@ -31,12 +32,8 @@ MOTIVOS_INICIALES = (
 PARECIDO_MOTIVO = 0.85
 
 
-class ConfiguracionInvalida(Exception):
+class ConfiguracionInvalida(DatosInvalidos):
     """El cambio no cumple las reglas. `errores` es una lista de (campo, mensaje)."""
-
-    def __init__(self, errores):
-        super().__init__(" ".join(mensaje for _, mensaje in errores))
-        self.errores = errores
 
 
 # --------------------------------------------------------------------------
