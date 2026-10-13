@@ -36,10 +36,17 @@
         {{ formulario.descripcion(rows=2) }}
       </div>
       <div class="campo">
-        {{ formulario.stock_actual.label }}
-        {{ formulario.stock_actual() }}
-        {% for e in formulario.stock_actual.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
-        {% if producto %}<small class="ayuda-campo">Cambiarlo registra un movimiento de ajuste.</small>{% endif %}
+        {% if producto %}
+          <label>Stock actual</label>
+          <p class="valor-fijo">{{ producto.stock_actual }} {{ producto.unidad }}</p>
+          <small class="ayuda-campo">El stock solo cambia con una entrada o un ajuste con motivo:
+            <a href="{{ url_for('inventario.detalle', producto_id=producto.id) }}">registrar un movimiento</a>.</small>
+        {% else %}
+          {{ formulario.stock_inicial.label }}
+          {{ formulario.stock_inicial() }}
+          {% for e in formulario.stock_inicial.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+          <small class="ayuda-campo">Entra como movimiento de entrada.</small>
+        {% endif %}
       </div>
       <div class="campo">
         {{ formulario.stock_minimo.label }}

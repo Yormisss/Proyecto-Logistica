@@ -71,11 +71,13 @@
         {{ formulario.cantidad.label }}
         {{ formulario.cantidad() }}
         {% for e in formulario.cantidad.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
-        <small class="ayuda-campo">En un ajuste, la cantidad reemplaza el stock actual.</small>
+        <small class="ayuda-campo">En un ajuste, la cantidad es el stock contado y reemplaza el actual.</small>
       </div>
       <div class="campo">
         {{ formulario.motivo.label }}
         {{ formulario.motivo(placeholder="Recepcion de proveedor") }}
+        {% for e in formulario.motivo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+        <small class="ayuda-campo">Obligatorio en un ajuste.</small>
       </div>
       <button type="submit" class="boton boton-primario">Registrar</button>
     </form>

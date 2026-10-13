@@ -9,11 +9,15 @@ from app.extensions import db
 from app.models import MovimientoInventario, Producto, TipoMovimiento
 from app.services.notificaciones import aviso_stock
 
+MOTIVO_AJUSTE_OBLIGATORIO = "Indique el motivo del ajuste."
+
 
 def registrar_movimiento(producto, tipo, cantidad, usuario_id, motivo=None, pedido_id=None):
     """Aplica un movimiento y deja la trazabilidad correspondiente.
 
     `cantidad` siempre es positiva; el signo lo determina el tipo de movimiento.
+    Un AJUSTE fija el stock al valor contado y exige el motivo, en pantalla y
+    por voz.
 
     Vuelve a leer el producto con `with_for_update()` justo antes de tocar el
     stock: sin el bloqueo, dos ajustes manuales concurrentes sobre el mismo
@@ -23,6 +27,8 @@ def registrar_movimiento(producto, tipo, cantidad, usuario_id, motivo=None, pedi
     sus columnas desde esa fila aunque el producto ya estuviera cargado en el
     identity map de la sesion.
     """
+    if tipo == TipoMovimiento.AJUSTE and not (motivo or "").strip():
+        raise ValueError(MOTIVO_AJUSTE_OBLIGATORIO)
     producto = (
         db.session.query(Producto)
         .filter_by(id=producto.id)
@@ -133,25 +139,17 @@ def crear_producto(datos, usuario_id, motivo_stock="Stock inicial"):
     return producto
 
 
-def editar_producto(producto, datos, usuario_id, motivo_ajuste="Ajuste desde edicion del producto"):
+def editar_producto(producto, datos):
     """Aplica los cambios y devuelve {campo: (antes, despues)}.
 
-    Si `datos` trae `stock_actual` distinto, lo registra como AJUSTE: el stock
-    solo cambia mediante movimientos.
+    No toca el stock: solo cambia con movimientos, una entrada o un ajuste con
+    su motivo (`registrar_movimiento`).
     """
     antes = {campo: getattr(producto, campo) for campo in CAMPOS_PRODUCTO}
     limpios = validar_producto(datos, producto)
-    stock_nuevo = None
-    if datos.get("stock_actual") not in (None, ""):
-        v = Validador()
-        stock_nuevo = v.entero(datos, "stock_actual", "el stock actual", minimo=0)
-        v.lanzar_si_hay()
     cambios = {campo: (antes[campo], valor) for campo, valor in limpios.items() if antes[campo] != valor}
     for campo, valor in limpios.items():
         setattr(producto, campo, valor)
-    if stock_nuevo is not None and stock_nuevo != producto.stock_actual:
-        cambios["stock_actual"] = (producto.stock_actual, stock_nuevo)
-        registrar_movimiento(producto, TipoMovimiento.AJUSTE, stock_nuevo, usuario_id, motivo=motivo_ajuste)
     return cambios
 
 

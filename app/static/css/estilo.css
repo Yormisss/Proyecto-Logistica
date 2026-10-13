@@ -272,6 +272,7 @@ body {
 .campo-ancho { grid-column: 1 / -1; }
 .acciones-formulario { display: flex; gap: .6rem; justify-content: flex-end; align-items: center; margin-bottom: 1rem; }
 .ayuda-campo { color: var(--gris-600); font-size: .78rem; }
+.valor-fijo { margin: 0; padding: .45rem 0; font-weight: 600; }
 
 .tabla-items select, .tabla-items input[type=number] {
   width: 100%; padding: .45rem .5rem; border: 1px solid var(--gris-200);

@@ -341,6 +341,20 @@ Cada cambio de estado deja un `EventoPedido` con usuario, hora y coordenadas, y 
 descuento un `MovimientoInventario` que cita el pedido de origen: trazabilidad completa
 en ambos sentidos.
 
+### El stock solo cambia con movimientos
+
+Fuera de las entregas, el stock de un producto cambia únicamente en *Inventario → producto
+→ Registrar movimiento*, o por voz con `productos` (`entrada` o `ajuste`):
+
+- **Entrada**: suma unidades recibidas (al menos una); el motivo es opcional.
+- **Ajuste por inventario físico**: fija el stock al valor contado (puede ser cero) y el
+  **motivo es obligatorio**; `registrar_movimiento` también lo exige, así que ningún
+  camino deja un ajuste sin motivo.
+
+El stock inicial solo se pide al crear el producto y entra como una entrada. El
+formulario de edición muestra el stock actual pero no lo cambia: un `stock_actual` en ese
+formulario se ignora.
+
 ### Geolocalización desde el teléfono del conductor
 
 La limitación de "dependencia de hardware de terceros" (numeral 1.4) implica que no hay
@@ -817,11 +831,11 @@ entrada, de modo que la trazabilidad cuadra.
 1. Inicie sesión como `despachador@sgds.com` y abra *Inventario → SKU-1001*, que está en
    72, sobre su mínimo de 60. Si ya bajó a 60 o menos, registre antes una **Entrada**.
 2. Registre un **Ajuste por inventario físico** con cantidad **60** (o cualquier valor
-   de 1 a 60) → aviso **`stock_bajo`** con `negativo: false` y `pedido: null`.
+   de 0 a 60) y un motivo → aviso **`stock_bajo`** con `negativo: false` y `pedido: null`.
 3. Para repetirlo, vuelva a subirlo con una Entrada y repita el paso 2.
 
 El formulario de movimientos manuales solo ofrece Entrada y Ajuste, y el ajuste no admite
-valores menores que 1. Por eso el aviso con `negativo: true` solo lo dispara una
+valores negativos. Por eso el aviso con `negativo: true` solo lo dispara una
 **entrega** que deja el stock por debajo de cero.
 
 **Resumen diario**: con `AUTOMATIZACION_TOKEN` definido, ejecute el escenario 2 con *Run

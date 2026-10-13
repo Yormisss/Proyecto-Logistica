@@ -136,7 +136,7 @@ check(b"SKU-1001" in r.data, "listado de productos")
 r = c.get("/inventario/?criticos=1")
 check(b"SKU-1004" in r.data and b"SKU-1001" not in r.data, "filtra bajo minimo")
 r = c.post("/inventario/nuevo", data={"sku":"sku-2001","nombre":"Producto Nuevo","unidad":"UND",
-           "stock_actual":"50","stock_minimo":"10","activo":"y"}, follow_redirects=True)
+           "stock_inicial":"50","stock_minimo":"10","activo":"y"}, follow_redirects=True)
 check(b"SKU-2001 creado" in r.data, "crea producto (SKU normalizado a mayusculas)")
 with app.app_context():
     nuevo = db.session.query(Producto).filter_by(sku="SKU-2001").first()
@@ -144,7 +144,7 @@ with app.app_context():
     movs = db.session.query(MovimientoInventario).filter_by(producto_id=nuevo.id).all()
     check(len(movs) == 1 and movs[0].stock_resultante == 50, "movimiento de stock inicial trazado")
     nid = nuevo.id
-r = c.post("/inventario/nuevo", data={"sku":"SKU-2001","nombre":"Duplicado","stock_actual":"1","stock_minimo":"1"}, follow_redirects=True)
+r = c.post("/inventario/nuevo", data={"sku":"SKU-2001","nombre":"Duplicado","stock_inicial":"1","stock_minimo":"1"}, follow_redirects=True)
 check(b"Ya existe un producto con este SKU" in r.data, "rechaza SKU duplicado")
 r = c.post(f"/inventario/{nid}", data={"tipo":"ENTRADA","cantidad":"25","motivo":"Recepcion proveedor"}, follow_redirects=True)
 check(b"Movimiento registrado" in r.data, "registra entrada")

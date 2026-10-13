@@ -16,9 +16,11 @@ import requests
 
 from run import app
 from app.extensions import db
-from app.models import (Cliente, DireccionCliente, EstadoPedido, EstadoRuta, EventoPedido, Pedido,
-                        PedidoItem, Producto, Ruta, Usuario, Vehiculo)
+from app.models import (Cliente, DireccionCliente, EstadoPedido, EstadoRuta, EventoPedido,
+                        MovimientoInventario, Pedido, PedidoItem, Producto, Ruta, TipoMovimiento, Usuario,
+                        Vehiculo)
 from app.services import ruteo
+from app.services.inventario import registrar_movimiento
 from app.services.busqueda_voz import buscar_sedes
 from app.tiempo import hoy
 
@@ -157,22 +159,61 @@ def producto_db(sku):
         p = db.session.query(Producto).filter_by(sku=sku).one_or_none()
         return SimpleNamespace(id=p.id, sku=p.sku, stock=p.stock_actual) if p else None
 base_producto = {"nombre": "Tornillos", "descripcion": "", "unidad": "UND", "stock_minimo": "5", "activo": "y"}
-enviar(gestor, "/inventario/nuevo", {**base_producto, "sku": "tor-001", "stock_actual": "0"})
+enviar(gestor, "/inventario/nuevo", {**base_producto, "sku": "tor-001", "stock_inicial": "0"})
 sin_mov = producto_db("TOR-001")
 check(sin_mov is not None and sin_mov.stock == 0, "un producto creado sin stock no tiene movimientos")
-r = enviar(gestor, f"/inventario/{sin_mov.id}/editar", {**base_producto, "sku": "TOR-002", "stock_actual": "0"})
+r = enviar(gestor, f"/inventario/{sin_mov.id}/editar", {**base_producto, "sku": "TOR-002"})
 check(producto_db("TOR-002") is not None, "mientras no tenga movimientos, el SKU se puede cambiar")
-enviar(gestor, "/inventario/nuevo", {**base_producto, "sku": "TUE-001", "nombre": "Tuercas", "stock_actual": "40"})
+enviar(gestor, "/inventario/nuevo", {**base_producto, "sku": "TUE-001", "nombre": "Tuercas", "stock_inicial": "40"})
 con_mov = producto_db("TUE-001")
 check(con_mov.stock == 40, "un producto creado con stock inicial entra con su movimiento")
 html = texto(gestor.get(f"/inventario/{con_mov.id}/editar"))
 check("El SKU queda fijo porque el producto ya tiene movimientos de inventario." in html, "la pantalla lo muestra fijo")
-r = enviar(gestor, f"/inventario/{con_mov.id}/editar", {**base_producto, "sku": "TUE-999", "nombre": "Tuercas",
-                                                         "stock_actual": "40"})
+r = enviar(gestor, f"/inventario/{con_mov.id}/editar", {**base_producto, "sku": "TUE-999", "nombre": "Tuercas"})
 check("El SKU queda fijo porque el producto ya tiene movimientos de inventario." in texto(r)
       and producto_db("TUE-999") is None, "un POST que intenta cambiarlo se rechaza")
-r = enviar(gestor, "/inventario/nuevo", {**base_producto, "sku": "TUE-001", "stock_actual": "0"})
+r = enviar(gestor, "/inventario/nuevo", {**base_producto, "sku": "TUE-001", "stock_inicial": "0"})
 check("Ya existe un producto con este SKU" in texto(r), "el SKU sigue siendo unico")
+
+print("\n== 3b. Productos: el stock solo cambia con movimientos ==")
+def movimientos_de(producto_id):
+    with app.app_context():
+        return db.session.query(MovimientoInventario).filter_by(producto_id=producto_id).count()
+html = texto(gestor.get(f"/inventario/{con_mov.id}/editar"))
+check('name="stock_inicial"' not in html and 'name="stock_actual"' not in html
+      and "registrar un movimiento" in html,
+      "la edicion muestra el stock sin campo para cambiarlo, con el enlace a los movimientos")
+check('name="stock_inicial"' in texto(gestor.get("/inventario/nuevo")), "el alta si pide el stock inicial")
+movs = movimientos_de(con_mov.id)
+enviar(gestor, f"/inventario/{con_mov.id}/editar", {**base_producto, "sku": "TUE-001", "nombre": "Tuercas M8",
+                                                    "stock_actual": "7"})
+editado = producto_db("TUE-001")
+with app.app_context():
+    nombre_editado = db.session.get(Producto, con_mov.id).nombre
+check(nombre_editado == "Tuercas M8" and editado.stock == 40 and movimientos_de(con_mov.id) == movs,
+      "un POST de edicion que trae stock_actual cambia el nombre pero no el stock ni crea movimientos")
+url_detalle_producto = f"/inventario/{con_mov.id}"
+r = enviar(gestor, url_detalle_producto, {"tipo": "AJUSTE", "cantidad": "30", "motivo": "  "}, url_detalle_producto)
+check("Indique el motivo del ajuste." in texto(r) and producto_db("TUE-001").stock == 40
+      and movimientos_de(con_mov.id) == movs, "un ajuste sin motivo se rechaza en pantalla")
+r = enviar(gestor, url_detalle_producto, {"tipo": "ENTRADA", "cantidad": "0", "motivo": ""}, url_detalle_producto)
+check("al menos una unidad" in texto(r) and movimientos_de(con_mov.id) == movs, "una entrada de cero se rechaza")
+r = enviar(gestor, url_detalle_producto, {"tipo": "ENTRADA", "cantidad": "5", "motivo": ""}, url_detalle_producto)
+check(producto_db("TUE-001").stock == 45, "una entrada no exige motivo")
+r = enviar(gestor, url_detalle_producto, {"tipo": "AJUSTE", "cantidad": "0", "motivo": "Conteo: no quedan"},
+           url_detalle_producto)
+with app.app_context():
+    ultimo = (db.session.query(MovimientoInventario).filter_by(producto_id=con_mov.id)
+              .order_by(MovimientoInventario.id.desc()).first())
+    check(db.session.get(Producto, con_mov.id).stock_actual == 0 and ultimo.tipo == TipoMovimiento.AJUSTE
+          and ultimo.motivo == "Conteo: no quedan", "un ajuste con motivo puede dejar el stock en cero")
+    try:
+        registrar_movimiento(db.session.get(Producto, con_mov.id), TipoMovimiento.AJUSTE, 3, None)
+        sin_motivo = False
+    except ValueError:
+        sin_motivo = True
+    db.session.rollback()
+check(sin_motivo, "el servicio tampoco acepta un ajuste sin motivo")
 
 
 print("\n== 4. Vehiculos ==")

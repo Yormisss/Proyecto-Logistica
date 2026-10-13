@@ -72,7 +72,8 @@ def ajustar(producto_id, cantidad):
     """Ajuste por inventario fisico desde la vista del producto."""
     url = f"/inventario/{producto_id}"
     return despachador.post(url, data={"csrf_token": token_csrf(despachador, url),
-                                       "tipo": TipoMovimiento.AJUSTE, "cantidad": cantidad})
+                                       "tipo": TipoMovimiento.AJUSTE, "cantidad": cantidad,
+                                       "motivo": "Conteo fisico"})
 
 def entregar(pedido_id):
     url = f"/conductor/parada/{pedido_id}"
@@ -169,7 +170,7 @@ check(not avisos("stock_bajo", inicio), "un producto inactivo no genera aviso")
 
 inicio = len(envios_make)
 with app.app_context():
-    registrar_movimiento(db.session.get(Producto, prod_e), TipoMovimiento.AJUSTE, 5, desp_id)
+    registrar_movimiento(db.session.get(Producto, prod_e), TipoMovimiento.AJUSTE, 5, desp_id, motivo="Conteo")
     db.session.rollback()
 check(not avisos("stock_bajo", inicio), "un movimiento revertido (rollback) no envia nada")
 with app.app_context():

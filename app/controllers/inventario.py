@@ -9,13 +9,13 @@ from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
 from sqlalchemy import or_
 from wtforms import BooleanField, IntegerField, SelectField, StringField, TextAreaField
-from wtforms.validators import DataRequired, Length, NumberRange, Optional
+from wtforms.validators import InputRequired, Length, NumberRange, Optional, ValidationError
 
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import MovimientoInventario, Producto, Rol, TipoMovimiento
 from app.services.inventario import (
-    crear_producto, editar_producto, registrar_movimiento, sku_fijo,
+    MOTIVO_AJUSTE_OBLIGATORIO, crear_producto, editar_producto, registrar_movimiento, sku_fijo,
 )
 from app.services.validacion import DatosInvalidos
 
@@ -24,13 +24,13 @@ inventario_bp = Blueprint("inventario", __name__)
 
 class FormularioProducto(FlaskForm):
     # Sin validadores propios: las reglas las aplica app.services.inventario, las
-    # mismas que usa el asistente de voz. En el alta, "stock actual" es el
-    # stock inicial, que entra como ENTRADA.
+    # mismas que usa el asistente de voz. El stock inicial solo se pide en el
+    # alta y entra como ENTRADA; despues el stock cambia solo con movimientos.
     sku = StringField("SKU", validators=[Optional()])
     nombre = StringField("Nombre", validators=[Optional()])
     descripcion = TextAreaField("Descripcion", validators=[Optional()])
     unidad = StringField("Unidad", validators=[Optional()], default="UND")
-    stock_actual = StringField("Stock actual", validators=[Optional()], default="0")
+    stock_inicial = StringField("Stock inicial", validators=[Optional()], default="0")
     stock_minimo = StringField("Stock minimo", validators=[Optional()], default="0")
     activo = BooleanField("Producto activo", default=True)
 
@@ -42,9 +42,8 @@ class FormularioProducto(FlaskForm):
 
 def _mostrar_errores(formulario, error):
     """Ubica cada error del servicio junto a su campo, o como aviso general."""
-    alias = {"stock_inicial": "stock_actual"}
     for campo, mensaje in error.errores:
-        destino = getattr(formulario, alias.get(campo, campo), None) if campo else None
+        destino = getattr(formulario, campo, None) if campo else None
         if destino is not None:
             destino.errors = list(destino.errors) + [mensaje]
         else:
@@ -59,10 +58,19 @@ class FormularioMovimiento(FlaskForm):
             (TipoMovimiento.AJUSTE, "Ajuste por inventario fisico"),
         ],
     )
+    # En un ajuste la cantidad es el stock contado: puede ser cero.
     cantidad = IntegerField(
-        "Cantidad", validators=[DataRequired("Indique la cantidad."), NumberRange(min=1)]
+        "Cantidad", validators=[InputRequired("Indique la cantidad."), NumberRange(min=0)]
     )
-    motivo = StringField("Motivo", validators=[Optional(), Length(max=255)])
+    motivo = StringField("Motivo", validators=[Length(max=255)])
+
+    def validate_cantidad(self, campo):
+        if self.tipo.data == TipoMovimiento.ENTRADA and (campo.data or 0) < 1:
+            raise ValidationError("Una entrada debe ser de al menos una unidad.")
+
+    def validate_motivo(self, campo):
+        if self.tipo.data == TipoMovimiento.AJUSTE and not (campo.data or "").strip():
+            raise ValidationError(MOTIVO_AJUSTE_OBLIGATORIO)
 
 
 @inventario_bp.route("/")
@@ -97,7 +105,7 @@ def nuevo():
 
     if formulario.validate_on_submit():
         try:
-            producto = crear_producto({**formulario.datos(), "stock_inicial": formulario.stock_actual.data},
+            producto = crear_producto({**formulario.datos(), "stock_inicial": formulario.stock_inicial.data},
                                       current_user.id)
         except DatosInvalidos as error:
             db.session.rollback()
@@ -123,8 +131,7 @@ def editar(producto_id):
 
     if formulario.validate_on_submit():
         try:
-            editar_producto(producto, {**formulario.datos(), "stock_actual": formulario.stock_actual.data},
-                            current_user.id)
+            editar_producto(producto, formulario.datos())
         except DatosInvalidos as error:
             db.session.rollback()
             _mostrar_errores(formulario, error)
