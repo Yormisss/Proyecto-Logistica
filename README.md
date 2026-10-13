@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               1222 verificaciones automatizadas en 16 suites
+├── pruebas/               1536 verificaciones automatizadas en 17 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -375,37 +375,62 @@ aplicación funciona igual.
 
 ### Capacidades por rol
 
-| Rol | Consultas | Acciones (con confirmación) |
+Todo lo que un rol hace en pantalla se puede hacer por voz, salvo las exclusiones de la
+tabla siguiente. Las acciones de una entidad se agrupan en una sola función con el
+parámetro `operacion`; **(M)** marca las operaciones que modifican datos (piden
+confirmación y quedan en la auditoría).
+
+| Rol | Funciones | Total |
 |---|---|---|
-| **Conductor** | Su ruta de hoy (o el cierre si ya la terminó), la siguiente parada, el detalle de una parada | Marcar una parada en camino o reintentarla, registrar una entrega fallida con su motivo |
-| **Gestor logístico** | Resumen del día (KPIs), pendientes sin ruta, avance de las rutas por conductor, un pedido (estado, ruta, conductor, bitácora), stock de un producto, productos bajo mínimo, fallidos de hoy, solicitudes de contacto pendientes | Crear un pedido (cliente y sede registrados, productos existentes, fecha desde hoy), anular un pedido, reintentar un fallido de una ruta de hoy, registrar una entrada de mercancía, ajustar el inventario al valor contado (motivo obligatorio), cambiar la prioridad, agregar un pedido pendiente a la ruta de hoy de un conductor (recalcula la secuencia) |
-| **Administrador** | Todo lo del gestor, más tiempo promedio de entrega, cumplimiento de ventana, productividad por conductor, causas de fallo (7, 14 o 30 días) y el resumen del panel de rendimiento | Todo lo del gestor |
-| **Cliente** | Sus pedidos en curso, el estado e historial de un pedido (con la traducción del portal), su ventana de entrega, el motivo de un fallo, sus sedes | Cancelar un pedido propio que sigue PENDIENTE, solicitar que el gestor lo contacte (una solicitud pendiente a la vez) |
+| **Conductor** | Consultas: `mi-ruta`, `siguiente-parada`, `detalle-parada`. `parada`: `en-camino` (M, también reintenta una fallida), `fallo` (M, con el catálogo o "Otro") | 4 |
+| **Gestor logístico** | Consultas: `resumen-dia`, `pendientes-sin-ruta`, `avance-rutas`, `buscar-pedido`, `stock-producto`, `productos-bajo-minimo`, `fallidos-hoy`, `solicitudes-contacto-pendientes`. `pedidos`: crear, editar, anular, reintentar (M). `productos`: crear, editar, activar, desactivar, entrada, ajuste (M). `rutas`: consultar, crear, agregar-parada, quitar-parada, recalcular, eliminar (M salvo consultar). `clientes` y `sedes`: consultar, crear, editar, activar, desactivar (M salvo consultar). `vehiculos`: consultar, crear, editar, activar, desactivar (M salvo consultar) | 14 |
+| **Administrador** | Todas las del gestor; la analítica (`tiempo-promedio-entrega`, `cumplimiento-ventana`, `productividad-conductores`, `causas-fallo`, `resumen-rendimiento`); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (consulta) | 22 |
+| **Cliente** | Consultas: `pedidos-en-curso`, `pedidos-recientes`, `estado-pedido`, `ventana-entrega`, `motivo-fallo`, `mis-sedes`. Acciones: `cancelar-pedido` (M, solo PENDIENTE), `solicitar-contacto` (M, una pendiente a la vez) | 8 |
 
-Las acciones sobre una misma entidad se agrupan en una sola función con el parámetro
-`operacion`: `pedidos` (crear, editar, anular, reintentar), `productos` (entrada, ajuste),
-`rutas` (agregar-parada) y, para el conductor, `parada` (en-camino, fallo). La operación
-entra en la huella de la confirmación, así que confirmar una no ejecuta otra, y la
-auditoría la registra con su propio título (*"Ajustar inventario"*).
+Reglas que el servidor aplica igual que la pantalla, porque usa los mismos servicios
+(`pedidos`, `despacho`, `planificacion`, `inventario`, `clientes`, `vehiculos`,
+`usuarios`, `configuracion`, `solicitudes`):
 
-Las acciones usan los mismos servicios que la pantalla (`despacho`, `pedidos`,
-`inventario`, `planificacion`, `solicitudes`), así que aplican las mismas reglas,
-disparan los mismos avisos de Make y dejan en la bitácora la nota *"Registrado por el
-asistente de voz"*. La lista completa de funciones, con sus parámetros, está en
-[docs/configuracion_retell.md](docs/configuracion_retell.md).
+- **Pedidos.** Crear exige cliente y sede registrados; si no existen, Gaby ofrece
+  registrarlos y retoma el pedido con lo ya dicho. Editar un PENDIENTE cambia fecha (no
+  anterior a hoy), sede del mismo cliente (actualiza la copia de la dirección), ventana,
+  prioridad, observaciones y productos; un ASIGNADO, solo ventana, prioridad y
+  observaciones, y el resumen advierte recalcular la ruta. Los demás estados no se editan.
+- **Rutas.** El resumen de crear lee conductor, vehículo, número de paradas y criterio;
+  el de eliminar, cuántas paradas vuelven a PENDIENTE. Una ruta con entregas no se
+  elimina.
+- **Inventario.** El stock solo cambia con `entrada` o `ajuste` (motivo obligatorio, y el
+  resumen lee el stock actual y el nuevo). Con stock inicial al crear, el resumen avisa
+  que el SKU queda fijo.
+- **Datos fijos.** El NIT se registra una vez; el SKU con movimientos, la placa y el
+  código de pedido no cambian; el correo de inicio de sesión solo lo cambia un
+  administrador en pantalla.
+- **Usuarios.** Las contraseñas nunca se dicen: al crear o restablecer, el servidor
+  genera una y la envía solo en `credencial_usuario`, por su propio webhook, al correo
+  del usuario. Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, esas dos operaciones se rechazan ya en
+  el resumen. El resumen de editar lee las consecuencias (un vehículo que queda sin
+  conductor, un cliente que pierde el portal); ver [Salvaguardas](#salvaguardas).
+
+Las ediciones son parciales: solo cambia lo que el usuario dijo, y el resumen lee cada
+cambio con su valor anterior y el nuevo. La operación entra en la huella de la
+confirmación, así que confirmar una no ejecuta otra, y la auditoría la registra con su
+propio título (*"Ajustar inventario"*). En la bitácora de cada pedido las acciones por voz
+dejan la nota *"Registrado por el asistente de voz"*. La lista completa de funciones, con
+sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_retell.md).
 
 ### Lo que queda fuera de la voz, y por qué
 
 | Rol | Excluido | Por qué |
 |---|---|---|
-| Conductor | Confirmar una entrega | Exige la prueba de entrega (PoD) en pantalla y descuenta inventario (RF5) |
-| Gestor | Importar CSV, crear o eliminar rutas | Necesitan revisar una vista previa o un mapa; una ruta finalizada tampoco se reabre al agregarle paradas: se crea una nueva en pantalla |
-| Gestor y admin | Crear clientes o sedes | Por voz solo se usan los registrados, para no duplicarlos con otra escritura |
-| Gestor y admin | Marcar atendida una solicitud de contacto | Se hace en la pantalla *Solicitudes*, después de contactar al cliente |
-| Admin | Usuarios, roles, contraseñas y activación de cuentas | Afectan el acceso al sistema; no hay ninguna función de voz para eso y el agente indica que se hace en *Usuarios* |
-| Cliente | Crear pedidos | Depende de la fase del portal pendiente |
+| Todos | Iniciar y cerrar sesión, cambiar la propia contraseña, el botón que abre la llamada | La llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
+| Gestor y admin | Importar pedidos desde CSV | Exige subir un archivo; no tiene equivalente hablado |
+| Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
 | Cliente | Cancelar un pedido ya programado | Desde ASIGNADO ya hay una ruta planificada: el asistente ofrece solicitar contacto con el gestor |
 | Cliente | Rutas, conductores, stock, datos de otros clientes | El mismo aislamiento del portal: un pedido ajeno se responde igual que uno inexistente |
+
+Pendientes de la fase 4 (las acciones las lista `app/asistentes/cobertura.py`): el
+conductor confirma la entrega e inicia la ruta, el gestor atiende una solicitud de
+contacto, la analítica pasa también al gestor y el conductor consulta su historial.
 
 ### Cómo funciona
 
@@ -969,7 +994,7 @@ Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**1222 verificaciones en 16 suites con SQLite y 1227 con MySQL**, todas pasando. La
+**1536 verificaciones en 17 suites con SQLite y 1541 con MySQL**, todas pasando. La
 diferencia está en la suite 7, que en MySQL verifica además las claves ajenas que dibuja el
 diagrama EER (SQLite no las agrega a tablas existentes). Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
@@ -995,15 +1020,16 @@ DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica_pruebas .v
 | `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 67 |
 | `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 (73 en MySQL) |
-| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
-| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 98 |
-| `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 78 |
-| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 211 |
-| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 92 |
+| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 86 |
+| `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 99 |
+| `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 79 |
+| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 214 |
+| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 94 |
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
-| `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 54 |
-| `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` y `credencial_usuario` | 56 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario | 110 |
+| `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
+| `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 87 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario | 277 |
+| `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración y bitácora (admin); resúmenes, rechazos y auditoría | 94 |
 
 **Las pruebas no avisan al Make real.** `ejecutar_todas.py` corre cada suite, y el
 reinicio y la siembra de la base, con `MAKE_WEBHOOK_URL` y `MAKE_WEBHOOK_CREDENCIALES_URL`
@@ -1061,8 +1087,8 @@ en tabla.
 ## MySQL y MySQL Workbench (fase piloto)
 
 El proyecto corre indistintamente sobre SQLite (desarrollo) o MySQL (piloto).
-**La migración está verificada:** las 17 tablas se crean correctamente y las 1222
-pruebas (1227 contra MySQL, que suma las verificaciones propias de ese motor: claves
+**La migración está verificada:** las 17 tablas se crean correctamente y las 1536
+pruebas (1541 contra MySQL, que suma las verificaciones propias de ese motor: claves
 ajenas y precisión de las coordenadas) pasan íntegras contra MySQL 8.0.46.
 
 `docker-compose.yml` no necesita cambios al evolucionar el esquema: solo provisiona
