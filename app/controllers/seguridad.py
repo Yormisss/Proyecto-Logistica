@@ -62,6 +62,9 @@ def requiere_rol(*roles):
                 abort(403)
             return vista(*args, **kwargs)
 
+        # Para inspeccionar quien puede usar cada pantalla (prueba de cobertura
+        # por voz). `login_required` lo conserva: functools.wraps copia __dict__.
+        envoltura.roles_permitidos = tuple(roles)
         return envoltura
 
     return decorador

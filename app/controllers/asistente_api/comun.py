@@ -72,3 +72,23 @@ def resolver(coincidencias, como_texto, que, no_encontrado):
 
 def pedido_texto(pedido):
     return f"{pedido.codigo} de {pedido.cliente_nombre}"
+
+
+def me_falta(etiquetas):
+    """"Me falta el cliente.", "Me faltan el cliente y los productos." (dialogo de formulario)."""
+    etiquetas = list(dict.fromkeys(etiquetas))
+    plural = len(etiquetas) > 1 or etiquetas[0].split(" ", 1)[0] in ("los", "las")
+    return f"Me falta{'n' if plural else ''} {enumerar(etiquetas)}."
+
+
+def frase_datos_invalidos(error):
+    """Lo que falta y lo que no es valido de un DatosInvalidos, para leer en voz alta.
+
+    Usa las mismas reglas (y mensajes) que la pantalla: "Me falta el nombre del
+    cliente y la dirección. El correo no es válido."
+    """
+    partes = []
+    if error.faltantes:
+        partes.append(me_falta([etiqueta for _, etiqueta in error.faltantes]))
+    partes += [mensaje for _, mensaje in error.invalidos]
+    return " ".join(partes)

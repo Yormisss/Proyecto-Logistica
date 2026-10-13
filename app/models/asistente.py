@@ -14,7 +14,7 @@ from app.tiempo import ahora
 
 # Vigencia del vinculo call_id -> usuario. Pasado este plazo las custom
 # functions de la llamada responden 403 aunque la llamada siga abierta.
-VIGENCIA_SESION = timedelta(minutes=10)
+VIGENCIA_SESION = timedelta(minutes=15)
 
 # Plazo para confirmar una accion despues de oir su resumen.
 VIGENCIA_CONFIRMACION = timedelta(minutes=3)

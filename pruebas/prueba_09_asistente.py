@@ -199,7 +199,7 @@ CALL_C1 = datos.get("call_id")
 with app.app_context():
     s = db.session.query(SesionAsistente).filter_by(call_id=CALL_C1).one()
     check(s.usuario_id == c1_id and s.rol == Rol.CONDUCTOR, "guarda call_id -> conductor1 con su rol")
-    check(s.vence_en - s.creada_en == timedelta(minutes=10), "la sesion vence a los 10 minutos")
+    check(s.vence_en - s.creada_en == timedelta(minutes=15), "la sesion vence a los 15 minutos")
 
 retell.falla = True
 total_sesiones = None

@@ -399,7 +399,7 @@ rechazos = [
      "cantidad no entera"),
     ({**pedido_voz, "productos": [{"producto": "arroz", "cantidad": "dos"}]}, "entero mayor que cero",
      "cantidad en palabras"),
-    ({**pedido_voz, "productos": []}, "al menos un producto", "sin productos"),
+    ({**pedido_voz, "productos": []}, "Me faltan los productos con sus cantidades.", "sin productos"),
     ({**pedido_voz, "fecha": "mañana"}, "No entendí la fecha", "una fecha que no es AAAA-MM-DD"),
     ({**pedido_voz, "prioridad": 7}, "prioridad debe ser", "prioridad fuera de 1 a 3"),
     ({**pedido_voz, "fecha": (hoy() - timedelta(days=1)).isoformat()}, "No puedo crear pedidos con fecha pasada",

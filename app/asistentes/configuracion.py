@@ -21,7 +21,7 @@ CARPETA_PROMPTS = Path(__file__).resolve().parent / "prompts"
 
 # Ajustes de llamada comunes a todos los agentes.
 IDIOMA = "es-419"                     # espanol latinoamericano
-DURACION_MAXIMA_MS = 5 * 60 * 1000    # la sesion del servidor dura 10 minutos
+DURACION_MAXIMA_MS = 10 * 60 * 1000   # la sesion del servidor dura 15 minutos
 SILENCIO_MAXIMO_MS = 20 * 1000        # cuelga tras 20 s sin que el usuario hable
 TIEMPO_FUNCION_MS = 15 * 1000         # las funciones responden en milisegundos
 

@@ -16,8 +16,8 @@ from app.controllers.asistente_api import (
     NOTA_ASISTENTE, cantidad, exigir_confirmacion, funcion_asistente, responder,
 )
 from app.controllers.asistente_api.comun import (
-    LARGO_MAXIMO_MOTIVO, entero, enumerar, fecha_iso, fecha_larga, fecha_voz, pedido_texto, porcentaje,
-    resolver, texto,
+    LARGO_MAXIMO_MOTIVO, entero, enumerar, fecha_iso, fecha_larga, fecha_voz, me_falta, pedido_texto,
+    porcentaje, resolver, texto,
 )
 from app.extensions import db
 from app.models import EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, TipoMovimiento
@@ -322,9 +322,12 @@ def solicitudes_contacto_pendientes():
     requeridos=("cliente", "productos"),
 )
 def crear_pedido_voz():
+    # Dialogo de formulario: se dice de una vez todo lo obligatorio que falta.
     nombre_cliente = texto("cliente")
-    if not nombre_cliente:
-        return responder("Necesito el nombre del cliente.")
+    lineas = g.argumentos.get("productos")
+    faltan = ([] if nombre_cliente else ["el cliente"]) +         ([] if isinstance(lineas, list) and lineas else ["los productos con sus cantidades"])
+    if faltan:
+        return responder(me_falta(faltan))
     cliente, error = resolver(
         buscar_clientes(nombre_cliente), lambda c: c.nombre, "clientes",
         f"No encontré el cliente {nombre_cliente}. Por voz solo se crean pedidos para "
@@ -347,9 +350,6 @@ def crear_pedido_voz():
     if sede is None:
         return responder(error)
 
-    lineas = g.argumentos.get("productos")
-    if not isinstance(lineas, list) or not lineas:
-        return responder("Necesito al menos un producto con su cantidad.")
     items, leidos = [], []
     for linea in lineas:
         if not isinstance(linea, dict):

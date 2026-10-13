@@ -61,6 +61,8 @@ cp .env.example .env
 .venv/bin/flask --app run sembrar          # Cargar datos de demostración
 .venv/bin/flask --app run migrar-clientes  # Normalizar clientes en una base con datos
 .venv/bin/flask --app run migrar-asistente # Crear o actualizar las tablas del asistente de voz
+.venv/bin/flask --app run migrar-configuracion # Crear la configuración del negocio (motivos, centro)
+.venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -391,7 +393,7 @@ asistente de voz"*. La lista completa de funciones, con sus parámetros, está e
    (403 si el rol no tiene), crea la llamada con `retell-sdk` en `/v3/create-web-call`
    pasando como variables dinámicas `nombre_usuario` y `fecha_hoy` (hora de Bogotá), y
    guarda `call_id → usuario` y el rol en `sesiones_asistente` con una vigencia de
-   **10 minutos**.
+   **15 minutos**.
 3. El navegador se une a la llamada con el SDK web. **La API key nunca sale del
    servidor:** el navegador solo recibe `access_token`, `call_id`, `transport` e
    `ice_servers`, que el transporte "gateway" de v3 necesita para conectarse.
@@ -474,8 +476,8 @@ repositorio (`app/asistentes/`), y un comando los aplica en Retell por API:
 
    Para cada rol crea el agente, o lo actualiza si ya existe (por su variable o por su
    nombre, *SGDS - Gestor logistico* por ejemplo, para no duplicarlo). Lo deja con
-   español latino (`es-419`), **duración máxima de 5 minutos** (la sesión del servidor dura
-   10, así una llamada nunca sobrevive a su sesión) y **fin tras 20 segundos de
+   español latino (`es-419`), **duración máxima de 10 minutos** (la sesión del servidor dura
+   15, así una llamada nunca sobrevive a su sesión) y **fin tras 20 segundos de
    silencio**, y con sus funciones en `POST`, sin la opción de enviar solo los argumentos
    (el servidor necesita el objeto `call` para leer el `call_id`) y con *Talk While
    Waiting*: mientras una función responde, el agente dice *"Un momento, lo reviso."*
@@ -560,7 +562,8 @@ Sin las variables correspondientes, la aplicación funciona igual y no sale nada
 |---|---|---|
 | `MAKE_WEBHOOK_URL` | URL del *Custom webhook* que recibe los avisos | No se envía ningún aviso |
 | `MAKE_WEBHOOK_KEY` | API key del webhook; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
-| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
+| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
+| `URL_PUBLICA` | Dirección de acceso que lleva `credencial_usuario` (`url_acceso`) | `url_acceso` va vacía |
 | `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario | El endpoint del resumen responde **404** |
 
 Genere el token con `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
@@ -579,6 +582,21 @@ el mismo mecanismo:
 | `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`; en FALLIDO (motivo de la prueba de entrega) y en CANCELADO (motivo de la anulación), además `motivo` |
 | `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora` |
 | `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `correo_destino` |
+| `accion_asistente` | Se agrega un registro a la **auditoría**: una acción confirmada por voz (con su resultado), un cambio de la configuración del negocio o una acción sobre usuarios | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `usuario`, `rol`, `accion`, `entidad`, `resumen`, `detalle` (texto plano, una línea por dato), `resultado` (`exito` o `error`), `hora`, `correo_destino`. **Nunca lleva contraseñas ni tokens** |
+| `credencial_usuario` | Se **crea o restablece por voz** una cuenta: la contraseña se genera en el servidor | El propio usuario, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `contrasena`, `url_acceso` (`URL_PUBLICA`), `creado_por` (nombre y rol), `accion` (`creación` o `restablecimiento`), `hora`, `correo_destino`. Es el **único** lugar por el que viaja la contraseña: no se guarda en la auditoría ni sale en otro evento. En pantalla la contraseña se sigue mostrando una vez, como antes, y no se envía |
+
+**Todo evento lleva además quién originó la acción:**
+
+| Campo | Contenido |
+|---|---|
+| `realizado_por` | Nombre completo de quien hizo la acción, o `Sistema SGDS (automático)` |
+| `rol_realizado_por` | `Conductor`, `Gestor logístico`, `Administrador`, `Cliente` o `Sistema` |
+| `origen` | `pantalla`, `voz` o `automático` |
+| `realizado_por_publico` | Solo la etiqueta del rol. Es el que deben usar los correos a clientes (`pedido_estado`): no exponen nombres del personal |
+
+En `stock_bajo` es quien hizo el movimiento que cruzó el umbral (en una entrega, el
+conductor que la confirmó). El resumen diario y cada fila de reprogramación salen como
+`Sistema SGDS (automático)`, con origen `automático`.
 
 `stock_bajo` avisa **una vez por umbral, al cruzarlo hacia abajo**, y no en cada
 movimiento posterior:
@@ -601,7 +619,11 @@ movimiento posterior:
   "direccion": "Av. Cra 68 #75-50, Bogota",
   "ventana": "08:00 - 11:00",
   "hora": "2026-10-06 09:12",
-  "motivo": "El cliente cancelo la compra"
+  "motivo": "El cliente cancelo la compra",
+  "realizado_por": "Carlos Rueda",
+  "rol_realizado_por": "Gestor logístico",
+  "origen": "pantalla",
+  "realizado_por_publico": "Gestor logístico"
 }
 ```
 
@@ -615,7 +637,11 @@ movimiento posterior:
   "negativo": false,
   "pedido": null,
   "correo_destino": "operaciones@ejemplo.com",
-  "hora": "2026-10-06 10:40"
+  "hora": "2026-10-06 10:40",
+  "realizado_por": "Carlos Rueda",
+  "rol_realizado_por": "Gestor logístico",
+  "origen": "voz",
+  "realizado_por_publico": "Gestor logístico"
 }
 ```
 
@@ -627,7 +653,48 @@ movimiento posterior:
   "telefono": "3115550111",
   "motivo": "Cancelar el pedido de hoy",
   "hora": "2026-10-06 11:05",
-  "correo_destino": "operaciones@ejemplo.com"
+  "correo_destino": "operaciones@ejemplo.com",
+  "realizado_por": "Marcela Rios",
+  "rol_realizado_por": "Cliente",
+  "origen": "voz",
+  "realizado_por_publico": "Cliente"
+}
+```
+
+```json
+{
+  "tipo": "accion_asistente",
+  "usuario": "Carlos Rueda",
+  "rol": "Gestor logístico",
+  "accion": "Anular pedido",
+  "entidad": "pedido",
+  "resumen": "Voy a anular el pedido PED-20261006-004 de Tienda La Esquina por: Duplicado.",
+  "detalle": "funcion: gestor/anular-pedido\ndatos / pedido: PED-20261006-004\ndatos / motivo: Duplicado\nrespuesta: Listo, anulé el pedido PED-20261006-004.",
+  "resultado": "exito",
+  "hora": "2026-10-06 11:20",
+  "correo_destino": "operaciones@ejemplo.com",
+  "realizado_por": "Carlos Rueda",
+  "rol_realizado_por": "Gestor logístico",
+  "origen": "voz",
+  "realizado_por_publico": "Gestor logístico"
+}
+```
+
+```json
+{
+  "tipo": "credencial_usuario",
+  "nombre": "Lucia Herrera",
+  "correo": "lucia.herrera@ejemplo.com",
+  "contrasena": "q7RmT2xKp9Wd",
+  "url_acceso": "https://sgds.ejemplo.com",
+  "creado_por": "Laura Gomez (Administrador)",
+  "accion": "creación",
+  "hora": "2026-10-06 11:30",
+  "correo_destino": "lucia.herrera@ejemplo.com",
+  "realizado_por": "Laura Gomez",
+  "rol_realizado_por": "Administrador",
+  "origen": "voz",
+  "realizado_por_publico": "Administrador"
 }
 ```
 
@@ -646,6 +713,13 @@ movimiento posterior:
      distinguir en el asunto un stock bajo de un descuadre.
    - `tipo` = `solicitud_contacto` → correo para `{{correo_destino}}` con el cliente,
      su teléfono, su correo y el motivo, para que el gestor lo llame.
+   - `tipo` = `accion_asistente` → correo para `{{correo_destino}}` con
+     `{{realizado_por}}`, `{{rol}}`, `{{origen}}`, `{{resumen}}`, `{{detalle}}` y
+     `{{resultado}}`; opcionalmente, una fila en Google Sheets por registro.
+   - `tipo` = `credencial_usuario` → correo para `{{correo_destino}}` (el propio
+     usuario) con `{{url_acceso}}`, `{{correo}}` y `{{contrasena}}`. No lo copie a
+     otra hoja ni a otro destinatario.
+   - En los correos a clientes use `{{realizado_por_publico}}`, nunca `{{realizado_por}}`.
 
 ### Escenario 2: resumen diario programado
 
@@ -677,9 +751,14 @@ Bogotá):
   "fallidos_para_reprogramar": [
     {"codigo": "PED-20261006-005", "cliente": "Supermercado El Portal",
      "correo": "compras@ejemplo.com", "direccion": "Av. Cra 68 #75-50, Bogota",
-     "motivo": "Cliente ausente"}
+     "motivo": "Cliente ausente", "realizado_por": "Sistema SGDS (automático)",
+     "rol_realizado_por": "Sistema", "origen": "automático", "realizado_por_publico": "Sistema"}
   ],
-  "resumen_html": "<div style=\"font-family:Arial…\">…</div>"
+  "resumen_html": "<div style=\"font-family:Arial…\">…</div>",
+  "realizado_por": "Sistema SGDS (automático)",
+  "rol_realizado_por": "Sistema",
+  "origen": "automático",
+  "realizado_por_publico": "Sistema"
 }
 ```
 

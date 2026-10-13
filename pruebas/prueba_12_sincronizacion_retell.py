@@ -225,6 +225,18 @@ with app.app_context():
 admin = next(d for d in conf.AGENTES if d.clave == "admin")
 gestor = next(d for d in conf.AGENTES if d.clave == "gestor")
 cliente = next(d for d in conf.AGENTES if d.clave == "cliente")
+for definicion in conf.AGENTES:
+    texto = conf.prompt(definicion)
+    check("Gaby" in conf.bienvenida(definicion) and texto.startswith("Eres Gaby"),
+          f"{definicion.clave}: se presenta como Gaby")
+    check("Me falta" in texto and "de uno en uno" in texto and "deletreados" in texto
+          and "No inventes valores" in texto and "contraseñas nunca se dicen" in texto
+          and "El NIT de un cliente" in texto and "La placa de un vehículo" in texto,
+          f"{definicion.clave}: reglas de formulario por voz, datos fijos y contraseñas")
+from app.models import VIGENCIA_SESION
+check(conf.DURACION_MAXIMA_MS == 10 * 60 * 1000 and VIGENCIA_SESION.total_seconds() == 15 * 60
+      and VIGENCIA_SESION.total_seconds() * 1000 > conf.DURACION_MAXIMA_MS,
+      "llamada de 10 minutos como maximo; la sesion del servidor (15) la cubre entera")
 check("Usuarios" in conf.prompt(admin) and "contraseñas" in conf.prompt(admin),
       "el admin explica que usuarios, roles y contraseñas se manejan en pantalla")
 check("Importar pedidos desde un archivo CSV" in conf.prompt(gestor) and "solo lo hace un administrador" in conf.prompt(gestor),
@@ -257,10 +269,10 @@ check(not [x for x in retell.registro if x == ("agent.create", "agent_conductor"
       and ("agent.publish", "agent_conductor", 3) in retell.registro,
       "el conductor existente: borrador v3, su LLM en v3 actualizado, y se publica")
 v_cond = retell.publicada("agent_conductor")
-check(v_cond["language"] == "es-419" and v_cond["max_call_duration_ms"] == 300000
+check(v_cond["language"] == "es-419" and v_cond["max_call_duration_ms"] == 600000
       and v_cond["end_call_after_silence_ms"] == 20000 and v_cond["agent_name"] == "SGDS - Conductor"
       and v_cond["response_engine"] == {"type": "retell-llm", "llm_id": "llm_de_agent_conductor", "version": 3},
-      "con espanol latino, 5 minutos, 20 s de silencio y el mismo LLM en su misma version")
+      "con espanol latino, 10 minutos, 20 s de silencio y el mismo LLM en su misma version")
 check(retell.agentes["agent_conductor"][0]["publicada"]
       and retell.llms["llm_de_agent_conductor"][2]["general_prompt"] == "prompt viejo",
       "la version publicada anterior queda intacta, con su version del LLM")
