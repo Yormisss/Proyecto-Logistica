@@ -28,6 +28,7 @@ SUITES = [
     ("prueba_10_automatizaciones.py", "RF4/RF6 · Automatizaciones con Make"),
     ("prueba_11_asistente_roles.py", "RF1/RF4 · Asistente de voz por rol"),
     ("prueba_12_sincronizacion_retell.py", "RF4 · Configuracion y sincronizacion con Retell"),
+    ("prueba_13_configuracion.py", "RF4/RF6 · Configuracion del negocio"),
 ]
 
 
