@@ -116,12 +116,20 @@ def causas_fallo():
     if not filas:
         return responder(f"En los últimos {dias} días no hay entregas fallidas con motivo.")
     total = sum(f["cantidad"] for f in filas)
-    return responder(
+    partes = [
         f"En los últimos {dias} días hubo {cantidad(total, 'entrega fallida', 'entregas fallidas')}. "
         "Las causas principales: "
         + enumerar([f"{f['motivo']}, {f['cantidad']}" for f in filas[:LIMITE_LISTA]])
         + "."
-    )
+    ]
+    otro = next((f for f in filas if f.get("es_otro") and f.get("detalles")), None)
+    if otro:
+        partes.append(
+            f"En «{otro['motivo']}» se escribió: "
+            + enumerar([f"{d['texto']}, {d['cantidad']}" for d in otro["detalles"][:LIMITE_LISTA]])
+            + "."
+        )
+    return responder(" ".join(partes))
 
 
 @funcion_asistente(

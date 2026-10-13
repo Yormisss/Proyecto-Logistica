@@ -120,6 +120,14 @@
         </div>
       {% endfor %}
       </div>
+      {% for fila in motivos if fila.es_otro and fila.detalles %}
+        <h3 class="tarjeta-subtitulo">Detalle de «{{ fila.motivo }}»</h3>
+        <ul class="lista-detalle-otro">
+        {% for detalle in fila.detalles %}
+          <li>{{ detalle.texto }} <span class="nota-pie">({{ detalle.cantidad }})</span></li>
+        {% endfor %}
+        </ul>
+      {% endfor %}
       <p class="nota-pie">
         Identificar la causa dominante permite atacarla en la planificacion,
         no solo registrarla.

@@ -12,6 +12,7 @@ from app.controllers.asistente_api import (
 )
 from app.extensions import db
 from app.models import EstadoPedido, Rol
+from app.services.configuracion import ConfiguracionInvalida, interpretar_motivo_voz
 from app.services.despacho import (
     TransicionInvalida, cambiar_estado, ruta_del_dia, ruta_finalizada_del_dia,
     validar_transicion,
@@ -19,9 +20,6 @@ from app.services.despacho import (
 
 ESPACIO = "conductor"
 ROLES = (Rol.CONDUCTOR,)
-
-# Mismo limite que PruebaEntrega.motivo_fallo.
-LARGO_MAXIMO_MOTIVO = 160
 
 PENDIENTES = (EstadoPedido.ASIGNADO, EstadoPedido.EN_RUTA)
 
@@ -181,7 +179,8 @@ def marcar_en_camino():
 
 @funcion_asistente(
     ESPACIO, "registrar-fallo", roles=ROLES, accion=True,
-    descripcion="Pasa una parada de la ruta de hoy a FALLIDO con el motivo; no toca el inventario.",
+    descripcion="Pasa una parada de la ruta de hoy a FALLIDO con el motivo; no toca el inventario. "
+                "El motivo se compara con el catalogo; si no coincide, queda como 'Otro' con lo dicho.",
     parametros={
         **PARAMETRO_ORDEN,
         "motivo": {"type": "string", "description": "Por que no se pudo entregar."},
@@ -196,9 +195,14 @@ def registrar_fallo():
     if pedido is None:
         return responder(error)
 
-    motivo = str(g.argumentos.get("motivo") or "").strip()[:LARGO_MAXIMO_MOTIVO]
-    if not motivo:
-        return responder("Necesito el motivo por el que no se pudo entregar.")
+    # Lo dicho se compara con el catalogo; si no coincide con ningun motivo, se
+    # registra como "Otro" con el texto dicho, y el resumen lo lee asi.
+    try:
+        motivo_catalogo, motivo = interpretar_motivo_voz(g.argumentos.get("motivo"))
+    except ConfiguracionInvalida as error:
+        return responder(str(error))
+    como = (f"por otro motivo: {motivo}" if motivo_catalogo.es_otro
+            else f"por: {motivo}")
 
     try:
         validar_transicion(pedido.estado, EstadoPedido.FALLIDO)
@@ -209,7 +213,7 @@ def registrar_fallo():
 
     pendiente = exigir_confirmacion(
         f"Voy a registrar la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}, "
-        f"como no entregada por: {motivo}."
+        f"como no entregada {como}."
     )
     if pendiente:
         return pendiente
@@ -221,6 +225,7 @@ def registrar_fallo():
             g.usuario.id,
             nota=NOTA_ASISTENTE,
             motivo_fallo=motivo,
+            motivo_id=motivo_catalogo.id,
         )
     except TransicionInvalida as causa:
         db.session.rollback()
@@ -231,5 +236,5 @@ def registrar_fallo():
     db.session.commit()
     return responder(
         f"Registré la parada {pedido.orden_en_ruta}, {pedido.cliente_nombre}, "
-        f"como no entregada por: {motivo}. El inventario no se afectó."
+        f"como no entregada {como}. El inventario no se afectó."
     )

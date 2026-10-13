@@ -15,6 +15,8 @@ from wtforms.validators import Length, Optional
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import EstadoPedido, Pedido, Rol, Ruta
+from app.services.configuracion import ConfiguracionInvalida, resolver_motivo_pantalla
+from app.services.configuracion import catalogo as catalogo_motivos
 from app.services.despacho import (
     TransicionInvalida, cambiar_estado, iniciar_ruta, ruta_del_dia,
     ruta_finalizada_del_dia,
@@ -22,16 +24,6 @@ from app.services.despacho import (
 from app.tiempo import hoy
 
 conductor_bp = Blueprint("conductor", __name__)
-
-MOTIVOS_FALLO = [
-    "Cliente ausente",
-    "Direccion incorrecta",
-    "Establecimiento cerrado",
-    "Cliente rechaza el pedido",
-    "Zona de dificil acceso",
-    "Fuera de la ventana horaria",
-    "Novedad con la mercancia",
-]
 
 
 class FormularioEntrega(FlaskForm):
@@ -45,7 +37,11 @@ class FormularioEntrega(FlaskForm):
 
 
 class FormularioFallo(FlaskForm):
+    # Nombre del motivo del catalogo (configuracion del negocio). Con "Otro",
+    # `motivo_otro` lleva el motivo escrito por el conductor.
     motivo_fallo = StringField("Motivo", validators=[Optional(), Length(max=160)])
+    # Sin Length: el largo lo valida el servicio, con un mensaje claro.
+    motivo_otro = StringField("Cual fue el motivo", validators=[Optional()])
     observacion = TextAreaField("Detalle", validators=[Optional(), Length(max=1000)])
     latitud = HiddenField()
     longitud = HiddenField()
@@ -158,7 +154,7 @@ def parada(pedido_id):
         formulario_entrega=FormularioEntrega(),
         formulario_fallo=FormularioFallo(),
         formulario_accion=FormularioAccion(),
-        motivos=MOTIVOS_FALLO,
+        motivos=catalogo_motivos(),
     )
 
 
@@ -249,9 +245,11 @@ def fallar(pedido_id):
         flash("Solicitud invalida. Intente nuevamente.", "error")
         return redirect(url_for("conductor.parada", pedido_id=pedido.id))
 
-    motivo = (formulario.motivo_fallo.data or "").strip()
-    if not motivo:
-        flash("Indique el motivo por el cual no se pudo entregar.", "error")
+    try:
+        motivo, texto = resolver_motivo_pantalla(formulario.motivo_fallo.data,
+                                                 formulario.motivo_otro.data)
+    except ConfiguracionInvalida as error:
+        flash(str(error), "error")
         return redirect(url_for("conductor.parada", pedido_id=pedido.id))
 
     try:
@@ -259,10 +257,11 @@ def fallar(pedido_id):
             pedido,
             EstadoPedido.FALLIDO,
             current_user.id,
-            nota=f"Entrega fallida: {motivo}",
+            nota=f"Entrega fallida: {texto}",
             latitud=_latitud(formulario),
             longitud=_longitud(formulario),
-            motivo_fallo=motivo,
+            motivo_fallo=texto,
+            motivo_id=motivo.id,
             observacion=formulario.observacion.data or None,
         )
     except TransicionInvalida as error:

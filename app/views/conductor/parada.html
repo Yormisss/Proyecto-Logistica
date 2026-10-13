@@ -91,8 +91,13 @@
       <label for="motivo_fallo">Motivo</label>
       <select name="motivo_fallo" id="motivo_fallo" required>
         <option value="">Seleccione un motivo</option>
-        {% for motivo in motivos %}<option value="{{ motivo }}">{{ motivo }}</option>{% endfor %}
+        {% for motivo in motivos %}<option value="{{ motivo.nombre }}"{{ ' data-otro' if motivo.es_otro }}>{{ motivo.nombre }}</option>{% endfor %}
       </select>
+    </div>
+    <div class="campo" id="campo-motivo-otro">
+      <label for="motivo_otro">Si eligió «Otro», escriba el motivo</label>
+      <input type="text" name="motivo_otro" id="motivo_otro" maxlength="160"
+             placeholder="Hasta 160 caracteres">
     </div>
     <div class="campo">
       {{ formulario_fallo.observacion.label }}
@@ -178,6 +183,23 @@
   }, function () {
     // Permiso denegado o sin senal: se continua sin coordenadas.
   }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+})();
+
+// El motivo escrito solo aplica a "Otro": se muestra y se exige al elegirlo.
+// Sin JavaScript el campo queda visible y el servidor valida igual.
+(function () {
+  const lista = document.getElementById("motivo_fallo");
+  const campo = document.getElementById("campo-motivo-otro");
+  const texto = document.getElementById("motivo_otro");
+  if (!lista || !campo || !texto) return;
+  function actualizar() {
+    const opcion = lista.options[lista.selectedIndex];
+    const esOtro = Boolean(opcion && opcion.hasAttribute("data-otro"));
+    campo.hidden = !esOtro;
+    texto.required = esOtro;
+  }
+  lista.addEventListener("change", actualizar);
+  actualizar();
 })();
 </script>
 {% endblock %}

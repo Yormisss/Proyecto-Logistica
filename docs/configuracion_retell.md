@@ -78,7 +78,7 @@ Nunca envíes "confirmar": true sin haberle leído antes el resumen al usuario y
 | `siguiente-parada` | `/api/asistente/conductor/siguiente-parada` | Primera parada pendiente de la ruta de hoy: cliente, direccion y ventana horaria. |
 | `detalle-parada` | `/api/asistente/conductor/detalle-parada` | Detalle de una parada de la ruta de hoy: cliente, direccion, ventana, estado, unidades, telefono y observaciones. |
 | `marcar-en-camino` | `/api/asistente/conductor/marcar-en-camino` | Pasa una parada de la ruta de hoy a EN_RUTA (tambien sirve para reintentar una fallida). Modifica datos: llamala primero sin 'confirmar' para obtener el resumen. |
-| `registrar-fallo` | `/api/asistente/conductor/registrar-fallo` | Pasa una parada de la ruta de hoy a FALLIDO con el motivo; no toca el inventario. Modifica datos: llamala primero sin 'confirmar' para obtener el resumen. |
+| `registrar-fallo` | `/api/asistente/conductor/registrar-fallo` | Pasa una parada de la ruta de hoy a FALLIDO con el motivo; no toca el inventario. El motivo se compara con el catalogo; si no coincide, queda como 'Otro' con lo dicho. Modifica datos: llamala primero sin 'confirmar' para obtener el resumen. |
 
 Parámetros (JSON schema) de cada función:
 

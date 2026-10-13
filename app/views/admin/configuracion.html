@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block titulo %}Configuracion | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Configuracion del negocio</h1>
+  <p class="subtitulo-pagina">
+    Datos que ajusta la operacion. Las claves, tokens y direcciones del sistema viven en el
+    archivo .env y no se editan aqui.
+  </p>
+</div>
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Centro de distribucion</h2>
+  <p class="nota-pie">Origen de las rutas. Un cambio solo afecta a las rutas nuevas o recalculadas.</p>
+  <form method="post" action="{{ url_for('configuracion.centro') }}" class="formulario">
+    {{ formulario_centro.hidden_tag() }}
+    <div class="campo">
+      {{ formulario_centro.cd_nombre.label }}
+      {{ formulario_centro.cd_nombre(maxlength=120, required=True) }}
+    </div>
+    <div class="campo">
+      {{ formulario_centro.cd_latitud.label }}
+      {{ formulario_centro.cd_latitud(inputmode="decimal", required=True) }}
+      <small>Entre -90 y 90.</small>
+    </div>
+    <div class="campo">
+      {{ formulario_centro.cd_longitud.label }}
+      {{ formulario_centro.cd_longitud(inputmode="decimal", required=True) }}
+      <small>Entre -180 y 180.</small>
+    </div>
+    <button type="submit" class="boton boton-primario">Guardar centro</button>
+  </form>
+</section>
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Motivos de entrega fallida</h2>
+  <p class="nota-pie">
+    El conductor elige uno de los motivos activos. «Otro» siempre existe y obliga a escribir el
+    motivo. Los motivos no se borran: se desactivan, y dejan de ofrecerse al conductor.
+  </p>
+  <table class="tabla">
+    <thead><tr><th>Motivo</th><th>Estado</th><th class="derecha">Usos</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for motivo in motivos %}
+      <tr>
+        <td>
+          {% if motivo.es_otro %}
+            <strong>{{ motivo.nombre }}</strong> <small>(comodín: no se renombra ni se desactiva)</small>
+          {% else %}
+            <form method="post" action="{{ url_for('configuracion.renombrar_motivo', motivo_id=motivo.id) }}"
+                  class="formulario-en-linea">
+              {{ formulario_motivo.hidden_tag() }}
+              <input type="text" name="nombre" value="{{ motivo.nombre }}" maxlength="{{ largo_maximo }}"
+                     aria-label="Nombre del motivo">
+              <button type="submit" class="boton boton-plano">Renombrar</button>
+            </form>
+          {% endif %}
+        </td>
+        <td>
+          <span class="etiqueta etiqueta-{{ 'entregado' if motivo.activo else 'cancelado' }}">
+            {{ 'Activo' if motivo.activo else 'Desactivado' }}
+          </span>
+        </td>
+        <td class="derecha">{{ usos.get(motivo.id, 0) }}</td>
+        <td>
+          {% if not motivo.es_otro %}
+            <form method="post" action="{{ url_for('configuracion.alternar_motivo', motivo_id=motivo.id) }}">
+              {{ formulario_accion.hidden_tag() }}
+              <button type="submit" class="boton boton-plano">{{ 'Desactivar' if motivo.activo else 'Activar' }}</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <form method="post" action="{{ url_for('configuracion.agregar_motivo') }}" class="formulario formulario-en-linea">
+    {{ formulario_motivo.hidden_tag() }}
+    <label for="nuevo_motivo">Nuevo motivo</label>
+    <input type="text" name="nombre" id="nuevo_motivo" maxlength="{{ largo_maximo }}" required>
+    <button type="submit" class="boton boton-primario">Agregar</button>
+  </form>
+</section>
+{% endblock %}
