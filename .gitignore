@@ -22,3 +22,6 @@ instance/
 .DS_Store
 .idea/
 .vscode/
+
+# Big Data: el data lake pesa cientos de MB y se regenera con bigdata/pipeline.py
+bigdata/datalake/

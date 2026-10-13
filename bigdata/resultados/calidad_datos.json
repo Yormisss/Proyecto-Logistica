@@ -1,0 +1,16 @@
+{
+  "filas_entrada": 306319,
+  "sin_codigo_descartadas": 0,
+  "duplicados_eliminados": 6096,
+  "ciudades_normalizadas": 38871,
+  "estados_en_minuscula": 2892,
+  "distancias_invalidas": 1471,
+  "prioridades_nulas": 2952,
+  "clientes_sin_nombre": 1469,
+  "mediana_distancia_imputada_km": 15.8,
+  "filas_salida": 300223,
+  "eventos_entrada": 882510,
+  "eventos_salida": 882510,
+  "movimientos_entrada": 253508,
+  "movimientos_salida": 253508
+}

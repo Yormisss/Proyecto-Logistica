@@ -13,7 +13,7 @@ from flask import request
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import Rol, Ruta, Usuario
-from app.services import analitica
+from app.services import analitica, bigdata
 from app.services.configuracion import centro_distribucion
 
 admin_bp = Blueprint("admin", __name__)
@@ -45,6 +45,7 @@ def dashboard():
         rutas_hoy=rutas_hoy,
         productos_criticos=productos_criticos,
         conductores_activos=conductores_activos,
+        bd=bigdata.panel(),
     )
 
 

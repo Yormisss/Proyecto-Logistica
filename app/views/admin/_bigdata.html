@@ -1,0 +1,279 @@
+{# Tablero de Big Data: resultados del pipeline de Spark (variable `bd`). #}
+
+{% macro miles(n) %}{{ '{:,}'.format(n).replace(',', '.') }}{% endmacro %}
+
+{% macro barras(filas, etiqueta, valor, sufijo='', nota=None, sufijo_nota='') %}
+  {% set tope = (filas | map(attribute=valor) | max) or 1 %}
+  <div class="grafica-barras barras-anchas">
+    {% for f in filas %}
+    {% set numero = miles(f[valor]) if f[valor] is integer else f[valor] %}
+    <div class="fila-barra"
+         data-tooltip="{{ f[etiqueta] }} â€” {{ numero }}{{ sufijo }}{% if nota %} Â· {{ miles(f[nota]) }}{{ sufijo_nota }}{% endif %}">
+      <span class="etiqueta-barra">{{ f[etiqueta] }}</span>
+      <div class="pista-barra"><div class="barra" style="width: {{ f[valor] / tope * 100 }}%"></div></div>
+      <span class="valor-barra">{{ numero }}{{ sufijo }}</span>
+    </div>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{% macro lineas(g, descripcion) %}
+  <div class="grafica-lineas">
+    <div class="eje-y" aria-hidden="true">
+      {% for m in g.marcas %}<span style="bottom: {{ m.pct }}%">{{ m.texto }}</span>{% endfor %}
+    </div>
+    <div class="lienzo">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="{{ descripcion }}">
+        {% for m in g.marcas %}
+        <line class="linea-grilla" x1="0" x2="100" y1="{{ 100 - m.pct }}" y2="{{ 100 - m.pct }}"/>
+        {% endfor %}
+        {% for s in g.series %}
+        <polyline class="linea-serie" points="{{ s.puntos }}" style="stroke: {{ s.color }}"/>
+        {% endfor %}
+        {% for b in g.bandas %}
+        <rect class="banda" x="{{ b.x }}" y="0" width="{{ b.ancho }}" height="100" data-tooltip="{{ b.tooltip }}"/>
+        {% endfor %}
+      </svg>
+    </div>
+    <div class="eje-x" aria-hidden="true">
+      {% for e in g.eje_x %}<span>{{ e }}</span>{% endfor %}
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro leyenda(series) %}
+  <ul class="leyenda">
+    {% for s in series %}
+    <li><span class="muestra" style="background: {{ s.color }}"></span>{{ s.nombre }}</li>
+    {% endfor %}
+  </ul>
+{% endmacro %}
+
+<section class="rejilla-kpis cuatro" id="big-data">
+  <article class="kpi">
+    <span class="kpi-etiqueta">Registros procesados</span>
+    <span class="kpi-valor compacto">{{ miles(bd.registros) }}</span>
+    <span class="kpi-detalle">{{ bd.totales.desde }} a {{ bd.totales.hasta }}</span>
+  </article>
+  <article class="kpi">
+    <span class="kpi-etiqueta">Pedidos analizados</span>
+    <span class="kpi-valor compacto">{{ miles(bd.totales.pedidos) }}</span>
+    <span class="kpi-detalle">{{ miles(bd.totales.clientes) }} clientes &middot; {{ bd.totales.conductores }} conductores</span>
+  </article>
+  <article class="kpi">
+    <span class="kpi-etiqueta">Tasa de exito global</span>
+    <span class="kpi-valor compacto">{{ bd.totales.tasa_exito }}<small class="kpi-unidad">%</small></span>
+    <span class="kpi-detalle">{{ miles(bd.meses | sum(attribute='entregados')) }} entregas exitosas</span>
+  </article>
+  <article class="kpi">
+    <span class="kpi-etiqueta">Data lake</span>
+    <span class="kpi-valor compacto">{{ bd.lake_mb }}<small class="kpi-unidad">MB</small></span>
+    <span class="kpi-detalle">{{ miles(bd.corregidas) }} filas corregidas en el ETL</span>
+  </article>
+</section>
+
+{# --- Entregas por mes: dos series, columna apilada --- #}
+<section class="tarjeta">
+  <div class="grafica-encabezado">
+    <h2 class="tarjeta-titulo sin-borde">Entregas por mes</h2>
+    <ul class="leyenda">
+      <li><span class="muestra" style="background: var(--serie-1)"></span>Entregadas</li>
+      <li><span class="muestra" style="background: var(--serie-2)"></span>Fallidas</li>
+    </ul>
+  </div>
+  <div class="grafica-columnas mensual" role="img" aria-label="Entregas y fallos por mes">
+    {% for m in bd.meses %}
+    <div class="columna-dia"
+         data-tooltip="{{ m.etiqueta }} â€” {{ miles(m.entregados) }} entregadas Â· {{ miles(m.fallidos) }} fallidas Â· {{ miles(m.cancelados) }} canceladas">
+      <div class="columna-pila">
+        <div class="segmento segmento-fallidas" style="height: {{ m.fallidos / bd.maximo_mes * 100 }}%"></div>
+        <div class="segmento segmento-entregadas sin-tope" style="height: {{ m.entregados / bd.maximo_mes * 100 }}%"></div>
+      </div>
+      <span class="etiqueta-dia">{{ m.eje or '&nbsp;' | safe }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <details class="tabla-alterna">
+    <summary>Ver los datos en tabla</summary>
+    <div class="tabla-scroll">
+    <table class="tabla">
+      <thead><tr><th>Mes</th><th class="derecha">Pedidos</th><th class="derecha">Entregados</th><th class="derecha">Fallidos</th><th class="derecha">Cancelados</th><th class="derecha">Exito</th><th class="derecha">Ventana</th><th class="derecha">Km promedio</th></tr></thead>
+      <tbody>
+      {% for m in bd.meses %}
+        <tr>
+          <td>{{ m.etiqueta }}</td>
+          <td class="derecha">{{ miles(m.pedidos) }}</td>
+          <td class="derecha">{{ miles(m.entregados) }}</td>
+          <td class="derecha">{{ miles(m.fallidos) }}</td>
+          <td class="derecha">{{ miles(m.cancelados) }}</td>
+          <td class="derecha">{{ m.tasa_exito }}%</td>
+          <td class="derecha">{{ m.cumplimiento_ventana }}%</td>
+          <td class="derecha">{{ m.km_promedio }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+</section>
+
+<div class="rejilla-par">
+  <section class="tarjeta">
+    <div class="grafica-encabezado">
+      <h2 class="tarjeta-titulo sin-borde">Calidad del servicio</h2>
+      {{ leyenda(bd.servicio.series) }}
+    </div>
+    {{ lineas(bd.servicio, 'Tasa de exito y cumplimiento de ventana horaria por mes') }}
+  </section>
+
+  <section class="tarjeta">
+    <div class="grafica-encabezado">
+      <h2 class="tarjeta-titulo sin-borde">Flujo de inventario</h2>
+      {{ leyenda(bd.inventario.series) }}
+    </div>
+    {{ lineas(bd.inventario, 'Unidades que entran y salen del almacen por mes') }}
+  </section>
+</div>
+
+<div class="rejilla-par">
+  {# --- Mapa de calor: magnitud en un solo tono, de claro a oscuro --- #}
+  <section class="tarjeta">
+    <div class="grafica-encabezado">
+      <h2 class="tarjeta-titulo sin-borde">Tasa de fallo por zona y franja</h2>
+      <span class="escala-calor" aria-hidden="true">Menor<span class="escala-rampa"></span>Mayor</span>
+    </div>
+    <table class="mapa-calor">
+      <thead>
+        <tr><th></th>{% for f in bd.franjas %}<th scope="col">{{ f }}</th>{% endfor %}<th scope="col">Zona</th></tr>
+      </thead>
+      <tbody>
+      {% for fila in bd.calor %}
+        <tr>
+          <th scope="row">{{ fila.zona }}</th>
+          {% for c in fila.celdas %}
+            {% if c %}
+            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.85 }}" style="--i: {{ c.intensidad }}"
+                data-tooltip="{{ fila.zona }} Â· {{ bd.franjas[loop.index0] }} â€” {{ c.tasa_fallo }}% de fallo Â· {{ miles(c.fallidos) }} de {{ miles(c.intentos) }} intentos">{{ c.tasa_fallo | round(1) }}%</td>
+            {% else %}
+            <td class="celda-vacia">â€”</td>
+            {% endif %}
+          {% endfor %}
+          <td class="celda-total">{{ fila.tasa }}%</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Causas de entrega fallida</h2>
+    {{ barras(bd.motivos, 'motivo', 'porcentaje', '%', 'casos', ' casos') }}
+  </section>
+</div>
+
+{# --- Un punto por conductor: la forma de la distribucion, no un ranking --- #}
+<section class="tarjeta">
+  <div class="grafica-encabezado">
+    <h2 class="tarjeta-titulo sin-borde">Tasa de exito por conductor</h2>
+    <span class="nota-grafica">{{ bd.flota.total }} conductores &middot; mediana {{ bd.flota.mediana }}%</span>
+  </div>
+  <div class="grafica-puntos">
+    <span class="marca-mediana" style="left: {{ bd.flota.mediana_pct }}%" aria-hidden="true"></span>
+    {% for p in bd.flota.puntos %}
+    <span class="punto" style="left: {{ p.x }}%; bottom: {{ 6 + p.carril * 12 }}px" data-tooltip="{{ p.tooltip }}"></span>
+    {% endfor %}
+  </div>
+  <div class="eje-puntos" aria-hidden="true">
+    {% for m in bd.flota.marcas %}<span style="left: {{ m.pct }}%">{{ m.texto }}</span>{% endfor %}
+  </div>
+</section>
+
+<div class="rejilla-par">
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Productos de mayor salida</h2>
+    {{ barras(bd.sku, 'sku', 'unidades', '', 'salidas', ' salidas') }}
+    <div class="segmentos-abc" role="img" aria-label="Clasificacion ABC de {{ bd.total_sku }} productos">
+      {% for c in bd.abc %}
+      <span class="segmento-abc abc-{{ c.clase | lower }}" style="flex-grow: {{ c.productos }}"
+            data-tooltip="Clase {{ c.clase }} â€” {{ c.productos }} productos"></span>
+      {% endfor %}
+    </div>
+    <ul class="leyenda">
+      {% for c in bd.abc %}
+      <li><span class="muestra abc-{{ c.clase | lower }}"></span>Clase {{ c.clase }} &middot; {{ c.productos }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Pedidos por ciudad</h2>
+    {{ barras(bd.ciudades, 'ciudad', 'pedidos', '', 'fallidos', ' fallidos') }}
+  </section>
+</div>
+
+{% if bd.ml %}
+<section class="tarjeta">
+  <div class="grafica-encabezado">
+    <h2 class="tarjeta-titulo sin-borde">Prediccion de entregas fallidas</h2>
+    <span class="nota-grafica">{{ miles(bd.ml.filas_entrenamiento) }} entregas de entrenamiento &middot; {{ miles(bd.ml.filas_prueba) }} de prueba</span>
+  </div>
+  <div class="resumen-metricas metricas-modelo">
+    <div><strong>{{ bd.ml.auc }}</strong><span>AUC</span></div>
+    <div><strong>{{ (bd.ml.recall_fallos * 100) | round(1) }}%</strong><span>Fallos detectados</span></div>
+    <div><strong>{{ (bd.ml.precision_fallos * 100) | round(1) }}%</strong><span>Precision</span></div>
+    <div><strong>{{ bd.ml.tasa_fallo_base_pct }}%</strong><span>Tasa base de fallo</span></div>
+  </div>
+  <div class="rejilla-par interna">
+    <div>
+      <h3 class="titulo-seccion">Peso de cada variable</h3>
+      {{ barras(bd.ml.importancias, 'variable', 'pct', '%') }}
+    </div>
+    <div>
+      <h3 class="titulo-seccion">Matriz de confusion</h3>
+      <table class="mapa-calor matriz">
+        <thead><tr><th></th><th scope="col">Predijo fallo</th><th scope="col">Predijo entrega</th></tr></thead>
+        <tbody>
+        {% for fila in bd.ml.matriz %}
+          <tr>
+            <th scope="row">{{ 'Fallo real' if loop.first else 'Entrega real' }}</th>
+            {% for c in fila %}
+            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.85 }}" style="--i: {{ c.intensidad }}"
+                data-tooltip="{{ c.texto }} â€” {{ miles(c.valor) }} entregas">
+              <strong>{{ miles(c.valor) }}</strong><small>{{ c.texto }}</small>
+            </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<div class="rejilla-par">
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Registros por fuente</h2>
+    {{ barras(bd.fuentes, 'nombre', 'registros') }}
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Data lake por capa</h2>
+    {{ barras(bd.capas, 'nombre', 'mb', ' MB') }}
+  </section>
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Filas corregidas en el ETL</h2>
+    {{ barras(bd.reglas, 'regla', 'filas') }}
+  </section>
+
+  {% if bd.streaming %}
+  <section class="tarjeta">
+    <div class="grafica-encabezado">
+      <h2 class="tarjeta-titulo sin-borde">Eventos en streaming</h2>
+      <span class="nota-grafica">{{ bd.streaming.eventos_persistidos }} eventos &middot; {{ bd.streaming.lotes }} micro-lotes</span>
+    </div>
+    {{ barras(bd.streaming.estados, 'estado', 'eventos') }}
+  </section>
+  {% endif %}
+</div>
