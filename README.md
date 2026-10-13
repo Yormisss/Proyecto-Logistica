@@ -571,41 +571,69 @@ transporte `gateway` con el `call_id`.
 Cambiar de página corta la llamada; el asistente está pensado para usarse desde una
 misma pantalla sin navegar.
 
+## Auditoría y bitácora
+
+La tabla `auditoria` responde quién hizo qué, desde dónde (`pantalla`, `voz` o
+`automático`) y con qué resultado. Es de **solo agregar**: el ORM rechaza modificar o borrar
+un registro. Nunca guarda contraseñas ni tokens.
+
+| Qué | Se audita | Correo `accion_asistente` a operaciones |
+|---|---|---|
+| Acciones confirmadas por voz (también las que fallan) | Sí, con el `call_id` | Sí, salvo el flujo del conductor (iniciar ruta, en camino, entregar, fallo) y las entradas de mercancía |
+| *Usuarios* y *Configuración*, en pantalla | Sí | Sí |
+| Clientes, sedes, productos, ajustes de inventario, vehículos, rutas (crear, recalcular, quitar parada, eliminar), pedidos (crear, editar, anular) y solicitudes atendidas, en pantalla | Sí | No |
+| Importar pedidos desde CSV | Una línea por importación, con cuántos se crearon | No |
+| El flujo del conductor y las entradas de mercancía, en pantalla | No: ya quedan en `eventos_pedido` y `movimientos_inventario`, con quién lo hizo | No |
+
+Las ediciones registran solo los campos que cambiaron, con el valor anterior y el nuevo;
+guardar sin cambios no deja registro. El administrador consulta todo en **Bitácora**
+(`/admin/bitacora/`), con filtros por fecha, usuario, origen y acción. Para tenerla en
+Google Sheets, el [escenario 3](#escenario-3-auditoría-en-google-sheets) la lee por lotes
+sin perder ni repetir registros.
+
 ## Automatizaciones con Make
 
-La aplicación se integra con [Make](https://www.make.com) en dos sentidos, ambos
-opcionales: **avisa** a un webhook de Make cuando ocurre algo (escenario 1) y **expone un
-resumen diario** que un escenario programado consulta y envía por correo (escenario 2).
-Sin las variables correspondientes, la aplicación funciona igual y no sale nada.
+La aplicación se integra con [Make](https://www.make.com) en ambos sentidos, todo
+opcional: **avisa** a un webhook de Make cuando ocurre algo (escenario 1), envía las
+contraseñas de las cuentas creadas por voz por un **webhook aparte** (escenario de
+credenciales), y **expone** un resumen diario (escenario 2) y la auditoría por lotes para
+Google Sheets (escenario 3), que Make consulta de forma programada. Sin las variables
+correspondientes, la aplicación funciona igual y no sale nada.
 
 ### Variables
 
 | Variable | Para qué | Si está vacía |
 |---|---|---|
 | `MAKE_WEBHOOK_URL` | URL del *Custom webhook* que recibe los avisos | No se envía ningún aviso |
-| `MAKE_WEBHOOK_KEY` | API key del webhook; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
+| `MAKE_WEBHOOK_KEY` | API key de los webhooks; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
+| `MAKE_WEBHOOK_CREDENCIALES_URL` | URL del webhook **aparte** que recibe solo `credencial_usuario` | No se envían contraseñas, y crear o restablecer cuentas **por voz** se rechaza en el resumen (en pantalla funciona igual) |
 | `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
 | `URL_PUBLICA` | Dirección de acceso que lleva `credencial_usuario` (`url_acceso`) | `url_acceso` va vacía |
-| `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario | El endpoint del resumen responde **404** |
+| `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario y la auditoría | Ambos endpoints responden **404** |
 
 Genere el token con `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 ### Eventos salientes
 
-Todo aviso es un `POST` JSON a `MAKE_WEBHOOK_URL` con un campo **`tipo`**, y todos usan
-el mismo mecanismo:
+Todo aviso es un `POST` JSON a `MAKE_WEBHOOK_URL` con un campo **`tipo`** (salvo
+`credencial_usuario`, que va solo a `MAKE_WEBHOOK_CREDENCIALES_URL`), y todos usan el mismo
+mecanismo:
 
 - Solo sale **después del commit**: un cambio revertido no genera correo.
 - Va en segundo plano, con un timeout de 3 s de conexión y 5 s de respuesta. **Si Make
-  falla o tarda, la operación no se bloquea ni se revierte**; el fallo queda solo en el log.
+  falla o tarda, la operación no se bloquea ni se revierte**; el fallo queda solo en el log
+  y el aviso no se reintenta (por eso la hoja de auditoría se llena con el escenario 3, que
+  sí recupera lo que falte).
+- Todo evento lleva `hora` (`2026-10-06 11:20`) y **`fecha_hora`** en ISO 8601 con segundos
+  y el desplazamiento de Bogotá (`2026-10-06T11:20:37-05:00`).
 
 | `tipo` | Cuándo | Destinatario | Campos |
 |---|---|---|---|
-| `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`; en FALLIDO (motivo de la prueba de entrega) y en CANCELADO (motivo de la anulación), además `motivo` |
-| `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora` |
-| `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `correo_destino` |
-| `accion_asistente` | Se agrega un registro a la **auditoría**: una acción confirmada por voz (con su resultado), un cambio de la configuración del negocio o una acción sobre usuarios | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `usuario`, `rol`, `accion`, `entidad`, `resumen`, `detalle` (texto plano, una línea por dato), `resultado` (`exito` o `error`), `hora`, `correo_destino`. **Nunca lleva contraseñas ni tokens** |
-| `credencial_usuario` | Se **crea o restablece por voz** una cuenta: la contraseña se genera en el servidor | El propio usuario, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `contrasena`, `url_acceso` (`URL_PUBLICA`), `creado_por` (nombre y rol), `accion` (`creación` o `restablecimiento`), `hora`, `correo_destino`. Es el **único** lugar por el que viaja la contraseña: no se guarda en la auditoría ni sale en otro evento. En pantalla la contraseña se sigue mostrando una vez, como antes, y no se envía |
+| `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`, `fecha_hora`; en FALLIDO (motivo de la prueba de entrega) y en CANCELADO (motivo de la anulación), además `motivo` |
+| `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora`, `fecha_hora` |
+| `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `fecha_hora`, `correo_destino` |
+| `accion_asistente` | Se agrega a la **auditoría** un registro con correo: una acción confirmada por voz (con su resultado), salvo el flujo del conductor y las entradas de mercancía, o una acción de *Usuarios* o *Configuración* (ver [Auditoría](#auditoría-y-bitácora)) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `id_auditoria`, `usuario`, `rol`, `accion`, `entidad`, `resumen`, `detalle` (texto plano, una línea por dato), `resultado` (`exito` o `error`), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva contraseñas ni tokens** |
+| `credencial_usuario` | Se **crea o restablece por voz** una cuenta: la contraseña se genera en el servidor | El propio usuario, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `contrasena`, `url_acceso` (`URL_PUBLICA`), `creado_por` (nombre y rol), `accion` (`creación` o `restablecimiento`), `hora`, `fecha_hora`, `correo_destino`. Es el **único** lugar por el que viaja la contraseña: no se guarda en la auditoría ni sale en otro evento, y va **solo** a `MAKE_WEBHOOK_CREDENCIALES_URL`. En pantalla la contraseña se sigue mostrando una vez, como antes, y no se envía |
 
 **Todo evento lleva además quién originó la acción:**
 
@@ -641,6 +669,7 @@ movimiento posterior:
   "direccion": "Av. Cra 68 #75-50, Bogota",
   "ventana": "08:00 - 11:00",
   "hora": "2026-10-06 09:12",
+  "fecha_hora": "2026-10-06T09:12:00-05:00",
   "motivo": "El cliente cancelo la compra",
   "realizado_por": "Carlos Rueda",
   "rol_realizado_por": "Gestor logístico",
@@ -660,6 +689,7 @@ movimiento posterior:
   "pedido": null,
   "correo_destino": "operaciones@ejemplo.com",
   "hora": "2026-10-06 10:40",
+  "fecha_hora": "2026-10-06T10:40:00-05:00",
   "realizado_por": "Carlos Rueda",
   "rol_realizado_por": "Gestor logístico",
   "origen": "voz",
@@ -675,6 +705,7 @@ movimiento posterior:
   "telefono": "3115550111",
   "motivo": "Cancelar el pedido de hoy",
   "hora": "2026-10-06 11:05",
+  "fecha_hora": "2026-10-06T11:05:00-05:00",
   "correo_destino": "operaciones@ejemplo.com",
   "realizado_por": "Marcela Rios",
   "rol_realizado_por": "Cliente",
@@ -686,6 +717,7 @@ movimiento posterior:
 ```json
 {
   "tipo": "accion_asistente",
+  "id_auditoria": 1842,
   "usuario": "Carlos Rueda",
   "rol": "Gestor logístico",
   "accion": "Anular pedido",
@@ -694,6 +726,7 @@ movimiento posterior:
   "detalle": "funcion: gestor/pedidos:anular\ndatos / operacion: anular\ndatos / pedido: PED-20261006-004\ndatos / motivo: Duplicado\nrespuesta: Listo, anulé el pedido PED-20261006-004.",
   "resultado": "exito",
   "hora": "2026-10-06 11:20",
+  "fecha_hora": "2026-10-06T11:20:00-05:00",
   "correo_destino": "operaciones@ejemplo.com",
   "realizado_por": "Carlos Rueda",
   "rol_realizado_por": "Gestor logístico",
@@ -712,6 +745,7 @@ movimiento posterior:
   "creado_por": "Laura Gomez (Administrador)",
   "accion": "creación",
   "hora": "2026-10-06 11:30",
+  "fecha_hora": "2026-10-06T11:30:00-05:00",
   "correo_destino": "lucia.herrera@ejemplo.com",
   "realizado_por": "Laura Gomez",
   "rol_realizado_por": "Administrador",
@@ -737,11 +771,29 @@ movimiento posterior:
      su teléfono, su correo y el motivo, para que el gestor lo llame.
    - `tipo` = `accion_asistente` → correo para `{{correo_destino}}` con
      `{{realizado_por}}`, `{{rol}}`, `{{origen}}`, `{{resumen}}`, `{{detalle}}` y
-     `{{resultado}}`; opcionalmente, una fila en Google Sheets por registro.
-   - `tipo` = `credencial_usuario` → correo para `{{correo_destino}}` (el propio
-     usuario) con `{{url_acceso}}`, `{{correo}}` y `{{contrasena}}`. No lo copie a
-     otra hoja ni a otro destinatario.
+     `{{resultado}}`. La hoja de Google Sheets **no** se llena desde aquí sino con el
+     escenario 3, que no pierde registros.
    - En los correos a clientes use `{{realizado_por_publico}}`, nunca `{{realizado_por}}`.
+
+   Este escenario **no** tiene ruta para `credencial_usuario`: ese evento nunca llega a
+   `MAKE_WEBHOOK_URL`. Si su escenario ya tenía esa ruta, elimínela.
+
+### Escenario de credenciales: webhook aparte
+
+`credencial_usuario` lleva una contraseña en claro, así que tiene su propio escenario, con
+acceso restringido y sin historial del contenido:
+
+1. Cree un escenario **separado** con el disparador **Webhooks → Custom webhook** y copie su
+   URL en `MAKE_WEBHOOK_CREDENCIALES_URL`. Lleva la misma API key, `MAKE_WEBHOOK_KEY`.
+2. En *Scenario settings* active **"Data is confidential"**: Make deja de guardar el
+   contenido de cada ejecución, y la contraseña no queda en el historial del escenario.
+3. Un único módulo de correo para `{{correo_destino}}` (el propio usuario) con
+   `{{url_acceso}}`, `{{correo}}` y `{{contrasena}}`, y un texto que le sugiera cambiarla
+   en *Perfil*. No agregue otros destinatarios, hojas ni registros.
+4. Compártalo solo con quien administre las cuentas.
+
+Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, Gaby no ofrece crear ni restablecer cuentas por voz:
+responde, ya en el resumen, que se hace en pantalla.
 
 ### Escenario 2: resumen diario programado
 
@@ -761,6 +813,7 @@ Bogotá):
 ```json
 {
   "fecha": "2026-10-06",
+  "fecha_hora": "2026-10-06T18:00:04-05:00",
   "correo_destino": "operaciones@ejemplo.com",
   "kpis": {
     "total": 17, "entregados": 7, "fallidos": 5, "cancelados": 2, "pendientes": 3,
@@ -797,6 +850,65 @@ Configuración del escenario:
    cuerpo `{{data.resumen_html}}`.
 4. Opcional: un **Iterator** sobre `fallidos_para_reprogramar` y un correo por pedido a
    `{{correo}}`, para que el cliente coordine una nueva visita.
+
+### Escenario 3: auditoría en Google Sheets
+
+`GET /api/automatizacion/auditoria?desde_id=<n>&limite=<m>` entrega la auditoría por
+lotes, en el orden de la hoja. Se autentica igual que el resumen diario
+(`X-Automatizacion-Token`; **401** con otro token, **404** sin `AUTOMATIZACION_TOKEN`).
+
+| Parámetro | Valor |
+|---|---|
+| `desde_id` | Último `id_auditoria` ya escrito en la hoja (0 la primera vez). Negativo: **400** |
+| `limite` | Registros por lote: 200 por defecto, como máximo 500 |
+
+```json
+{
+  "columnas": ["id_auditoria", "fecha_hora", "usuario", "rol", "origen", "accion", "entidad",
+               "entidad_id", "resumen", "detalle", "resultado", "call_id"],
+  "filas": [
+    [1842, "2026-10-06T11:20:37-05:00", "Carlos Rueda", "Gestor logístico", "voz",
+     "Anular pedido", "pedido", "", "Voy a anular el pedido PED-20261006-004 de Tienda La Esquina por: Duplicado.",
+     "funcion: gestor/pedidos:anular\ndatos / operacion: anular\n…", "exito", "call_9f2c…"]
+  ],
+  "siguiente_desde_id": 1842,
+  "hay_mas": false,
+  "fecha_hora": "2026-10-06T12:00:02-05:00"
+}
+```
+
+**Sin huecos.** Solo se entregan registros con al menos **60 segundos** de antigüedad, y el
+recorrido es por `id`: se corta en el primer registro todavía reciente, aunque haya otros
+posteriores ya viejos. En MySQL, dos transacciones simultáneas pueden confirmar el id 11
+antes que el 10; con este corte el 11 no sale antes que el 10, y el cursor nunca salta un
+registro. Un id que nunca llegó a existir (un *rollback*) no importa, porque el cursor es
+"mayor que".
+
+**Sin repetidos.** El cursor solo avanza si la hoja se escribió, y `id_auditoria` identifica
+cada fila si un lote se reintenta.
+
+Configuración del escenario:
+
+1. Disparador **Schedule** cada hora (zona horaria *America/Bogota*).
+2. **Data store → Get a record**: un almacén `cursor_auditoria` con la clave `auditoria` y
+   el campo `desde_id` (número; 0 si no existe).
+3. **HTTP → Make a request**: `GET`
+   `https://<su-dominio>/api/automatizacion/auditoria?desde_id={{desde_id}}&limite=200`, con
+   el encabezado `X-Automatizacion-Token` y *Parse response* activado; timeout de 60 s.
+4. **Filtro**: continúa solo si `filas` no está vacío.
+5. **Google Sheets → Bulk Add Rows (Advanced)**: hoja `Auditoria`, cuya primera fila tiene
+   los nombres de `columnas`; *Rows* = `{{data.filas}}`. Es **una sola operación por lote**.
+6. **Data store → Add/replace a record**: `auditoria` → `desde_id = {{data.siguiente_desde_id}}`.
+   Va después de la escritura, así que solo se guarda si Bulk Add Rows salió bien; si
+   falla, la siguiente ejecución vuelve a pedir el mismo lote.
+7. Si `hay_mas` es `true`, quedan registros: la siguiente ejecución los trae. Para vaciar la
+   cola de una vez, envuelva los pasos 2 a 6 en un **Repeater** que se detenga cuando
+   `hay_mas` sea `false`.
+
+Para detectar una fila repetida por un reintento (un lote que se escribió pero cuyo cursor
+no alcanzó a guardarse), la columna A es `id_auditoria`: en la hoja, una columna auxiliar
+`=COUNTIF(A:A; A2)>1` marca los duplicados, o un paso **Search Rows** por `id_auditoria`
+antes de escribir los evita, a costa de una operación por fila.
 
 ### Demo con los datos sembrados
 

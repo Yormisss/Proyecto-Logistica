@@ -37,6 +37,16 @@ def hoy():
     return ahora().date()
 
 
+def iso_bogota(momento=None):
+    """"2026-10-13T14:05:09-05:00": ISO 8601 con segundos y el desplazamiento de Bogota.
+
+    `momento` es un datetime naive en hora de Bogota (como los de la base);
+    por omision, ahora.
+    """
+    momento = momento or ahora()
+    return momento.replace(tzinfo=ZONA_BOGOTA, microsecond=0).isoformat()
+
+
 # Nombres en espanol, sin depender del locale del servidor (en la nube suele
 # ser ingles). Los usan el asistente de voz para leer y entender fechas.
 DIAS_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")

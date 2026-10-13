@@ -54,6 +54,10 @@ class ConfiguracionBase:
     # API key del webhook de Make. Si se define, viaja en el encabezado
     # x-make-apikey de cada aviso y Make rechaza los que no la traen.
     MAKE_WEBHOOK_KEY = os.getenv("MAKE_WEBHOOK_KEY", "")
+    # Webhook aparte, solo para "credencial_usuario" (la contrasena de una cuenta
+    # creada o restablecida por voz). Su escenario debe tener activado "Data is
+    # confidential" en Make. Vacio = esas acciones no se ofrecen por voz.
+    MAKE_WEBHOOK_CREDENCIALES_URL = os.getenv("MAKE_WEBHOOK_CREDENCIALES_URL", "")
     # Destino de los avisos internos (stock bajo) y del resumen diario. Vacio =
     # no se envian avisos internos; los avisos al cliente no dependen de esto.
     CORREO_OPERACIONES = os.getenv("CORREO_OPERACIONES", "")

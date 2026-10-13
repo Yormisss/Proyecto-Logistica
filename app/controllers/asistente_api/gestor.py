@@ -499,7 +499,7 @@ productos = funcion_agrupada(
 
 
 @productos("entrada", "Registrar entrada",
-           "suma unidades recibidas al stock; requiere producto y cantidad")
+           "suma unidades recibidas al stock; requiere producto y cantidad", avisar=False)
 def registrar_entrada():
     producto, error = _producto(solo_activos=False)
     if producto is None:

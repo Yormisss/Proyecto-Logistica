@@ -1,8 +1,12 @@
 """Registro en la auditoria y su aviso a operaciones.
 
-`registrar_auditoria` agrega el registro a la sesion de la base y encola el
-evento `accion_asistente` de Make; ambos se confirman con el commit de quien
-llama, de modo que una accion revertida no deja registro "exitoso".
+`registrar_auditoria` agrega el registro a la sesion de la base y, si
+`avisar`, encola el evento `accion_asistente` de Make; ambos se confirman con
+el commit de quien llama, de modo que una accion revertida no deja registro
+"exitoso". Con correo a operaciones (avisar=True): las acciones por voz, salvo
+el flujo del conductor y las entradas de mercancia, y todo lo de Usuarios y
+Configuracion. El resto de lo que se hace en pantalla queda en la auditoria
+sin correo; llega a Google Sheets por /api/automatizacion/auditoria.
 
 Las contrasenas y los tokens nunca llegan a la auditoria: cualquier dato cuya
 clave los nombre se reemplaza por "(no se registra)" antes de guardar.
@@ -14,11 +18,17 @@ from app.extensions import db
 from app.models import RESULTADO_ERROR, RESULTADO_EXITO, Auditoria
 from app.services.notificaciones import (
     ORIGEN_AUTOMATICO,
+    ROL_SISTEMA,
     aviso_accion_asistente,
+    etiqueta_rol,
     origen_actual,
     usuario_actual,
 )
-from app.tiempo import ahora
+from app.tiempo import ahora, iso_bogota
+
+# Columnas de la hoja de auditoria (Google Sheets), en su orden.
+COLUMNAS_HOJA = ("id_auditoria", "fecha_hora", "usuario", "rol", "origen", "accion", "entidad",
+                 "entidad_id", "resumen", "detalle", "resultado", "call_id")
 
 # Fragmentos de clave que marcan un dato sensible.
 CLAVES_SENSIBLES = ("contrasena", "contraseña", "password", "clave", "token", "secret",
@@ -26,7 +36,8 @@ CLAVES_SENSIBLES = ("contrasena", "contraseña", "password", "clave", "token", "
 OCULTO = "(no se registra)"
 LARGO_RESUMEN = 500
 
-__all__ = ["RESULTADO_ERROR", "RESULTADO_EXITO", "registrar_auditoria", "limpiar"]
+__all__ = ["COLUMNAS_HOJA", "RESULTADO_ERROR", "RESULTADO_EXITO", "auditar_pantalla",
+           "campos_cambiados", "fila_hoja", "limpiar", "registrar_auditoria"]
 
 
 def _sensible(clave):
@@ -45,8 +56,8 @@ def limpiar(datos):
 
 
 def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RESULTADO_EXITO,
-                        entidad_id=None, usuario=None, origen=None, call_id=None):
-    """Agrega un registro de auditoria (y su evento) a la transaccion en curso.
+                        entidad_id=None, usuario=None, origen=None, call_id=None, avisar=True):
+    """Agrega un registro de auditoria (y, si `avisar`, su evento) a la transaccion en curso.
 
     `usuario` y `origen` se toman de la peticion si no vienen: el usuario de la
     llamada de voz o el de la sesion web, y "voz" o "pantalla". Sin usuario el
@@ -70,8 +81,44 @@ def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RES
     )
     registro.usuario = usuario
     db.session.add(registro)
-    aviso_accion_asistente(registro)
+    # El flush le da su id, que viaja en el evento como id_auditoria.
+    db.session.flush([registro])
+    if avisar:
+        aviso_accion_asistente(registro)
     return registro
+
+
+def auditar_pantalla(accion, entidad, resumen, detalle=None, entidad_id=None):
+    """Registra una accion de pantalla del alcance de la auditoria, sin correo.
+
+    Clientes, sedes, productos, ajustes de inventario, vehiculos, rutas,
+    pedidos y solicitudes. Usuarios y Configuracion usan `registrar_auditoria`
+    con correo.
+    """
+    return registrar_auditoria(accion, entidad, resumen, detalle, entidad_id=entidad_id, avisar=False)
+
+
+def campos_cambiados(cambios):
+    """"nombre, telefono" a partir de {campo: (antes, despues)}."""
+    return ", ".join(campo.replace("_", " ") for campo in cambios)
+
+
+def fila_hoja(registro):
+    """Valores del registro en el orden de COLUMNAS_HOJA."""
+    return [
+        registro.id,
+        iso_bogota(registro.registrado_en),
+        registro.usuario_nombre,
+        etiqueta_rol(registro.rol) if registro.rol else ROL_SISTEMA,
+        registro.origen,
+        registro.accion,
+        registro.entidad,
+        registro.entidad_id or "",
+        registro.resumen,
+        registro.detalle_legible,
+        registro.resultado,
+        registro.call_id or "",
+    ]
 
 
 def cambios_legibles(cambios):

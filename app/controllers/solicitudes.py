@@ -7,6 +7,7 @@ from flask_wtf import FlaskForm
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import Rol, SolicitudContacto
+from app.services.auditoria import auditar_pantalla
 from app.services.solicitudes import SolicitudInvalida, marcar_atendida
 
 solicitudes_bp = Blueprint("solicitudes", __name__)
@@ -60,6 +61,9 @@ def atender(solicitud_id):
     except SolicitudInvalida as error:
         flash(str(error), "advertencia")
         return redirect(url_for("solicitudes.lista"))
+    auditar_pantalla("Atender solicitud de contacto", "solicitud",
+                     f"Marcó como atendida la solicitud de {solicitud.cliente.nombre} ({solicitud.motivo}).",
+                     {"cliente": solicitud.cliente.nombre, "motivo": solicitud.motivo}, entidad_id=solicitud.id)
     db.session.commit()
     flash(f"Solicitud de {solicitud.cliente.nombre} marcada como atendida.", "exito")
     return redirect(url_for("solicitudes.lista"))

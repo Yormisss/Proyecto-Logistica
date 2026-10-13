@@ -82,8 +82,9 @@ def entregar(pedido_id):
 
 CAMPOS_ACTOR = {"realizado_por", "rol_realizado_por", "origen", "realizado_por_publico"}
 CAMPOS_STOCK = {"tipo", "sku", "producto", "stock_actual", "stock_minimo", "negativo", "pedido",
-                "correo_destino", "hora"} | CAMPOS_ACTOR
-CAMPOS_PEDIDO = {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora"} | CAMPOS_ACTOR
+                "correo_destino", "hora", "fecha_hora"} | CAMPOS_ACTOR
+CAMPOS_PEDIDO = {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora",
+                 "fecha_hora"} | CAMPOS_ACTOR
 SISTEMA = {"realizado_por": "Sistema SGDS (automático)", "rol_realizado_por": "Sistema",
            "origen": "automático", "realizado_por_publico": "Sistema"}
 
@@ -345,9 +346,12 @@ with app.app_context():
 
 app.config["CORREO_OPERACIONES"] = f"  {OPERACIONES} "
 datos = resumen(TOKEN).get_json()
-check(set(datos) == {"fecha", "correo_destino", "kpis", "productos_bajo_minimo",
+check(set(datos) == {"fecha", "fecha_hora", "correo_destino", "kpis", "productos_bajo_minimo",
                      "fallidos_para_reprogramar", "resumen_html"} | CAMPOS_ACTOR,
       f"campos del resumen {sorted(datos)}")
+check(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-05:00", datos["fecha_hora"]) is not None
+      and datos["fecha_hora"].startswith(datos["fecha"]),
+      f"el resumen lleva fecha_hora ISO 8601 con -05:00 ({datos['fecha_hora']})")
 check({k: datos[k] for k in CAMPOS_ACTOR} == SISTEMA, "el resumen lo origina el sistema, automatico")
 check(datos["fecha"] == hoy().isoformat(), "fecha de hoy en formato ISO")
 check(datos["correo_destino"] == OPERACIONES, "correo_destino es CORREO_OPERACIONES (sin espacios)")

@@ -151,7 +151,8 @@ parada = funcion_agrupada(
 
 
 @parada("en-camino", "Marcar parada en camino",
-        "pasa la parada a EN_RUTA; tambien sirve para reintentar una fallida; requiere orden")
+        "pasa la parada a EN_RUTA; tambien sirve para reintentar una fallida; requiere orden",
+        avisar=False)
 def marcar_en_camino():
     ruta = _ruta()
     if ruta is None:
@@ -186,7 +187,7 @@ def marcar_en_camino():
 @parada("fallo", "Registrar entrega fallida",
         "pasa la parada a FALLIDO con el motivo, sin tocar el inventario; el motivo se compara "
         "con el catalogo y, si no coincide, queda como 'Otro' con lo dicho; requiere orden y "
-        "motivo")
+        "motivo", avisar=False)
 def registrar_fallo():
     ruta = _ruta()
     if ruta is None:

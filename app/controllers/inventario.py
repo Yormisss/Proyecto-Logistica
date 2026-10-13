@@ -17,6 +17,7 @@ from app.models import MovimientoInventario, Producto, Rol, TipoMovimiento
 from app.services.inventario import (
     MOTIVO_AJUSTE_OBLIGATORIO, crear_producto, editar_producto, registrar_movimiento, sku_fijo,
 )
+from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
 from app.services.validacion import DatosInvalidos
 
 inventario_bp = Blueprint("inventario", __name__)
@@ -111,6 +112,11 @@ def nuevo():
             db.session.rollback()
             _mostrar_errores(formulario, error)
         else:
+            auditar_pantalla("Crear producto", "producto", f"Creó el producto {producto.sku}, {producto.nombre}.",
+                             {"sku": producto.sku, "nombre": producto.nombre, "unidad": producto.unidad,
+                              "stock_minimo": producto.stock_minimo, "stock_inicial": producto.stock_actual,
+                              "activo": producto.activo},
+                             entidad_id=producto.id)
             db.session.commit()
             flash(f"Producto {producto.sku} creado.", "exito")
             return redirect(url_for("inventario.lista"))
@@ -131,11 +137,15 @@ def editar(producto_id):
 
     if formulario.validate_on_submit():
         try:
-            editar_producto(producto, formulario.datos())
+            cambios = editar_producto(producto, formulario.datos())
         except DatosInvalidos as error:
             db.session.rollback()
             _mostrar_errores(formulario, error)
         else:
+            if cambios:
+                auditar_pantalla("Editar producto", "producto",
+                                 f"Editó el producto {producto.sku}: {campos_cambiados(cambios)}.",
+                                 cambios_legibles(cambios), entidad_id=producto.id)
             db.session.commit()
             flash(f"Producto {producto.sku} actualizado.", "exito")
             return redirect(url_for("inventario.lista"))
@@ -154,6 +164,7 @@ def detalle(producto_id):
 
     formulario = FormularioMovimiento()
     if formulario.validate_on_submit():
+        stock_previo = producto.stock_actual
         registrar_movimiento(
             producto,
             formulario.tipo.data,
@@ -161,6 +172,16 @@ def detalle(producto_id):
             current_user.id,
             motivo=formulario.motivo.data or None,
         )
+        # Las entradas no se auditan: son operacion de alto volumen y ya quedan en
+        # los movimientos. El ajuste, que fija el stock a un valor, si.
+        if formulario.tipo.data == TipoMovimiento.AJUSTE:
+            auditar_pantalla(
+                "Ajustar inventario", "producto",
+                f"Ajustó el inventario de {producto.sku}, {producto.nombre}: el stock pasó de "
+                f"{stock_previo} a {formulario.cantidad.data}, por: {formulario.motivo.data.strip()}.",
+                {"stock": [stock_previo, formulario.cantidad.data], "motivo": formulario.motivo.data.strip()},
+                entidad_id=producto.id,
+            )
         db.session.commit()
         flash("Movimiento registrado.", "exito")
         return redirect(url_for("inventario.detalle", producto_id=producto.id))

@@ -12,12 +12,26 @@ from wtforms.validators import Optional
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import Rol, Usuario, Vehiculo
+from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
 from app.services.validacion import DatosInvalidos
 from app.services.vehiculos import (
     cambiar_estado_vehiculo, crear_vehiculo, editar_vehiculo, rutas_abiertas,
 )
 
 vehiculos_bp = Blueprint("vehiculos", __name__)
+
+
+def _nombre_conductor(conductor_id):
+    conductor = db.session.get(Usuario, conductor_id) if conductor_id else None
+    return conductor.nombre if conductor else None
+
+
+def _detalle_auditoria(cambios):
+    """Los cambios con el conductor por su nombre, no por su id."""
+    if "conductor_id" in cambios:
+        antes, despues = cambios.pop("conductor_id")
+        cambios["conductor"] = (_nombre_conductor(antes), _nombre_conductor(despues))
+    return cambios_legibles(cambios)
 
 
 class FormularioVehiculo(FlaskForm):
@@ -86,6 +100,13 @@ def nuevo():
             db.session.rollback()
             _mostrar_errores(formulario, error)
         else:
+            auditar_pantalla("Crear vehículo", "vehiculo", f"Registró el vehículo {vehiculo.placa}.",
+                             {"placa": vehiculo.placa, "tipo": vehiculo.tipo,
+                              "capacidad_kg": vehiculo.capacidad_kg,
+                              "capacidad_unidades": vehiculo.capacidad_unidades,
+                              "conductor": _nombre_conductor(vehiculo.conductor_id),
+                              "activo": vehiculo.activo},
+                             entidad_id=vehiculo.id)
             db.session.commit()
             flash(f"Vehiculo {vehiculo.placa} registrado.", "exito")
             return redirect(url_for("vehiculos.lista"))
@@ -102,11 +123,15 @@ def editar(vehiculo_id):
         formulario.conductor_id.data = vehiculo.conductor_id or 0
     if formulario.validate_on_submit():
         try:
-            editar_vehiculo(vehiculo, formulario.datos())
+            cambios = editar_vehiculo(vehiculo, formulario.datos())
         except DatosInvalidos as error:
             db.session.rollback()
             _mostrar_errores(formulario, error)
         else:
+            if cambios:
+                auditar_pantalla("Editar vehículo", "vehiculo",
+                                 f"Editó el vehículo {vehiculo.placa}: {campos_cambiados(cambios)}.",
+                                 _detalle_auditoria(cambios), entidad_id=vehiculo.id)
             db.session.commit()
             flash(f"Vehiculo {vehiculo.placa} actualizado.", "exito")
             return redirect(url_for("vehiculos.lista"))
@@ -126,6 +151,9 @@ def alternar(vehiculo_id):
     except DatosInvalidos as error:
         flash(str(error), "error")
         return redirect(url_for("vehiculos.lista"))
+    auditar_pantalla("Activar vehículo" if vehiculo.activo else "Desactivar vehículo", "vehiculo",
+                     f"{'Activó' if vehiculo.activo else 'Desactivó'} el vehículo {vehiculo.placa}.",
+                     {"activo": [not vehiculo.activo, vehiculo.activo]}, entidad_id=vehiculo.id)
     db.session.commit()
     flash(f"Vehiculo {vehiculo.placa} {'activado' if vehiculo.activo else 'desactivado'}.", "exito")
     return redirect(url_for("vehiculos.lista"))

@@ -391,7 +391,7 @@ aviso = next((e for e in envios_make if e["json"]["codigo"] == "ASIS-001"), None
 check(aviso is not None, "marcar-en-camino de El Portal envio un aviso a Make")
 if aviso:
     check(set(aviso["json"]) == {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora",
-                                 "realizado_por", "rol_realizado_por", "origen", "realizado_por_publico"},
+                                 "fecha_hora", "realizado_por", "rol_realizado_por", "origen", "realizado_por_publico"},
           "el aviso lleva tipo, codigo, estado, cliente, correo, direccion, ventana, hora y quien lo origino")
     check(aviso["json"]["origen"] == "voz" and aviso["json"]["rol_realizado_por"] == "Conductor"
           and aviso["json"]["realizado_por_publico"] == "Conductor" and aviso["json"]["realizado_por"],
@@ -400,6 +400,9 @@ if aviso:
     check(aviso["json"]["estado"] == "EN_RUTA" and aviso["json"]["correo"] == "compras@portal.invalid"
           and aviso["json"]["ventana"] == "08:00 - 11:00", "con los datos del pedido")
     check(re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", aviso["json"]["hora"]) is not None, "hora AAAA-MM-DD HH:MM")
+    check(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-05:00", aviso["json"]["fecha_hora"]) is not None
+          and aviso["json"]["fecha_hora"].startswith(aviso["json"]["hora"].replace(" ", "T")),
+          f"fecha_hora ISO 8601 con segundos y -05:00 ({aviso['json']['fecha_hora']})")
     check(aviso["url"] == "https://hook.make.invalid/sgds" and aviso["timeout"] == (3, 5),
           "va a MAKE_WEBHOOK_URL con timeout corto")
 check(len([e for e in envios_make if e["json"]["codigo"] == "ASIS-001"]) == 1,

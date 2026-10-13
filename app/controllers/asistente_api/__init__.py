@@ -54,6 +54,10 @@ class Operacion:
     titulo: str          # para la auditoria: "Crear pedido"
     descripcion: str
     modifica: bool = True
+    # Si su registro de auditoria envia el correo accion_asistente. No lo
+    # envian el flujo del conductor ni las entradas de mercancia: son operacion
+    # de alto volumen que ya tiene su historial (eventos y movimientos).
+    avisar: bool = True
 
 
 @dataclass(frozen=True)
@@ -162,12 +166,12 @@ def funcion_agrupada(espacio, nombre, *, roles, descripcion, entidad, parametros
                       requeridos=("operacion",), accion=True, entidad=entidad)(despachar)
     funcion = FUNCIONES[(espacio, nombre)]
 
-    def operacion(nombre_operacion, titulo, descripcion_operacion, *, modifica=True):
+    def operacion(nombre_operacion, titulo, descripcion_operacion, *, modifica=True, avisar=True):
         def registrar(vista):
             if nombre_operacion in funcion.operaciones:
                 raise ValueError(f"Operacion duplicada: {espacio}/{nombre}:{nombre_operacion}")
             funcion.operaciones[nombre_operacion] = Operacion(
-                nombre_operacion, vista, titulo, descripcion_operacion, modifica)
+                nombre_operacion, vista, titulo, descripcion_operacion, modifica, avisar)
             funcion.parametros["operacion"]["enum"].append(nombre_operacion)
             return vista
         return registrar
@@ -254,6 +258,7 @@ def _auditar(resultado, mensaje):
         usuario=g.usuario,
         origen=ORIGEN_VOZ,
         call_id=g.sesion.call_id,
+        avisar=operacion.avisar if operacion else True,
     )
     db.session.commit()
 

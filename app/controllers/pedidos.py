@@ -26,6 +26,7 @@ from app.extensions import db
 from app.models import (
     Cliente, EstadoPedido, Pedido, Producto, Rol,
 )
+from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
 from app.services.clientes import resolver_destino
 from app.services.pedidos import (
     AVISO_RECALCULAR, campos_editables, crear_pedido, editar_pedido, validar_pedido,
@@ -218,11 +219,18 @@ def editar(pedido_id):
             flash(error, "error")
         if not errores_lectura:
             try:
-                _, advertencias = editar_pedido(pedido, datos, current_user.id)
+                cambios, advertencias = editar_pedido(pedido, datos, current_user.id)
             except DatosInvalidos as error:
                 db.session.rollback()
                 _mostrar_errores(formulario, error.errores)
             else:
+                if cambios:
+                    auditar_pantalla(
+                        "Editar pedido", "pedido",
+                        f"Editó el pedido {pedido.codigo} ({pedido.estado_etiqueta.lower()}): "
+                        f"{campos_cambiados(cambios)}.",
+                        cambios_legibles(cambios), entidad_id=pedido.codigo,
+                    )
                 db.session.commit()
                 flash(f"Pedido {pedido.codigo} actualizado.", "exito")
                 for advertencia in advertencias:
@@ -305,6 +313,15 @@ def nuevo():
                 observaciones=formulario.observaciones.data,
                 **reglas,
             )
+            auditar_pantalla(
+                "Crear pedido", "pedido",
+                f"Creó el pedido {pedido.codigo} para {pedido.cliente_nombre}, para el "
+                f"{pedido.fecha_despacho.isoformat()}.",
+                {"cliente": pedido.cliente_nombre, "direccion": pedido.direccion,
+                 "fecha": pedido.fecha_despacho.isoformat(), "prioridad": pedido.prioridad,
+                 "productos": [f"{i.cantidad} de {i.producto.nombre}" for i in pedido.items]},
+                entidad_id=pedido.codigo,
+            )
             db.session.commit()
 
             flash(f"Pedido {pedido.codigo} registrado correctamente.", "exito")
@@ -332,11 +349,15 @@ def anular(pedido_id):
         return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
 
     try:
+        estado_anterior = pedido.estado_etiqueta
         anular_pedido(pedido, current_user.id, motivo)
     except TransicionInvalida as error:
         flash(str(error), "error")
         return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
 
+    auditar_pantalla("Anular pedido", "pedido",
+                     f"Anuló el pedido {pedido.codigo} de {pedido.cliente_nombre} por: {motivo}.",
+                     {"estado_anterior": estado_anterior, "motivo": motivo}, entidad_id=pedido.codigo)
     db.session.commit()
     flash(f"Pedido {pedido.codigo} anulado.", "exito")
     return redirect(url_for("pedidos.lista"))
@@ -411,6 +432,12 @@ def confirmar_importacion():
         return redirect(url_for("pedidos.importar"))
 
     creados = guardar_pedidos(pedidos, current_user.id)
+    # Una sola linea por importacion, no una por pedido.
+    auditar_pantalla("Importar pedidos", "pedido",
+                     f"Importó {creados} pedido(s) desde un CSV"
+                     + (f"; se omitieron {len(errores)} fila(s) con errores." if errores else "."),
+                     {"pedidos_creados": creados, "filas_omitidas": len(errores)})
+    db.session.commit()
 
     mensaje = f"{creados} pedido(s) cargados correctamente."
     if errores:

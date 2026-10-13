@@ -21,6 +21,7 @@ from wtforms.validators import Optional
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import Cliente, DireccionCliente, EstadoPedido, Pedido, Rol
+from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
 from app.services.clientes import (
     cambiar_estado_sede, crear_cliente, crear_sede, editar_cliente, editar_sede,
 )
@@ -155,6 +156,10 @@ def nuevo():
         except DatosInvalidos as error:
             _mostrar_errores(formulario, error)
         else:
+            auditar_pantalla("Crear cliente", "cliente", f"Registró el cliente {cliente.nombre}.",
+                             {campo: getattr(cliente, campo) for campo in
+                              ("nombre", "documento", "telefono", "correo", "activo")},
+                             entidad_id=cliente.id)
             db.session.commit()
             flash(f"Cliente {cliente.nombre} registrado.", "exito")
             return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
@@ -177,6 +182,11 @@ def detalle(cliente_id):
             # se muestran como avisos para que no queden ocultos.
             _mostrar_errores(formulario_sede, error, todo_como_aviso=True)
         else:
+            auditar_pantalla("Agregar sede", "sede",
+                             f"Agregó la sede {sede.etiqueta} de {cliente.nombre}: {sede.direccion}.",
+                             {"cliente": cliente.nombre, **cambios_legibles(
+                                 {campo: (None, getattr(sede, campo)) for campo in formulario_sede.datos()})},
+                             entidad_id=sede.id)
             db.session.commit()
             flash(f"Sede '{sede.etiqueta}' agregada.", "exito")
             return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
@@ -208,11 +218,15 @@ def editar(cliente_id):
 
     if formulario.validate_on_submit():
         try:
-            editar_cliente(cliente, formulario.datos())
+            cambios = editar_cliente(cliente, formulario.datos())
         except DatosInvalidos as error:
             db.session.rollback()
             _mostrar_errores(formulario, error)
         else:
+            if cambios:
+                auditar_pantalla("Editar cliente", "cliente",
+                                 f"Editó el cliente {cliente.nombre}: {campos_cambiados(cambios)}.",
+                                 cambios_legibles(cambios), entidad_id=cliente.id)
             db.session.commit()
             flash(f"Cliente {cliente.nombre} actualizado.", "exito")
             return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
@@ -231,11 +245,16 @@ def editar_sede_vista(cliente_id, sede_id):
     formulario = FormularioSede(obj=sede)
     if formulario.validate_on_submit():
         try:
-            editar_sede(sede, formulario.datos())
+            cambios = editar_sede(sede, formulario.datos())
         except DatosInvalidos as error:
             db.session.rollback()
             _mostrar_errores(formulario, error)
         else:
+            if cambios:
+                auditar_pantalla("Editar sede", "sede",
+                                 f"Editó la sede {sede.etiqueta} de {cliente.nombre}: "
+                                 f"{campos_cambiados(cambios)}.",
+                                 cambios_legibles(cambios), entidad_id=sede.id)
             db.session.commit()
             flash(f"Sede '{sede.etiqueta}' actualizada. Los pedidos ya creados conservan su "
                   "direccion.", "exito")
@@ -260,6 +279,9 @@ def alternar_sede(cliente_id, sede_id):
     except DatosInvalidos as error:
         flash(str(error), "error")
         return redirect(url_for("clientes_admin.detalle", cliente_id=cliente.id))
+    auditar_pantalla("Activar sede" if sede.activa else "Desactivar sede", "sede",
+                     f"{'Activó' if sede.activa else 'Desactivó'} la sede {sede.etiqueta} de {cliente.nombre}.",
+                     {"activa": [not sede.activa, sede.activa]}, entidad_id=sede.id)
     db.session.commit()
     flash(f"Sede '{sede.etiqueta}' " + ("activada." if sede.activa else
           "desactivada: no se ofrece para pedidos nuevos."), "exito")

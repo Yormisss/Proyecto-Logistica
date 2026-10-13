@@ -1,7 +1,8 @@
 """Auditoria de acciones: quien hizo que, desde donde y con que resultado.
 
-Registra las acciones confirmadas por voz, los cambios de la configuracion del
-negocio y las acciones sobre usuarios (por voz o en pantalla). Es un historico:
+Registra las acciones confirmadas por voz y, en pantalla, las de usuarios,
+configuracion, clientes, sedes, productos, ajustes de inventario, vehiculos,
+rutas, pedidos y solicitudes (ver app.services.auditoria). Es un historico:
 solo se agregan filas; el ORM rechaza modificarlas o borrarlas.
 
 `detalle` guarda JSON con los datos de la accion. Nunca lleva contrasenas ni

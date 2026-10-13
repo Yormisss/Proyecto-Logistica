@@ -22,6 +22,7 @@ from app.extensions import db
 from app.models import (
     EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, Usuario, Vehiculo,
 )
+from app.services.auditoria import auditar_pantalla
 from app.services.configuracion import centro_distribucion
 from app.services.planificacion import (
     PlanificacionInvalida, crear_ruta, eliminar_ruta, recalcular_secuencia,
@@ -147,6 +148,17 @@ def nueva():
             for _, mensaje in error.errores:
                 flash(mensaje, "error")
         else:
+            auditar_pantalla(
+                "Crear ruta", "ruta",
+                f"Creó la ruta {ruta.codigo} del {ruta.fecha.isoformat()} para {ruta.conductor.nombre}"
+                + (f" con el vehículo {ruta.vehiculo.placa}" if ruta.vehiculo else "")
+                + f": {len(ruta.pedidos)} parada(s), {ESTRATEGIAS.get(formulario.estrategia.data, '').lower()}.",
+                {"fecha": ruta.fecha.isoformat(), "conductor": ruta.conductor.nombre,
+                 "vehiculo": ruta.vehiculo.placa if ruta.vehiculo else None,
+                 "criterio": ESTRATEGIAS.get(formulario.estrategia.data),
+                 "pedidos": [p.codigo for p in ruta.pedidos]},
+                entidad_id=ruta.codigo,
+            )
             db.session.commit()
             for advertencia in resultado.advertencias:
                 flash(advertencia, "advertencia")
@@ -237,6 +249,13 @@ def recalcular(ruta_id):
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
 
     abiertos = [p for p in ruta.pedidos if p.estado in EstadoPedido.ABIERTOS]
+    auditar_pantalla(
+        "Recalcular ruta", "ruta",
+        f"Recalculó la ruta {ruta.codigo} ({ESTRATEGIAS[estrategia].lower()}): "
+        f"{len(abiertos)} parada(s) reordenadas, {ruta.distancia_km} km.",
+        {"criterio": ESTRATEGIAS[estrategia], "paradas": len(abiertos), "distancia_km": ruta.distancia_km},
+        entidad_id=ruta.codigo,
+    )
     db.session.commit()
 
     for advertencia in resultado.advertencias:
@@ -265,6 +284,9 @@ def quitar_parada(ruta_id, pedido_id):
     except PlanificacionInvalida as error:
         flash(str(error), "error")
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
+    auditar_pantalla("Quitar parada de ruta", "ruta",
+                     f"Quitó el pedido {pedido.codigo} de la ruta {ruta.codigo}; volvió a pendiente.",
+                     {"pedido": pedido.codigo, "cliente": pedido.cliente_nombre}, entidad_id=ruta.codigo)
     db.session.commit()
 
     flash(f"Pedido {pedido.codigo} devuelto a la bolsa de pendientes.", "exito")
@@ -280,10 +302,14 @@ def eliminar(ruta_id):
         abort(404)
 
     try:
-        codigo, _ = eliminar_ruta(ruta, current_user.id)
+        codigos = [p.codigo for p in ruta.pedidos]
+        codigo, devueltos = eliminar_ruta(ruta, current_user.id)
     except PlanificacionInvalida as error:
         flash(str(error), "error")
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
+    auditar_pantalla("Eliminar ruta", "ruta",
+                     f"Eliminó la ruta {codigo}; {devueltos} pedido(s) volvieron a pendiente.",
+                     {"pedidos": codigos}, entidad_id=codigo)
     db.session.commit()
 
     flash(f"Ruta {codigo} eliminada; sus pedidos volvieron a pendientes.", "exito")

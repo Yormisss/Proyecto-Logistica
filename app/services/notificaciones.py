@@ -1,7 +1,8 @@
 """Avisos salientes a un escenario de Make.
 
 Todo evento se envia como un POST JSON a MAKE_WEBHOOK_URL con un campo `tipo`,
-y el escenario de Make lo enruta segun ese campo:
+y el escenario de Make lo enruta segun ese campo (salvo `credencial_usuario`,
+que va solo a MAKE_WEBHOOK_CREDENCIALES_URL):
 
 * `pedido_estado`: un pedido paso a EN_RUTA, ENTREGADO, FALLIDO o CANCELADO.
   Va al cliente, asi que solo se envia si el cliente tiene correo. FALLIDO y
@@ -11,12 +12,16 @@ y el escenario de Make lo enruta segun ese campo:
   sin esa variable no se envia.
 * `solicitud_contacto`: un cliente pidio que el gestor lo contacte. Tambien es
   interno, con la misma regla.
-* `accion_asistente`: cada registro de la auditoria (acciones confirmadas por
-  voz, cambios de configuracion y acciones sobre usuarios). Interno.
+* `accion_asistente`: un registro de la auditoria, con su `id_auditoria`.
+  Interno. No todo registro lo envia: ver `registrar_auditoria(avisar=...)`.
 * `credencial_usuario`: la contrasena de una cuenta creada o restablecida por
   voz. Va al correo de inicio de sesion del propio usuario y es el UNICO lugar
   por el que viaja esa contrasena: nunca se guarda en la auditoria ni en otro
-  evento.
+  evento. Sale por su propio webhook, MAKE_WEBHOOK_CREDENCIALES_URL, para que
+  no quede en el historial del escenario general; sin el, no se envia.
+
+Todo evento lleva `hora` ("2026-10-13 14:05") y `fecha_hora` en ISO 8601 con
+segundos y el desplazamiento de Bogota ("2026-10-13T14:05:09-05:00").
 
 Todo evento lleva quien origino la accion: `realizado_por` (nombre),
 `rol_realizado_por` (etiqueta del rol), `origen` ("pantalla", "voz" o
@@ -44,7 +49,7 @@ from sqlalchemy import event
 
 from app.extensions import db
 from app.models import EstadoPedido, Rol, Usuario
-from app.tiempo import ahora
+from app.tiempo import ahora, iso_bogota
 
 TIPO_PEDIDO_ESTADO = "pedido_estado"
 TIPO_STOCK_BAJO = "stock_bajo"
@@ -84,8 +89,15 @@ _en_curso = set()
 registro = logging.getLogger(__name__)
 
 
-def _hora():
-    return ahora().strftime("%Y-%m-%d %H:%M")
+def _marca(momento=None):
+    """{"hora": "2026-10-13 14:05", "fecha_hora": "2026-10-13T14:05:09-05:00"}."""
+    momento = momento or ahora()
+    return {"hora": momento.strftime("%Y-%m-%d %H:%M"), "fecha_hora": iso_bogota(momento)}
+
+
+def credenciales_configuradas():
+    """Si hay webhook para enviar contrasenas (sin el, no se crean cuentas por voz)."""
+    return bool((current_app.config.get("MAKE_WEBHOOK_CREDENCIALES_URL") or "").strip())
 
 
 def origen_actual():
@@ -129,15 +141,16 @@ def _usuario(usuario_id):
     return db.session.get(Usuario, usuario_id) if usuario_id else None
 
 
-def encolar_evento(tipo, datos, actor=None):
+def encolar_evento(tipo, datos, actor=None, clave_url="MAKE_WEBHOOK_URL"):
     """Encola un evento de `tipo` para Make; sale tras el commit.
 
     La URL y la API key se leen aqui, con el contexto de la aplicacion: el hilo
     que envia no lo tiene. `actor` es el resultado de `datos_actor`; si no
-    viene, se toma de la peticion en curso.
+    viene, se toma de la peticion en curso. `clave_url` es la variable con el
+    webhook de destino.
     """
     config = current_app.config
-    url = config.get("MAKE_WEBHOOK_URL")
+    url = (config.get(clave_url) or "").strip()
     if not url:
         return
     cabeceras = {}
@@ -167,7 +180,7 @@ def aviso_estado_pedido(pedido, motivo=None, usuario_id=None):
         "correo": correo,
         "direccion": pedido.direccion_completa,
         "ventana": pedido.ventana_texto,
-        "hora": _hora(),
+        **_marca(),
     }
     if pedido.estado in (EstadoPedido.CANCELADO, EstadoPedido.FALLIDO):
         datos["motivo"] = motivo
@@ -204,7 +217,7 @@ def aviso_stock(producto, stock_previo, pedido=None, usuario_id=None):
         "negativo": nuevo < 0,
         "pedido": pedido,
         "correo_destino": correo,
-        "hora": _hora(),
+        **_marca(),
     }, datos_actor(_usuario(usuario_id)))
 
 
@@ -218,7 +231,7 @@ def aviso_solicitud_contacto(solicitud):
         "correo": solicitud.correo,
         "telefono": solicitud.telefono,
         "motivo": solicitud.motivo,
-        "hora": _hora(),
+        **_marca(),
         "correo_destino": correo_destino,
     }, datos_actor(solicitud.usuario))
 
@@ -229,6 +242,7 @@ def aviso_accion_asistente(registro):
     if not correo_destino:
         return
     encolar_evento(TIPO_ACCION_ASISTENTE, {
+        "id_auditoria": registro.id,
         "usuario": registro.usuario_nombre,
         "rol": etiqueta_rol(registro.rol) if registro.rol else ROL_SISTEMA,
         "accion": registro.accion,
@@ -236,7 +250,7 @@ def aviso_accion_asistente(registro):
         "resumen": registro.resumen,
         "detalle": registro.detalle_legible,
         "resultado": registro.resultado,
-        "hora": registro.registrado_en.strftime("%Y-%m-%d %H:%M"),
+        **_marca(registro.registrado_en),
         "correo_destino": correo_destino,
     }, datos_actor(registro.usuario, registro.origen))
 
@@ -259,9 +273,9 @@ def aviso_credencial_usuario(usuario, contrasena, accion, creado_por):
         "url_acceso": (current_app.config.get("URL_PUBLICA") or "").strip().rstrip("/"),
         "creado_por": f"{creado_por.nombre} ({etiqueta_rol(creado_por.rol)})",
         "accion": accion,
-        "hora": _hora(),
+        **_marca(),
         "correo_destino": usuario.correo,
-    }, datos_actor(creado_por))
+    }, datos_actor(creado_por), clave_url="MAKE_WEBHOOK_CREDENCIALES_URL")
 
 
 def _enviar(url, cabeceras, datos):
