@@ -1,9 +1,9 @@
 ﻿motivo,casos,porcentaje
-Sin acceso,9984,20.17
-Pedido rechazado,9957,20.12
-Cliente ausente,9899,20.00
-Direccion errada,9833,19.86
-Zona cerrada,9812,19.82
+Sin acceso,10026,20.24
+Pedido rechazado,9899,19.99
+Cliente ausente,9873,19.93
+Zona cerrada,9863,19.91
+Direccion errada,9850,19.89
 Establecimiento cerrado,7,0.01
 Fuera de la ventana horaria,6,0.01
 Direccion incorrecta,1,0.00

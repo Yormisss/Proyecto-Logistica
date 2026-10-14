@@ -25,3 +25,10 @@ instance/
 
 # Big Data: el data lake pesa cientos de MB y se regenera con bigdata/pipeline.py
 bigdata/datalake/
+
+# Archivos de trabajo del documento y de las capturas de evidencia
+.venv-capturas/
+herramientas_capturas/
+Documento/
+Checklist_SGDS_Evaluado.xlsx
+_sca_tmp.txt

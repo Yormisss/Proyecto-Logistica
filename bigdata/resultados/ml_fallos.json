@@ -1,58 +1,58 @@
 {
   "modelo": "RandomForestClassifier (Spark MLlib)",
-  "filas_entrenamiento": 232751,
-  "filas_prueba": 58396,
-  "tasa_fallo_base_pct": 17.06,
-  "auc": 0.6189,
-  "exactitud": 0.5137,
-  "precision_fallos": 0.2107,
-  "recall_fallos": 0.6908,
+  "filas_entrenamiento": 232792,
+  "filas_prueba": 58206,
+  "tasa_fallo_base_pct": 16.99,
+  "auc": 0.617,
+  "exactitud": 0.5248,
+  "precision_fallos": 0.2155,
+  "recall_fallos": 0.6708,
   "matriz_confusion": {
-    "verdaderos_positivos": 6771,
-    "falsos_positivos": 25370,
-    "falsos_negativos": 3030,
-    "verdaderos_negativos": 23225
+    "verdaderos_positivos": 6694,
+    "falsos_positivos": 24373,
+    "falsos_negativos": 3285,
+    "verdaderos_negativos": 23854
   },
   "importancia_variables": [
     {
       "variable": "zona_idx",
-      "importancia": 0.5503
+      "importancia": 0.5626
     },
     {
       "variable": "distancia_km",
-      "importancia": 0.1612
+      "importancia": 0.135
     },
     {
       "variable": "tasa_fallo_conductor",
-      "importancia": 0.0972
+      "importancia": 0.1095
     },
     {
       "variable": "prioridad",
-      "importancia": 0.0852
+      "importancia": 0.0901
     },
     {
       "variable": "hora_planeada",
-      "importancia": 0.054
+      "importancia": 0.0478
     },
     {
       "variable": "ciudad_idx",
-      "importancia": 0.0233
+      "importancia": 0.025
     },
     {
       "variable": "conductor_id",
-      "importancia": 0.0122
+      "importancia": 0.0135
     },
     {
       "variable": "dia_semana",
-      "importancia": 0.0074
+      "importancia": 0.0079
     },
     {
       "variable": "n_items",
-      "importancia": 0.0069
+      "importancia": 0.0065
     },
     {
       "variable": "sin_ventana",
-      "importancia": 0.0023
+      "importancia": 0.0022
     }
   ]
 }

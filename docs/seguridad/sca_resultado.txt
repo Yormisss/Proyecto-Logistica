@@ -1,0 +1,19 @@
+SCA - pip-audit  |  2026-10-05 22:38
+Proyecto: SGDS - Sistema de Gestion de Despachos
+============================================================
+Found 11 known vulnerabilities in 5 packages
+Name          Version ID                  Fix Versions
+------------- ------- ------------------- ------------
+click         8.1.8   PYSEC-2026-2132     8.3.3
+python-dotenv 1.2.1   PYSEC-2026-2270     1.2.2
+requests      2.32.5  PYSEC-2026-2275     2.33.0
+urllib3       1.26.20 PYSEC-2026-141      2.7.0
+urllib3       1.26.20 PYSEC-2026-1999     2.5.0
+urllib3       1.26.20 PYSEC-2026-1998     2.6.0
+urllib3       1.26.20 PYSEC-2026-1994     2.6.0
+urllib3       1.26.20 PYSEC-2026-1996     2.6.3
+urllib3       1.26.20 PYSEC-2026-4177     2.8.0
+urllib3       1.26.20 PYSEC-2026-4175     2.8.0
+werkzeug      3.1.8   GHSA-g6x2-hccm-hh4m 3.1.9
+============================================================
+(codigo de salida pip-audit: 0)

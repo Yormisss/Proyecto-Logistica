@@ -1,16 +1,16 @@
 {
-  "filas_entrada": 306319,
+  "filas_entrada": 306205,
   "sin_codigo_descartadas": 0,
-  "duplicados_eliminados": 6096,
-  "ciudades_normalizadas": 38871,
-  "estados_en_minuscula": 2892,
-  "distancias_invalidas": 1471,
-  "prioridades_nulas": 2952,
-  "clientes_sin_nombre": 1469,
-  "mediana_distancia_imputada_km": 15.8,
+  "duplicados_eliminados": 5982,
+  "ciudades_normalizadas": 38262,
+  "estados_en_minuscula": 2921,
+  "distancias_invalidas": 1474,
+  "prioridades_nulas": 3003,
+  "clientes_sin_nombre": 1490,
+  "mediana_distancia_imputada_km": 15.9,
   "filas_salida": 300223,
-  "eventos_entrada": 882510,
-  "eventos_salida": 882510,
-  "movimientos_entrada": 253508,
-  "movimientos_salida": 253508
+  "eventos_entrada": 882212,
+  "eventos_salida": 882212,
+  "movimientos_entrada": 253308,
+  "movimientos_salida": 253308
 }
