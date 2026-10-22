@@ -1,7 +1,8 @@
 import pathlib
 import re, sys
 from datetime import date, time
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 from run import app
 from app.extensions import db
 from app.models import (Pedido, PedidoItem, Producto, Ruta, Usuario, Rol, EstadoPedido,
@@ -13,10 +14,7 @@ def check(c,m):
     if not c: fallos.append(m)
 app.config["WTF_CSRF_ENABLED"]=True
 
-# Base limpia en cada corrida, sea SQLite o MySQL.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 def sesion(correo, clave):
     c = app.test_client()
@@ -81,7 +79,7 @@ check("Cliente Uno" in html, "muestra el cliente")
 check("Confirmar entrega" in html and "No se pudo entregar" in html, "ofrece ambas acciones")
 check("Caja bebidas 12 und" in html, "lista la mercancia a entregar")
 check("google.com/maps/dir" in html, "enlace al navegador GPS")
-check("descuenta automaticamente la mercancia" in html, "advierte del efecto en inventario")
+check("descuenta automáticamente la mercancía" in html, "advierte del efecto en inventario")
 
 print("\n== 4. ENTREGA -> descuento de inventario (RF5) ==")
 t = tok(c, f"/conductor/parada/{pids[0]}")
@@ -222,7 +220,7 @@ print("\n== 12. CSRF y roles ==")
 with app.app_context():
     stock_csrf = db.session.get(Producto,pa_id).stock_actual
 r = c.post(f"/conductor/parada/{pids[2]}/entregar", data={"receptor_nombre":"Sin token"}, follow_redirects=True)
-check(r.status_code==400 and b"La sesion expiro" in r.data, "sin token CSRF muestra pagina en espanol")
+check(r.status_code==400 and "La sesión expiró" in r.data.decode(), "sin token CSRF muestra pagina en espanol")
 check(b"CSRF token" not in r.data and b"Bad Request" not in r.data, "no filtra el error crudo en ingles")
 with app.app_context():
     check(db.session.get(Producto,pa_id).stock_actual==stock_csrf, "sin token CSRF el inventario no se toca")

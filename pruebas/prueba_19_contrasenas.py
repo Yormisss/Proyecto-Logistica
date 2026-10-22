@@ -10,7 +10,9 @@ import pathlib
 import re
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
+_preparar.reiniciar_base()
 from sqlalchemy import inspect, text
 
 from run import app
@@ -449,7 +451,7 @@ check("despachador@sgds.com" not in html and "admin@sgds.com" in html,
       "las vigentes excluyen a las pendientes")
 
 print("\n== 14. Migracion de las columnas de contrasenas ==")
-from migraciones.m005_gestion_contrasenas import COLUMNAS, aplicar
+from migraciones.m008_gestion_contrasenas import COLUMNAS, aplicar
 with app.app_context():
     check(aplicar(verboso=False) == [], "sobre una base al dia no agrega nada")
     with db.engine.begin() as conexion:

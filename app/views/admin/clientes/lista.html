@@ -16,7 +16,7 @@
 
 <section class="tarjeta">
   <form method="get" class="barra-filtros">
-    <input type="search" name="q" value="{{ filtros.q }}" placeholder="Razon social o NIT">
+    <input type="search" name="q" value="{{ filtros.q }}" placeholder="Razón social o NIT">
     <select name="portal">
       <option value="">Con y sin portal</option>
       <option value="si" {{ 'selected' if filtros.portal == 'si' }}>Con portal</option>
@@ -33,7 +33,7 @@
     <table class="tabla">
       <thead>
         <tr>
-          <th>Razon social</th><th>NIT</th><th class="derecha">Sedes</th>
+          <th>Razón social</th><th>NIT</th><th class="derecha">Sedes</th>
           <th class="derecha">Pedidos</th><th class="derecha">En curso</th>
           <th>Portal</th><th></th>
         </tr>
@@ -68,7 +68,7 @@
     </table>
   </div>
   {% else %}
-    <p class="vacio">Ningun cliente coincide con el filtro.</p>
+    <p class="vacio">Ningún cliente coincide con el filtro.</p>
   {% endif %}
 </section>
 {% endblock %}

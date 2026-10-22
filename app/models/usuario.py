@@ -63,7 +63,7 @@ class Usuario(UserMixin, db.Model):
     activo = db.Column(db.Boolean, nullable=False, default=True)
     creado_en = db.Column(db.DateTime, default=ahora)
     # Gestion de contrasenas del administrador. Las cuentas anteriores a la
-    # migracion m005 quedan con la fecha en NULL: no se sabe cuando cambio.
+    # migracion m008 quedan con la fecha en NULL: no se sabe cuando cambio.
     contrasena_actualizada_en = db.Column(db.DateTime, default=ahora)
     # True cuando la contrasena la asigno el administrador: solo sirve para
     # entrar y reemplazarla (ver `auth.exigir_cambio_contrasena`).

@@ -3,7 +3,6 @@
 Evitan que personal no autorizado acceda a las rutas de entrega o altere el inventario.
 """
 
-import re
 from functools import wraps
 from urllib.parse import urlsplit
 
@@ -13,6 +12,7 @@ from wtforms import StringField
 from wtforms.validators import DataRequired, Email, Length, Optional, StopValidation
 
 from app.models import Rol
+from app.services.validacion import MENSAJE_CORREO, PATRON_CORREO, correo_en_lista_blanca
 
 # Pagina de inicio de cada rol. Es la unica fuente de verdad del aterrizaje tras
 # el login: antes la decision era un `if es_conductor / else dashboard`, que
@@ -65,6 +65,9 @@ def requiere_rol(*roles):
                 abort(403)
             return vista(*args, **kwargs)
 
+        # Para inspeccionar quien puede usar cada pantalla (prueba de cobertura
+        # por voz). `login_required` lo conserva: functools.wraps copia __dict__.
+        envoltura.roles_permitidos = tuple(roles)
         return envoltura
 
     return decorador
@@ -77,17 +80,8 @@ def requiere_rol(*roles):
 # La de `usuarios.correo`, `clientes.correo` y `solicitudes_contacto.correo`.
 LONGITUD_MAXIMA_CORREO = 120
 
-# Validacion por lista blanca (OWASP): en lugar de buscar los caracteres
-# peligrosos, se acepta solo lo que un correo necesita. Parte local con
-# letras sin tilde, numeros y . _ - +; una sola @; dominio con letras,
-# numeros y guiones, separado por puntos y terminado en una extension de
-# letras. Fuera quedan espacios, comillas, < > ; = / \ ( ), tildes y la ñ.
-# Va sin anclas porque tambien es el atributo `pattern` del HTML, que el
-# navegador ancla solo; el `\-` dentro de las clases lo exige el modo `v` con
-# el que los navegadores actuales compilan ese atributo.
-PATRON_CORREO = r"[A-Za-z0-9._+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}"
-_REGEX_CORREO = re.compile(rf"(?:{PATRON_CORREO})\Z")
-MENSAJE_CORREO = "Use solo letras sin tilde, numeros, los simbolos . _ - + y una @."
+# El patron y su mensaje viven en app.services.validacion, que tambien usa el
+# asistente de voz: una sola lista blanca para la pantalla y la voz.
 
 
 def _recortar(valor):
@@ -99,28 +93,32 @@ def _recortar(valor):
 def _lista_blanca_correo(formulario, campo):
     # StopValidation y no ValidationError: corta la cadena para que `Email`
     # no agregue un segundo mensaje sobre el mismo valor.
-    if campo.data and not _REGEX_CORREO.match(campo.data):
+    if campo.data and not correo_en_lista_blanca(campo.data):
         raise StopValidation(MENSAJE_CORREO)
 
 
-def campo_correo(etiqueta="Correo electronico", obligatorio=None):
+def campo_correo(etiqueta="Correo electrónico", obligatorio=None, validar=True):
     """Campo de correo con la lista blanca, comun a todos los formularios.
 
     Se usa en el login, en las cuentas de acceso y en los clientes: si el alta
     aceptara un correo que el login rechaza, esa cuenta no podria entrar.
     `obligatorio` es el mensaje cuando falta; sin el, el campo es opcional.
+    `validar=False` es para los formularios cuyas reglas aplica un servicio
+    (cuentas y clientes): `Validador.correo` usa la misma lista blanca, tambien
+    por voz, y el campo solo aporta el filtro del navegador.
 
     El servidor es la validacion que cuenta. En el navegador, `data-correo`
     hace que el campo descarte al escribir o pegar cualquier caracter fuera de
     la lista (ver base.html): asi ni siquiera se pueden introducir.
     """
     validadores = [DataRequired(obligatorio)] if obligatorio else [Optional()]
-    validadores += [
-        Length(max=LONGITUD_MAXIMA_CORREO,
-               message=f"Maximo {LONGITUD_MAXIMA_CORREO} caracteres."),
-        _lista_blanca_correo,
-        Email("Correo no valido."),
-    ]
+    if validar:
+        validadores += [
+            Length(max=LONGITUD_MAXIMA_CORREO,
+                   message=f"Maximo {LONGITUD_MAXIMA_CORREO} caracteres."),
+            _lista_blanca_correo,
+            Email("Correo no valido."),
+        ]
     return StringField(
         etiqueta,
         filters=[_recortar],

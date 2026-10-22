@@ -4,7 +4,7 @@
 {% block contenido %}
 <div class="encabezado-pagina fila-encabezado">
   <div>
-    <h1 class="titulo-pagina">Ordenes de despacho</h1>
+    <h1 class="titulo-pagina">Órdenes de despacho</h1>
     <p class="subtitulo-pagina">{{ paginacion.total }} pedido(s) registrados</p>
   </div>
   <div class="acciones-encabezado">
@@ -14,7 +14,7 @@
 </div>
 
 <form method="get" class="barra-filtros">
-  <input type="search" name="q" placeholder="Codigo, cliente o direccion" value="{{ filtros.q }}">
+  <input type="search" name="q" placeholder="Código, cliente o dirección" value="{{ filtros.q }}">
   <select name="estado">
     <option value="">Todos los estados</option>
     {% for clave, etiqueta in EstadoPedido.ETIQUETAS.items() %}
@@ -32,7 +32,7 @@
     <table class="tabla">
       <thead>
         <tr>
-          <th>Codigo</th><th>Cliente</th><th>Direccion</th>
+          <th>Código</th><th>Cliente</th><th>Dirección</th>
           <th>Fecha</th><th>Ventana</th><th>Ruta</th><th>Estado</th>
         </tr>
       </thead>
@@ -60,7 +60,7 @@
     {% if paginacion.has_prev %}
       <a href="{{ url_for('pedidos.lista', pagina=paginacion.prev_num, **filtros) }}">Anterior</a>
     {% endif %}
-    <span>Pagina {{ paginacion.page }} de {{ paginacion.pages }}</span>
+    <span>Página {{ paginacion.page }} de {{ paginacion.pages }}</span>
     {% if paginacion.has_next %}
       <a href="{{ url_for('pedidos.lista', pagina=paginacion.next_num, **filtros) }}">Siguiente</a>
     {% endif %}

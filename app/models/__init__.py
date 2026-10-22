@@ -4,8 +4,10 @@ Reexporta las entidades para que los controladores importen desde `app.models`.
 """
 
 from app.models.acceso import IntentoAcceso
+from app.models.auditoria import RESULTADO_ERROR, RESULTADO_EXITO, Auditoria
 from app.models.asistente import VIGENCIA_CONFIRMACION, VIGENCIA_SESION, SesionAsistente
 from app.models.cliente import Cliente, DireccionCliente, normalizar_texto
+from app.models.configuracion import NOMBRE_OTRO, ConfiguracionNegocio, MotivoFallo
 from app.models.inventario import MovimientoInventario, Producto, TipoMovimiento
 from app.models.metrica import (
     ENDPOINTS_CRITICOS,
@@ -25,6 +27,12 @@ from app.models.solicitud import SolicitudContacto
 from app.models.usuario import Rol, Usuario
 
 __all__ = [
+    "Auditoria",
+    "RESULTADO_ERROR",
+    "RESULTADO_EXITO",
+    "ConfiguracionNegocio",
+    "MotivoFallo",
+    "NOMBRE_OTRO",
     "IntentoAcceso",
     "SesionAsistente",
     "SolicitudContacto",

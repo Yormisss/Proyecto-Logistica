@@ -12,7 +12,9 @@ import re
 import sys
 from datetime import timedelta
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
+_preparar.reiniciar_base()
 from sqlalchemy import inspect
 
 from run import app
@@ -87,7 +89,10 @@ for rol, (correo, clave) in CUENTAS.items():
           f"{rol}: bloqueado, ni la contrasena correcta entra")
     check("Espere 1 minuto" in mensaje, f"{rol}: recien bloqueado, falta un minuto")
     with app.app_context():
-        db.session.get(IntentoAcceso, correo).bloqueado_hasta = ahora() + timedelta(seconds=25)
+        # Al segundo, como `acceso._registrar_fallo`: MySQL redondea los
+        # microsegundos de DATETIME y podia guardar un segundo de mas (26).
+        db.session.get(IntentoAcceso, correo).bloqueado_hasta = (
+            ahora().replace(microsecond=0) + timedelta(seconds=25))
         db.session.commit()
     _, mensaje = intentar(correo, clave)
     check(re.search(r"Espere 2[45] segundos", mensaje) is not None,
@@ -207,7 +212,7 @@ with app.app_context():
           "con la configuracion por defecto la espera es de un minuto")
 
 print("\n== 10. Migracion de la tabla de intentos ==")
-from migraciones.m006_intentos_acceso import aplicar
+from migraciones.m009_intentos_acceso import aplicar
 with app.app_context():
     check(aplicar(verboso=False) is False, "sobre una base al dia no hace nada")
     IntentoAcceso.__table__.drop(db.engine)

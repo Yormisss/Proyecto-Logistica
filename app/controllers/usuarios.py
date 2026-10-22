@@ -9,10 +9,10 @@ claves ajenas de `rutas`, `eventos_pedido` y `movimientos_inventario`: borrar un
 cuenta romperia la trazabilidad que sostiene el RF6. El login ya rechaza a los
 usuarios inactivos, asi que desactivar es el equivalente funcional de eliminar
 sin perder el historico.
-"""
 
-import secrets
-import string
+Las reglas viven en `app.services.usuarios`, que tambien usa el asistente de voz.
+Toda accion sobre una cuenta queda en la auditoria (sin la contrasena).
+"""
 
 from flask import (
     Blueprint, abort, flash, redirect, render_template, request, url_for,
@@ -26,35 +26,24 @@ from wtforms.validators import DataRequired, EqualTo, Length, Optional
 from app.controllers.auth import cambiar_contrasena_propia
 from app.controllers.seguridad import campo_correo, es_redireccion_segura, requiere_rol
 from app.extensions import db
-from app.models import Cliente, EstadoRuta, Rol, Ruta, Usuario
+from app.models import Cliente, Rol, Usuario
 from app.models.usuario import METODO_HASH
 from app.services import acceso
+from app.services.auditoria import cambios_legibles, registrar_auditoria
+from app.services.usuarios import (
+    LONGITUD_MINIMA, cambiar_estado_usuario, clientes_disponibles, crear_usuario,
+    editar_usuario, rechazo_contrasena, restablecer_contrasena, rutas_abiertas,
+)
+from app.services.validacion import DatosInvalidos
 from app.tiempo import ahora
 
 usuarios_bp = Blueprint("usuarios", __name__)
 
-LONGITUD_MINIMA = 8
 SIN_CLIENTE = 0
 
 
-def generar_contrasena(longitud=12):
-    """Contrasena temporal para una cuenta nueva.
-
-    Se usa `secrets` y no `random`: este valor es una credencial, no un dato de
-    demostracion. Se muestra una sola vez al administrador para que la entregue
-    por un canal aparte; el usuario debe cambiarla al iniciar sesion.
-    """
-    alfabeto = string.ascii_letters + string.digits + "!*-_"
-    return "".join(secrets.choice(alfabeto) for _ in range(longitud))
-
-
 def _a_entero(valor):
-    """Coercion tolerante del select de clientes.
-
-    Un valor no numerico se interpreta como "sin cliente": asi el fallo lo
-    reporta `_validar_cliente` con un mensaje en espanol, en lugar del error de
-    coercion de WTForms.
-    """
+    """Coercion tolerante del select de clientes: un valor raro es "sin cliente"."""
     try:
         return int(valor)
     except (TypeError, ValueError):
@@ -62,27 +51,22 @@ def _a_entero(valor):
 
 
 class FormularioUsuario(FlaskForm):
-    nombre = StringField(
-        "Nombre completo",
-        validators=[DataRequired("Indique el nombre."), Length(max=120)],
-    )
-    correo = campo_correo(obligatorio="Indique el correo.")
-    documento = StringField("Documento", validators=[Optional(), Length(max=30)])
-    telefono = StringField("Telefono", validators=[Optional(), Length(max=30)])
-    # `validate_choice=False` en ambos selects: la comprobacion de opciones de
-    # WTForms responde "Not a valid choice." en ingles, y el resto de la interfaz
-    # esta en espanol. Se valida en `_validar_rol` y `_validar_cliente`.
-    rol = SelectField("Rol", validate_choice=False, validators=[DataRequired()])
+    # Sin validadores propios: las reglas (obligatorios, largos, correo,
+    # unicidad, rol, cliente, contrasena) las aplica el servicio, igual que por voz.
+    # El correo lleva ademas `campo_correo`, que pone la lista blanca en el
+    # navegador (la misma que aplica el servicio).
+    nombre = StringField("Nombre completo", validators=[Optional()])
+    correo = campo_correo(validar=False)
+    documento = StringField("Documento", validators=[Optional()])
+    telefono = StringField("Teléfono", validators=[Optional()])
+    # `validate_choice=False`: la comprobacion de WTForms responde en ingles.
+    rol = SelectField("Rol", validate_choice=False, validators=[Optional()])
     # Solo aplica al rol CLIENTE: es la entidad comercial cuyos pedidos vera.
     cliente_id = SelectField(
-        "Cliente asociado", coerce=_a_entero, validate_choice=False,
-        validators=[Optional()],
+        "Cliente asociado", coerce=_a_entero, validate_choice=False, validators=[Optional()],
     )
-    contrasena = PasswordField(
-        "Contrasena",
-        validators=[Optional(), Length(min=LONGITUD_MINIMA,
-                                      message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
-    )
+    # Solo en el alta; la edicion no toca la contrasena (ver su apartado).
+    contrasena = PasswordField("Contraseña", validators=[Optional()])
     # Solo en el alta, si el administrador escribio la contrasena y la cuenta es
     # de un rol cuya contrasena administra: las demas siempre son temporales.
     exigir_cambio = BooleanField("Exigir cambio al primer inicio de sesion", default=True)
@@ -91,7 +75,18 @@ class FormularioUsuario(FlaskForm):
     def __init__(self, *args, usuario=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.rol.choices = Rol.opciones()
-        self.cliente_id.choices = _opciones_cliente(usuario)
+        self.cliente_id.choices = [(SIN_CLIENTE, "— Seleccione el cliente —")] + [
+            (c.id, f"{c.nombre}" + (f" · NIT {c.documento}" if c.documento else ""))
+            for c in clientes_disponibles(usuario)
+        ]
+
+    def datos(self):
+        return {
+            "nombre": self.nombre.data, "correo": self.correo.data, "documento": self.documento.data,
+            "telefono": self.telefono.data, "rol": self.rol.data, "cliente_id": self.cliente_id.data,
+            "contrasena": self.contrasena.data or None, "exigir_cambio": self.exigir_cambio.data,
+            "activo": self.activo.data,
+        }
 
 
 class FormularioAccion(FlaskForm):
@@ -130,20 +125,29 @@ class FormularioContrasenaPropia(FlaskForm):
     )
 
 
-def _rechazo_contrasena(usuario):
-    """Por que el administrador no puede gestionar esta contrasena, o None.
+def _mostrar_errores(formulario, error):
+    """Ubica cada error del servicio junto a su campo, o como aviso general."""
+    for campo, mensaje in error.errores:
+        destino = getattr(formulario, campo, None) if campo else None
+        if destino is not None:
+            destino.errors = list(destino.errors) + [mensaje]
+        else:
+            flash(mensaje, "error")
 
-    El cliente es el unico que cambia la suya, y la de un administrador solo
-    la cambia el mismo, con la actual: asi ninguna cuenta con acceso total
-    puede apropiarse de otra.
-    """
-    if usuario.id == current_user.id:
-        return "Su propia contrasena se cambia en Contrasenas, con la actual."
-    if usuario.rol == Rol.CLIENTE:
-        return "Solo el cliente puede cambiar su propia contrasena."
-    if not usuario.contrasena_administrable:
-        return "Solo cada administrador puede cambiar su propia contrasena."
-    return None
+
+def _datos_cuenta(usuario, cliente=None):
+    datos = {"nombre": usuario.nombre, "correo": usuario.correo, "rol": usuario.rol_etiqueta,
+             "activo": usuario.activo}
+    if cliente is not None:
+        datos["cliente"] = cliente.nombre
+    return datos
+
+
+def _usuario(usuario_id):
+    usuario = db.session.get(Usuario, usuario_id)
+    if usuario is None:
+        abort(404)
+    return usuario
 
 
 def _filtrar_rol_y_texto(consulta):
@@ -171,140 +175,6 @@ def _volver(por_defecto):
     """Destino tras una accion que se lanza desde varias pantallas."""
     destino = request.form.get("volver", "")
     return destino if es_redireccion_segura(destino) else por_defecto
-
-
-def _usuario_o_404(usuario_id):
-    usuario = db.session.get(Usuario, usuario_id)
-    if usuario is None:
-        abort(404)
-    return usuario
-
-
-def _opciones_cliente(usuario=None):
-    """Clientes que pueden recibir una cuenta de portal.
-
-    Se ofrecen los que aun no tienen cuenta, mas el que ya esta vinculado al
-    usuario en edicion: la relacion es 1 a 0..1 y la columna es unica, asi que un
-    cliente no puede quedar asociado a dos cuentas.
-    """
-    consulta = db.session.query(Cliente).filter(Cliente.activo.is_(True))
-
-    if usuario is not None and usuario.cliente is not None:
-        consulta = consulta.filter(
-            or_(Cliente.usuario_id.is_(None), Cliente.id == usuario.cliente.id)
-        )
-    else:
-        consulta = consulta.filter(Cliente.usuario_id.is_(None))
-
-    opciones = [(SIN_CLIENTE, "— Seleccione el cliente —")]
-    opciones += [
-        (c.id, f"{c.nombre}" + (f" · NIT {c.documento}" if c.documento else ""))
-        for c in consulta.order_by(Cliente.nombre).all()
-    ]
-    return opciones
-
-
-def _administradores_activos(excluyendo=None):
-    consulta = db.session.query(func.count(Usuario.id)).filter(
-        Usuario.rol == Rol.ADMIN, Usuario.activo.is_(True)
-    )
-    if excluyendo is not None:
-        consulta = consulta.filter(Usuario.id != excluyendo)
-    return consulta.scalar()
-
-
-def _validar_unicidad(formulario, usuario=None):
-    """Correo y documento son unicos en el esquema; se avisa en el campo."""
-    propio = usuario.id if usuario else None
-    correo = formulario.correo.data.strip().lower()
-
-    choque = db.session.query(Usuario).filter(Usuario.correo == correo)
-    if propio:
-        choque = choque.filter(Usuario.id != propio)
-    if choque.first():
-        formulario.correo.errors = list(formulario.correo.errors) + [
-            "Ya existe una cuenta con este correo."
-        ]
-
-    documento = (formulario.documento.data or "").strip()
-    if documento:
-        choque = db.session.query(Usuario).filter(Usuario.documento == documento)
-        if propio:
-            choque = choque.filter(Usuario.id != propio)
-        if choque.first():
-            formulario.documento.errors = list(formulario.documento.errors) + [
-                "Ya existe una cuenta con este documento."
-            ]
-
-    return not (formulario.correo.errors or formulario.documento.errors)
-
-
-def _validar_rol(formulario):
-    """Un rol fuera del catalogo solo llega en un POST fabricado a mano."""
-    if formulario.rol.data not in Rol.ETIQUETAS:
-        formulario.rol.errors = list(formulario.rol.errors) + [
-            "El rol seleccionado no es valido."
-        ]
-        return False
-    return True
-
-
-def _validar_cliente(formulario):
-    """El rol CLIENTE exige un cliente comercial; los demas roles no lo admiten."""
-    if formulario.rol.data != Rol.CLIENTE:
-        return True
-
-    if formulario.cliente_id.data in (None, SIN_CLIENTE):
-        formulario.cliente_id.errors = list(formulario.cliente_id.errors) + [
-            "Una cuenta de cliente debe apuntar al cliente cuyos pedidos vera."
-        ]
-        return False
-
-    # El select ya limita las opciones, pero la comprobacion se repite aqui:
-    # un POST fabricado a mano no pasa por el formulario renderizado.
-    permitidos = {valor for valor, _ in formulario.cliente_id.choices}
-    if formulario.cliente_id.data not in permitidos:
-        formulario.cliente_id.errors = list(formulario.cliente_id.errors) + [
-            "El cliente seleccionado no esta disponible."
-        ]
-        return False
-
-    return True
-
-
-def _aplicar_vinculo_cliente(usuario, cliente_id):
-    """Sincroniza `clientes.usuario_id` con el rol de la cuenta.
-
-    Al dejar de ser CLIENTE la cuenta se desvincula, para que no quede una
-    credencial con acceso al portal de un cliente al que ya no representa.
-    """
-    anterior = usuario.cliente
-
-    if usuario.rol != Rol.CLIENTE:
-        if anterior is not None:
-            anterior.usuario_id = None
-        return None
-
-    nuevo = db.session.get(Cliente, cliente_id)
-    if anterior is not None and anterior is not nuevo:
-        anterior.usuario_id = None
-    if nuevo is not None:
-        nuevo.usuario_id = usuario.id
-    return nuevo
-
-
-def _rutas_abiertas(usuario):
-    """Rutas sin cerrar de un conductor; condiciona cambiarle el rol."""
-    if usuario.rol != Rol.CONDUCTOR:
-        return 0
-    return (
-        db.session.query(func.count(Ruta.id))
-        .filter(
-            Ruta.conductor_id == usuario.id,
-            Ruta.estado.in_((EstadoRuta.PLANIFICADA, EstadoRuta.EN_CURSO)),
-        )
-        .scalar()
-    )
 
 
 # --------------------------------------------------------------------------
@@ -374,50 +244,28 @@ def nuevo():
                 formulario.telefono.data = cliente.telefono or ""
 
     if formulario.validate_on_submit():
-        valido = (
-            _validar_unicidad(formulario)
-            and _validar_rol(formulario)
-            and _validar_cliente(formulario)
-        )
-
-        if valido:
-            usuario = Usuario(
-                nombre=formulario.nombre.data.strip(),
-                correo=formulario.correo.data.strip().lower(),
-                documento=(formulario.documento.data or "").strip() or None,
-                telefono=(formulario.telefono.data or "").strip() or None,
-                rol=formulario.rol.data,
-                activo=formulario.activo.data,
+        try:
+            usuario, generada, cliente = crear_usuario(formulario.datos(), actor=current_user)
+        except DatosInvalidos as error:
+            _mostrar_errores(formulario, error)
+        else:
+            registrar_auditoria(
+                "Crear usuario", "usuario",
+                f"Creó la cuenta de {usuario.nombre} ({usuario.correo}) como {usuario.rol_etiqueta}.",
+                _datos_cuenta(usuario, cliente), entidad_id=usuario.id,
             )
-
-            # Sin contrasena explicita se genera una temporal y se muestra una
-            # sola vez: evita que el administrador reutilice una clave conocida.
-            temporal = formulario.contrasena.data or generar_contrasena()
-            usuario.establecer_contrasena(
-                temporal,
-                temporal=(
-                    not formulario.contrasena.data
-                    or formulario.exigir_cambio.data
-                    or not usuario.contrasena_administrable
-                ),
-            )
-
-            db.session.add(usuario)
-            db.session.flush()
-
-            cliente = _aplicar_vinculo_cliente(usuario, formulario.cliente_id.data)
             db.session.commit()
-
             flash(f"Cuenta de {usuario.nombre} creada como {usuario.rol_etiqueta}.", "exito")
             if cliente is not None:
                 flash(f"Portal habilitado para {cliente.nombre}.", "exito")
-            if not formulario.contrasena.data:
+            if generada:
+                # Se muestra una sola vez: evita que el administrador reutilice una
+                # clave conocida y no queda guardada en ningun otro lugar.
                 flash(
-                    f"Contrasena temporal de {usuario.correo}: {temporal} — "
+                    f"Contrasena temporal de {usuario.correo}: {generada} — "
                     "entreguela por un canal aparte; no se volvera a mostrar.",
                     "advertencia",
                 )
-
             return redirect(url_for("usuarios.lista"))
 
     return render_template(
@@ -434,10 +282,7 @@ def nuevo():
 @login_required
 @requiere_rol(Rol.ADMIN)
 def editar(usuario_id):
-    usuario = db.session.get(Usuario, usuario_id)
-    if usuario is None:
-        abort(404)
-
+    usuario = _usuario(usuario_id)
     es_propia = usuario.id == current_user.id
     formulario = FormularioUsuario(obj=usuario, usuario=usuario)
 
@@ -445,53 +290,28 @@ def editar(usuario_id):
         formulario.cliente_id.data = usuario.cliente.id
 
     if formulario.validate_on_submit():
-        valido = (
-            _validar_unicidad(formulario, usuario)
-            and _validar_rol(formulario)
-            and _validar_cliente(formulario)
-        )
-
-        # Un administrador no puede quitarse a si mismo el acceso: perderia la
-        # capacidad de revertirlo y dejaria el sistema sin quien gestione cuentas.
-        if es_propia and formulario.rol.data != Rol.ADMIN:
-            flash("No puede cambiar su propio rol de administrador.", "error")
-            valido = False
-        if es_propia and not formulario.activo.data:
-            flash("No puede desactivar su propia cuenta.", "error")
-            valido = False
-
-        pierde_admin = usuario.rol == Rol.ADMIN and (
-            formulario.rol.data != Rol.ADMIN or not formulario.activo.data
-        )
-        if valido and pierde_admin and _administradores_activos(excluyendo=usuario.id) == 0:
-            flash("Debe quedar al menos un administrador activo en el sistema.", "error")
-            valido = False
-
-        if valido:
-            rutas_abiertas = _rutas_abiertas(usuario) if formulario.rol.data != usuario.rol else 0
-
-            usuario.nombre = formulario.nombre.data.strip()
-            usuario.correo = formulario.correo.data.strip().lower()
-            usuario.documento = (formulario.documento.data or "").strip() or None
-            usuario.telefono = (formulario.telefono.data or "").strip() or None
-            usuario.rol = formulario.rol.data
-            usuario.activo = formulario.activo.data
-
-            _aplicar_vinculo_cliente(usuario, formulario.cliente_id.data)
-            db.session.commit()
-
-            flash(f"Cuenta de {usuario.nombre} actualizada.", "exito")
-            if rutas_abiertas:
-                flash(
-                    f"Atencion: {rutas_abiertas} ruta(s) sin cerrar siguen asignadas a "
-                    f"{usuario.nombre}. Reasignelas antes de continuar la operacion.",
-                    "advertencia",
+        try:
+            cambios, consecuencias = editar_usuario(usuario, formulario.datos(), actor=current_user)
+        except DatosInvalidos as error:
+            db.session.rollback()
+            _mostrar_errores(formulario, error)
+        else:
+            if cambios:
+                registrar_auditoria(
+                    "Editar usuario", "usuario",
+                    f"Editó la cuenta de {usuario.nombre}: "
+                    + ", ".join(campo.replace("_", " ") for campo in cambios) + ".",
+                    cambios_legibles(cambios), entidad_id=usuario.id,
                 )
+            db.session.commit()
+            flash(f"Cuenta de {usuario.nombre} actualizada.", "exito")
+            for consecuencia in consecuencias:
+                flash(consecuencia[0].upper() + consecuencia[1:] + ".", "advertencia")
             return redirect(url_for("usuarios.lista"))
 
     return render_template(
         "admin/usuarios/formulario.html", formulario=formulario, usuario=usuario,
-        es_propia=es_propia, rutas_abiertas=_rutas_abiertas(usuario),
+        es_propia=es_propia, rutas_abiertas=rutas_abiertas(usuario),
         longitud_minima=LONGITUD_MINIMA,
     )
 
@@ -505,37 +325,30 @@ def editar(usuario_id):
 @requiere_rol(Rol.ADMIN)
 def alternar_estado(usuario_id):
     """Activa o desactiva la cuenta. Sustituye al borrado (ver cabecera)."""
-    usuario = db.session.get(Usuario, usuario_id)
-    if usuario is None:
-        abort(404)
+    usuario = _usuario(usuario_id)
 
     if not FormularioAccion().validate_on_submit():
         flash("Solicitud invalida. Intente nuevamente.", "error")
         return redirect(url_for("usuarios.lista"))
 
-    if usuario.id == current_user.id:
-        flash("No puede desactivar su propia cuenta.", "error")
+    try:
+        cambiar_estado_usuario(usuario, not usuario.activo, actor=current_user)
+    except DatosInvalidos as error:
+        flash(str(error), "error")
         return redirect(url_for("usuarios.lista"))
 
-    if usuario.activo and usuario.rol == Rol.ADMIN and _administradores_activos(usuario.id) == 0:
-        flash("Debe quedar al menos un administrador activo en el sistema.", "error")
-        return redirect(url_for("usuarios.lista"))
-
-    abiertas = _rutas_abiertas(usuario) if usuario.activo else 0
-
-    usuario.activo = not usuario.activo
+    registrar_auditoria(
+        "Activar usuario" if usuario.activo else "Desactivar usuario", "usuario",
+        f"{'Activó' if usuario.activo else 'Desactivó'} la cuenta de {usuario.nombre}.",
+        {"correo": usuario.correo, "activo": [not usuario.activo, usuario.activo]},
+        entidad_id=usuario.id,
+    )
     db.session.commit()
-
     flash(
         f"Cuenta de {usuario.nombre} "
         + ("activada." if usuario.activo else "desactivada. No podra iniciar sesion."),
         "exito",
     )
-    if abiertas:
-        flash(
-            f"{usuario.nombre} tenia {abiertas} ruta(s) sin cerrar; reasignelas.",
-            "advertencia",
-        )
     return redirect(url_for("usuarios.lista"))
 
 
@@ -544,7 +357,7 @@ def alternar_estado(usuario_id):
 @requiere_rol(Rol.ADMIN)
 def restablecer(usuario_id):
     """Emite una contrasena temporal nueva y la muestra una sola vez."""
-    usuario = _usuario_o_404(usuario_id)
+    usuario = _usuario(usuario_id)
     destino = _volver(url_for("usuarios.lista"))
 
     if not FormularioAccion().validate_on_submit():
@@ -553,13 +366,17 @@ def restablecer(usuario_id):
 
     # La propia tampoco: cerraria la sesion en curso (ver `get_id`) y saltaria
     # la verificacion de la contrasena actual.
-    rechazo = _rechazo_contrasena(usuario)
-    if rechazo:
-        flash(rechazo, "error")
+    try:
+        temporal = restablecer_contrasena(usuario, actor=current_user)
+    except DatosInvalidos as error:
+        flash(str(error), "error")
         return redirect(destino)
 
-    temporal = generar_contrasena()
-    usuario.establecer_contrasena(temporal, temporal=True)
+    registrar_auditoria(
+        "Restablecer contraseña", "usuario",
+        f"Restableció la contraseña de {usuario.nombre}.",
+        {"correo": usuario.correo}, entidad_id=usuario.id,
+    )
     db.session.commit()
 
     flash(
@@ -627,11 +444,11 @@ def contrasenas():
 @requiere_rol(Rol.ADMIN)
 def contrasena(usuario_id):
     """Ficha de la contrasena de una cuenta: la propia o la de un gestor o conductor."""
-    usuario = _usuario_o_404(usuario_id)
+    usuario = _usuario(usuario_id)
     if usuario.id == current_user.id:
         return _contrasena_propia(usuario)
 
-    rechazo = _rechazo_contrasena(usuario)
+    rechazo = rechazo_contrasena(usuario, current_user)
     if rechazo:
         flash(rechazo, "error")
         return redirect(url_for("usuarios.contrasenas"))
@@ -640,6 +457,13 @@ def contrasena(usuario_id):
     if formulario.validate_on_submit():
         usuario.establecer_contrasena(
             formulario.contrasena.data, temporal=formulario.exigir_cambio.data
+        )
+        registrar_auditoria(
+            "Asignar contraseña", "usuario",
+            f"Asignó una contraseña a {usuario.nombre}"
+            + (" (temporal)." if usuario.debe_cambiar_contrasena else "."),
+            {"correo": usuario.correo, "temporal": usuario.debe_cambiar_contrasena},
+            entidad_id=usuario.id,
         )
         db.session.commit()
 
@@ -682,19 +506,26 @@ def _contrasena_propia(usuario):
 @requiere_rol(Rol.ADMIN)
 def alternar_exigencia(usuario_id):
     """Marca o desmarca que la cuenta debe cambiar su contrasena."""
-    usuario = _usuario_o_404(usuario_id)
+    usuario = _usuario(usuario_id)
     destino = _volver(url_for("usuarios.contrasenas"))
 
     if not FormularioAccion().validate_on_submit():
         flash("Solicitud invalida. Intente nuevamente.", "error")
         return redirect(destino)
 
-    rechazo = _rechazo_contrasena(usuario)
+    rechazo = rechazo_contrasena(usuario, current_user)
     if rechazo:
         flash(rechazo, "error")
         return redirect(destino)
 
     usuario.debe_cambiar_contrasena = not usuario.debe_cambiar_contrasena
+    registrar_auditoria(
+        "Exigir cambio de contraseña" if usuario.debe_cambiar_contrasena
+        else "Quitar exigencia de cambio de contraseña", "usuario",
+        f"{'Exigió' if usuario.debe_cambiar_contrasena else 'Quitó la exigencia de'} "
+        f"cambio de contraseña a {usuario.nombre}.",
+        {"correo": usuario.correo}, entidad_id=usuario.id,
+    )
     db.session.commit()
 
     flash(
@@ -737,6 +568,12 @@ def exigir_cambio_masivo():
         .filter(Usuario.id.in_(administrables), Usuario.debe_cambiar_contrasena.is_(False))
         .update({Usuario.debe_cambiar_contrasena: True}, synchronize_session=False)
     )
+    if marcadas:
+        registrar_auditoria(
+            "Exigir cambio de contraseña", "usuario",
+            f"Exigió el cambio de contraseña a {marcadas} cuenta(s).",
+            {"cuentas": marcadas},
+        )
     db.session.commit()
 
     flash(f"{marcadas} cuenta(s) deberan cambiar su contrasena.", "exito")

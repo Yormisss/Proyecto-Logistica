@@ -63,8 +63,10 @@ def kpis_del_dia(fecha=None):
         "fallidos": fallidos,
         "cancelados": conteos.get(EstadoPedido.CANCELADO, 0),
         "pendientes": pendientes,
-        "en_ruta": conteos.get(EstadoPedido.EN_RUTA, 0),
+        # Desglose de `pendientes`: sin_asignar + asignados + en_ruta.
         "sin_asignar": conteos.get(EstadoPedido.PENDIENTE, 0),
+        "asignados": conteos.get(EstadoPedido.ASIGNADO, 0),
+        "en_ruta": conteos.get(EstadoPedido.EN_RUTA, 0),
         "porcentaje_exito": round(entregados * 100 / cerrados, 1) if cerrados else 0.0,
         "conteos": conteos,
     }
@@ -113,22 +115,63 @@ def serie_entregas(dias=14, hasta=None):
 
 
 def motivos_fallo(dias=30, hasta=None):
-    """Ranking de causas de entrega fallida (cadena causal 2.3.1)."""
+    """Ranking de causas de entrega fallida (cadena causal 2.3.1).
+
+    Agrupa por el catalogo de motivos (configuracion del negocio). Cada prueba
+    de entrega cuenta para su motivo (`motivo_id`), con el nombre actual del
+    motivo aunque se haya renombrado. Las anteriores al catalogo solo tienen el
+    texto: se reconocen por el nombre con que nacio el motivo, y si no coincide
+    con ninguno cuentan como "Otro". "Otro" trae en `detalles` cada texto
+    escrito y cuantas veces aparece.
+    """
+    from collections import Counter
+
+    from app.models import MotivoFallo
+    from app.services.configuracion import reconocer_motivo_historico
+
     hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
     filas = (
-        db.session.query(PruebaEntrega.motivo_fallo, func.count(PruebaEntrega.id))
+        db.session.query(PruebaEntrega.motivo_id, PruebaEntrega.motivo_fallo)
         .join(Pedido, Pedido.id == PruebaEntrega.pedido_id)
         .filter(
             PruebaEntrega.motivo_fallo.isnot(None),
             Pedido.fecha_despacho.between(desde, hasta),
         )
-        .group_by(PruebaEntrega.motivo_fallo)
-        .order_by(func.count(PruebaEntrega.id).desc())
         .all()
     )
-    return [{"motivo": motivo, "cantidad": int(cantidad)} for motivo, cantidad in filas]
+    catalogo = {m.id: m for m in db.session.query(MotivoFallo)}
+    otro = next((m for m in catalogo.values() if m.es_otro), None)
+    reconocidos = {}
+
+    grupos = {}
+    for motivo_id, texto in filas:
+        motivo = catalogo.get(motivo_id) if motivo_id else None
+        if motivo is None:
+            if texto not in reconocidos:
+                reconocidos[texto] = reconocer_motivo_historico(texto) or otro
+            motivo = reconocidos[texto]
+        clave = motivo.id if motivo is not None else ("texto", texto)
+        grupo = grupos.setdefault(clave, {
+            "motivo": motivo.nombre if motivo is not None else texto,
+            "cantidad": 0,
+            "es_otro": bool(motivo is not None and motivo.es_otro),
+            "textos": Counter(),
+        })
+        grupo["cantidad"] += 1
+        if grupo["es_otro"]:
+            grupo["textos"][texto] += 1
+
+    resultado = []
+    for grupo in sorted(grupos.values(), key=lambda g: (-g["cantidad"], g["motivo"])):
+        textos = grupo.pop("textos")
+        grupo["detalles"] = [
+            {"texto": t, "cantidad": n}
+            for t, n in sorted(textos.items(), key=lambda par: (-par[1], par[0]))
+        ]
+        resultado.append(grupo)
+    return resultado
 
 
 def productividad_conductores(dias=30, hasta=None):
@@ -220,10 +263,14 @@ def cumplimiento_ventana(dias=30, hasta=None):
     hasta = hasta or hoy()
     desde = hasta - timedelta(days=dias - 1)
 
+    # La prueba de la entrega es la mas reciente del pedido; las anteriores son
+    # intentos fallidos.
+    ultimas = db.session.query(func.max(PruebaEntrega.id)).group_by(PruebaEntrega.pedido_id)
     filas = (
         db.session.query(Pedido.ventana_fin, PruebaEntrega.registrado_en)
         .join(PruebaEntrega, PruebaEntrega.pedido_id == Pedido.id)
         .filter(
+            PruebaEntrega.id.in_(ultimas),
             Pedido.estado == EstadoPedido.ENTREGADO,
             Pedido.ventana_fin.isnot(None),
             Pedido.fecha_despacho.between(desde, hasta),

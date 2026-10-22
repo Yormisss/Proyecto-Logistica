@@ -12,7 +12,8 @@ import re
 import sys
 from types import SimpleNamespace
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 from retell.resources.agent import AgentResource
 from retell.resources.llm import LlmResource
 
@@ -195,7 +196,7 @@ from retell.types.llm_create_params import GeneralToolCustomTool
 CAMPOS_HERRAMIENTA = set(GeneralToolCustomTool.__annotations__)
 
 print("\n== 1. Configuracion de cada agente ==")
-ESPERADAS = {"conductor": 5, "gestor": 14, "admin": 20, "cliente": 8}
+ESPERADAS = {"conductor": 6, "gestor": 19, "admin": 23, "cliente": 8}
 with app.app_context():
     for definicion in conf.AGENTES:
         tools = conf.herramientas(definicion, URL)
@@ -224,11 +225,33 @@ with app.app_context():
 
 admin = next(d for d in conf.AGENTES if d.clave == "admin")
 gestor = next(d for d in conf.AGENTES if d.clave == "gestor")
+with app.app_context():
+    tool_pedidos = next(t for t in conf.herramientas(gestor, URL) if t["name"] == "pedidos")
+check(tool_pedidos["parameters"]["required"] == ["operacion"]
+      and tool_pedidos["parameters"]["properties"]["operacion"]["enum"] == ["crear", "anular", "reintentar", "editar"],
+      "una funcion agrupada exige 'operacion', con sus operaciones en el enum")
+check(all(f"'{op}':" in tool_pedidos["description"] for op in ("crear", "anular", "reintentar", "editar"))
+      and tool_pedidos["description"].count("(modifica datos)") == 4
+      and "llamala primero sin 'confirmar'" in tool_pedidos["description"],
+      "y su descripcion explica cada operacion y cuales modifican datos")
 cliente = next(d for d in conf.AGENTES if d.clave == "cliente")
+for definicion in conf.AGENTES:
+    texto = conf.prompt(definicion)
+    check("Gaby" in conf.bienvenida(definicion) and texto.startswith("Eres Gaby"),
+          f"{definicion.clave}: se presenta como Gaby")
+    check("Me falta" in texto and "de uno en uno" in texto and "deletreados" in texto
+          and "No inventes valores" in texto and "contraseñas nunca se dicen" in texto
+          and "El NIT de un cliente" in texto and "La placa de un vehículo" in texto,
+          f"{definicion.clave}: reglas de formulario por voz, datos fijos y contraseñas")
+from app.models import VIGENCIA_SESION
+check(conf.DURACION_MAXIMA_MS == 10 * 60 * 1000 and VIGENCIA_SESION.total_seconds() == 15 * 60
+      and VIGENCIA_SESION.total_seconds() * 1000 > conf.DURACION_MAXIMA_MS,
+      "llamada de 10 minutos como maximo; la sesion del servidor (15) la cubre entera")
 check("Usuarios" in conf.prompt(admin) and "contraseñas" in conf.prompt(admin),
       "el admin explica que usuarios, roles y contraseñas se manejan en pantalla")
-check("Importar pedidos desde un archivo CSV" in conf.prompt(gestor) and "solo lo hace un administrador" in conf.prompt(gestor),
-      "el gestor explica que importar CSV y ajustar inventario no van por voz")
+check("Importar pedidos desde un archivo CSV" in conf.prompt(gestor) and "solo lo hace un administrador" not in conf.prompt(gestor)
+      and "ajustar el inventario al valor contado" in conf.prompt(gestor),
+      "el gestor explica que importar CSV no va por voz, y que el ajuste de inventario si")
 check("Crear pedidos: todavía no está disponible" in conf.prompt(cliente) and "otras empresas" in conf.prompt(cliente),
       "el cliente explica que no crea pedidos ni ve datos de otros")
 check({d.variable for d in conf.AGENTES} == set(VARIABLES), "un agente por variable de entorno")
@@ -257,16 +280,16 @@ check(not [x for x in retell.registro if x == ("agent.create", "agent_conductor"
       and ("agent.publish", "agent_conductor", 3) in retell.registro,
       "el conductor existente: borrador v3, su LLM en v3 actualizado, y se publica")
 v_cond = retell.publicada("agent_conductor")
-check(v_cond["language"] == "es-419" and v_cond["max_call_duration_ms"] == 300000
+check(v_cond["language"] == "es-419" and v_cond["max_call_duration_ms"] == 600000
       and v_cond["end_call_after_silence_ms"] == 20000 and v_cond["agent_name"] == "SGDS - Conductor"
       and v_cond["response_engine"] == {"type": "retell-llm", "llm_id": "llm_de_agent_conductor", "version": 3},
-      "con espanol latino, 5 minutos, 20 s de silencio y el mismo LLM en su misma version")
+      "con espanol latino, 10 minutos, 20 s de silencio y el mismo LLM en su misma version")
 check(retell.agentes["agent_conductor"][0]["publicada"]
       and retell.llms["llm_de_agent_conductor"][2]["general_prompt"] == "prompt viejo",
       "la version publicada anterior queda intacta, con su version del LLM")
 llm_cond = llm_de("agent_conductor")
-check(len(llm_cond["general_tools"]) == 5 and all(t["url"].startswith(URL + "/api/asistente/conductor/") for t in llm_cond["general_tools"]),
-      "su LLM trae las 5 funciones con la URL publica (sin la barra final)")
+check(len(llm_cond["general_tools"]) == 6 and all(t["url"].startswith(URL + "/api/asistente/conductor/") for t in llm_cond["general_tools"]),
+      "su LLM trae las 6 funciones con la URL publica (sin la barra final)")
 check(llm_cond["begin_message"] == conf.bienvenida(conf.AGENTES[0]) and llm_cond["general_prompt"] == conf.prompt(conf.AGENTES[0])
       and llm_cond["default_dynamic_variables"] == {"nombre_usuario": "", "fecha_hoy": ""},
       "con el prompt, la bienvenida y las variables dinamicas del repositorio")
@@ -281,7 +304,7 @@ check(all(retell.agentes[a][-1]["voice_id"] == "voz-es" and retell.agentes[a][-1
           and retell.agentes[a][-1]["response_engine"]["version"] == 0 for a in creados),
       "con la voz de RETELL_VOZ_ID, el LLM en la version 0 como el agente, y publicados")
 check([len(llm_de(por_nombre[n])["general_tools"]) for n in ("SGDS - Gestor logistico", "SGDS - Administrador", "SGDS - Cliente")]
-      == [14, 20, 8], "gestor con 14 funciones, admin con 20 (las del gestor y las suyas) y cliente con 8")
+      == [19, 23, 8], "gestor con 19 funciones, admin con 23 (las del gestor y las suyas) y cliente con 8")
 for nombre, variable in (("SGDS - Gestor logistico", "RETELL_AGENTE_GESTOR_ID"),
                          ("SGDS - Administrador", "RETELL_AGENTE_ADMIN_ID"), ("SGDS - Cliente", "RETELL_AGENTE_CLIENTE_ID")):
     check(f"{variable}={por_nombre[nombre]}" in r.output, f"imprime {variable} para el .env")

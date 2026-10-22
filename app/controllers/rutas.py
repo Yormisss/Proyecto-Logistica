@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 from flask import (
-    Blueprint, abort, current_app, flash, redirect, render_template, request, url_for,
+    Blueprint, abort, flash, redirect, render_template, request, url_for,
 )
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
@@ -20,13 +20,16 @@ from wtforms.validators import DataRequired, Optional
 from app.controllers.seguridad import requiere_rol
 from app.extensions import db
 from app.models import (
-    EstadoPedido, EstadoRuta, EventoPedido, Pedido, Rol, Ruta, Usuario, Vehiculo,
+    EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, Usuario, Vehiculo,
 )
-from app.services.codigos import generar_codigo_ruta
+from app.services.auditoria import auditar_pantalla
+from app.services.configuracion import centro_distribucion
 from app.services.planificacion import (
-    PlanificacionInvalida, origen_centro_distribucion, recalcular_secuencia,
+    PlanificacionInvalida, crear_ruta, eliminar_ruta, recalcular_secuencia,
 )
-from app.services.ruteo import ESTRATEGIA_DISTANCIA, ESTRATEGIAS, calcular_ruta
+from app.services.planificacion import quitar_parada as quitar_parada_servicio
+from app.services.validacion import DatosInvalidos
+from app.services.ruteo import ESTRATEGIA_DISTANCIA, ESTRATEGIAS
 from app.tiempo import hoy
 
 rutas_bp = Blueprint("rutas", __name__)
@@ -35,7 +38,7 @@ rutas_bp = Blueprint("rutas", __name__)
 class FormularioRuta(FlaskForm):
     fecha = DateField("Fecha de despacho", validators=[DataRequired("Indique la fecha.")])
     conductor_id = SelectField("Conductor", coerce=int, validators=[DataRequired()])
-    vehiculo_id = SelectField("Vehiculo", coerce=int, validators=[Optional()])
+    vehiculo_id = SelectField("Vehículo", coerce=int, validators=[Optional()])
     estrategia = SelectField(
         "Criterio de ordenamiento",
         choices=list(ESTRATEGIAS.items()),
@@ -61,19 +64,6 @@ class FormularioRuta(FlaskForm):
             (v.id, f"{v.placa} — {v.tipo}") for v in vehiculos
         ]
         return conductores, vehiculos
-
-
-def _aplicar_resultado(ruta, resultado):
-    """Persiste la secuencia calculada sobre los pedidos de la ruta."""
-    posiciones = {pedido_id: indice for indice, pedido_id in enumerate(resultado.orden, start=1)}
-
-    for pedido in ruta.pedidos:
-        pedido.orden_en_ruta = posiciones.get(pedido.id)
-
-    ruta.distancia_km = resultado.distancia_km
-    ruta.duracion_min = resultado.duracion_min
-    ruta.geometria = resultado.geometria
-    ruta.proveedor_ruteo = resultado.proveedor
 
 
 # --------------------------------------------------------------------------
@@ -145,70 +135,39 @@ def nueva():
     )
 
     if formulario.validate_on_submit():
-        seleccionados = request.form.getlist("pedido_id", type=int)
-
-        if not seleccionados:
-            flash("Seleccione al menos un pedido para la ruta.", "error")
-            return render_template(
-                "rutas/nueva.html", formulario=formulario,
-                disponibles=disponibles, fecha_seleccionada=fecha_seleccionada,
+        try:
+            ruta, resultado = crear_ruta({
+                "fecha": formulario.fecha.data,
+                "conductor_id": formulario.conductor_id.data,
+                "vehiculo_id": formulario.vehiculo_id.data or None,
+                "estrategia": formulario.estrategia.data,
+                "pedidos": request.form.getlist("pedido_id", type=int),
+            }, current_user.id)
+        except DatosInvalidos as error:
+            db.session.rollback()
+            for _, mensaje in error.errores:
+                flash(mensaje, "error")
+        else:
+            auditar_pantalla(
+                "Crear ruta", "ruta",
+                f"Creó la ruta {ruta.codigo} del {ruta.fecha.isoformat()} para {ruta.conductor.nombre}"
+                + (f" con el vehículo {ruta.vehiculo.placa}" if ruta.vehiculo else "")
+                + f": {len(ruta.pedidos)} parada(s), {ESTRATEGIAS.get(formulario.estrategia.data, '').lower()}.",
+                {"fecha": ruta.fecha.isoformat(), "conductor": ruta.conductor.nombre,
+                 "vehiculo": ruta.vehiculo.placa if ruta.vehiculo else None,
+                 "criterio": ESTRATEGIAS.get(formulario.estrategia.data),
+                 "pedidos": [p.codigo for p in ruta.pedidos]},
+                entidad_id=ruta.codigo,
             )
-
-        pedidos = (
-            db.session.query(Pedido)
-            .filter(
-                Pedido.id.in_(seleccionados),
-                Pedido.ruta_id.is_(None),
-                Pedido.estado == EstadoPedido.PENDIENTE,
-            )
-            .all()
-        )
-
-        if len(pedidos) != len(seleccionados):
+            db.session.commit()
+            for advertencia in resultado.advertencias:
+                flash(advertencia, "advertencia")
             flash(
-                "Algunos pedidos ya fueron asignados a otra ruta. Verifique la seleccion.",
-                "error",
+                f"Ruta {ruta.codigo} creada con {len(ruta.pedidos)} parada(s): "
+                f"{ruta.distancia_km} km estimados.",
+                "exito",
             )
-            return redirect(url_for("rutas.nueva", fecha=formulario.fecha.data.isoformat()))
-
-        ruta = Ruta(
-            codigo=generar_codigo_ruta(formulario.fecha.data),
-            fecha=formulario.fecha.data,
-            estado=EstadoRuta.PLANIFICADA,
-            conductor_id=formulario.conductor_id.data,
-            vehiculo_id=formulario.vehiculo_id.data or None,
-        )
-        db.session.add(ruta)
-        db.session.flush()
-
-        for pedido in pedidos:
-            pedido.ruta_id = ruta.id
-            pedido.estado = EstadoPedido.ASIGNADO
-            db.session.add(
-                EventoPedido(
-                    pedido_id=pedido.id,
-                    usuario_id=current_user.id,
-                    estado_anterior=EstadoPedido.PENDIENTE,
-                    estado_nuevo=EstadoPedido.ASIGNADO,
-                    nota=f"Asignado a la ruta {ruta.codigo}",
-                )
-            )
-
-        resultado = calcular_ruta(
-            origen_centro_distribucion(), pedidos, formulario.estrategia.data
-        )
-        _aplicar_resultado(ruta, resultado)
-        db.session.commit()
-
-        for advertencia in resultado.advertencias:
-            flash(advertencia, "advertencia")
-
-        flash(
-            f"Ruta {ruta.codigo} creada con {len(pedidos)} parada(s): "
-            f"{ruta.distancia_km} km estimados.",
-            "exito",
-        )
-        return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
+            return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
 
     return render_template(
         "rutas/nueva.html",
@@ -230,11 +189,11 @@ def detalle(ruta_id):
     if ruta is None:
         abort(404)
 
-    origen = origen_centro_distribucion()
+    centro = centro_distribucion()
     datos_origen = {
-        "lat": origen[0],
-        "lng": origen[1],
-        "nombre": current_app.config["CD_NOMBRE"],
+        "lat": centro["latitud"],
+        "lng": centro["longitud"],
+        "nombre": centro["nombre"],
     }
 
     # Datos que consume el mapa; se serializan en el controlador para no
@@ -290,6 +249,13 @@ def recalcular(ruta_id):
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
 
     abiertos = [p for p in ruta.pedidos if p.estado in EstadoPedido.ABIERTOS]
+    auditar_pantalla(
+        "Recalcular ruta", "ruta",
+        f"Recalculó la ruta {ruta.codigo} ({ESTRATEGIAS[estrategia].lower()}): "
+        f"{len(abiertos)} parada(s) reordenadas, {ruta.distancia_km} km.",
+        {"criterio": ESTRATEGIAS[estrategia], "paradas": len(abiertos), "distancia_km": ruta.distancia_km},
+        entidad_id=ruta.codigo,
+    )
     db.session.commit()
 
     for advertencia in resultado.advertencias:
@@ -313,22 +279,14 @@ def quitar_parada(ruta_id, pedido_id):
     if ruta is None or pedido is None or pedido.ruta_id != ruta.id:
         abort(404)
 
-    if pedido.estado in EstadoPedido.FINALES:
-        flash("No se puede retirar una parada ya cerrada.", "error")
+    try:
+        quitar_parada_servicio(ruta, pedido, current_user.id)
+    except PlanificacionInvalida as error:
+        flash(str(error), "error")
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
-
-    pedido.ruta_id = None
-    pedido.orden_en_ruta = None
-    pedido.estado = EstadoPedido.PENDIENTE
-    db.session.add(
-        EventoPedido(
-            pedido_id=pedido.id,
-            usuario_id=current_user.id,
-            estado_anterior=EstadoPedido.ASIGNADO,
-            estado_nuevo=EstadoPedido.PENDIENTE,
-            nota=f"Retirado de la ruta {ruta.codigo}",
-        )
-    )
+    auditar_pantalla("Quitar parada de ruta", "ruta",
+                     f"Quitó el pedido {pedido.codigo} de la ruta {ruta.codigo}; volvió a pendiente.",
+                     {"pedido": pedido.codigo, "cliente": pedido.cliente_nombre}, entidad_id=ruta.codigo)
     db.session.commit()
 
     flash(f"Pedido {pedido.codigo} devuelto a la bolsa de pendientes.", "exito")
@@ -343,19 +301,15 @@ def eliminar(ruta_id):
     if ruta is None:
         abort(404)
 
-    if any(p.estado in EstadoPedido.FINALES for p in ruta.pedidos):
-        flash(
-            "No se puede eliminar una ruta que ya tiene entregas registradas.", "error"
-        )
+    try:
+        codigos = [p.codigo for p in ruta.pedidos]
+        codigo, devueltos = eliminar_ruta(ruta, current_user.id)
+    except PlanificacionInvalida as error:
+        flash(str(error), "error")
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
-
-    codigo = ruta.codigo
-    for pedido in ruta.pedidos:
-        pedido.ruta_id = None
-        pedido.orden_en_ruta = None
-        pedido.estado = EstadoPedido.PENDIENTE
-
-    db.session.delete(ruta)
+    auditar_pantalla("Eliminar ruta", "ruta",
+                     f"Eliminó la ruta {codigo}; {devueltos} pedido(s) volvieron a pendiente.",
+                     {"pedidos": codigos}, entidad_id=codigo)
     db.session.commit()
 
     flash(f"Ruta {codigo} eliminada; sus pedidos volvieron a pendientes.", "exito")

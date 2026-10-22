@@ -13,7 +13,8 @@ import time as reloj
 from datetime import time, timedelta
 from types import SimpleNamespace
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 from retell.lib.webhook_auth import symmetric
 
 from run import app
@@ -30,9 +31,7 @@ def check(c, m):
     print(("  OK   " if c else "  FALLA") + f" {m}")
     if not c: fallos.append(m)
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _preparar import reiniciar_base
-reiniciar_base()
+_preparar.reiniciar_base()
 
 CLAVE = "clave-retell-prueba"
 API = "/api/asistente/conductor"
@@ -199,7 +198,7 @@ CALL_C1 = datos.get("call_id")
 with app.app_context():
     s = db.session.query(SesionAsistente).filter_by(call_id=CALL_C1).one()
     check(s.usuario_id == c1_id and s.rol == Rol.CONDUCTOR, "guarda call_id -> conductor1 con su rol")
-    check(s.vence_en - s.creada_en == timedelta(minutes=10), "la sesion vence a los 10 minutos")
+    check(s.vence_en - s.creada_en == timedelta(minutes=15), "la sesion vence a los 15 minutos")
 
 retell.falla = True
 total_sesiones = None
@@ -247,7 +246,7 @@ with app.app_context():
     db.session.commit()
 s = funcion("mi-ruta", "call_vencido")
 check(s[0] == 403, f"call_id vencido: 403 ({s[0]})")
-s = funcion("marcar-en-camino", "call_vencido", {"orden": 1})
+s = funcion("parada", "call_vencido", {"operacion": "en-camino", "orden": 1})
 check(s[0] == 403, "un call_id vencido tampoco puede ejecutar acciones")
 s = funcion("mi-ruta", "call_de_cliente")
 check(s[0] == 403, "call_id abierto por un cliente: 403")
@@ -334,7 +333,7 @@ with app.app_context():
     stock_inicial = db.session.get(Producto, prod_id).stock_actual
 
 envios_antes = len(envios_make)
-s = funcion("marcar-en-camino", CALL_C2, {"orden": 1})
+s = funcion("parada", CALL_C2, {"operacion": "en-camino", "orden": 1})
 notificaciones.esperar_envios()
 check(mensaje(s) == "Voy a marcar en camino la parada 1, Supermercado El Portal. ¿confirmas?",
       "sin confirmar=true, marcar-en-camino solo resume y pide confirmacion")
@@ -344,7 +343,7 @@ with app.app_context():
           "y no cambia el pedido ni la bitacora")
 check(len(envios_make) == envios_antes, "ni envia avisos a Make")
 
-s = accion("marcar-en-camino", CALL_C2, {"orden": 1})
+s = accion("parada", CALL_C2, {"operacion": "en-camino", "orden": 1})
 notificaciones.esperar_envios()
 check("quedó en camino" in mensaje(s), "con confirmar=true, marcar-en-camino confirma en voz")
 with app.app_context():
@@ -354,20 +353,20 @@ with app.app_context():
     check(ev.nota == NOTA and ev.usuario_id == c2_id, "el evento queda con la nota del asistente y el conductor")
     check(db.session.get(Ruta, p.ruta_id).estado == EstadoRuta.EN_CURSO, "la ruta pasa a EN_CURSO (regla de despacho.py)")
 
-s = accion("marcar-en-camino", CALL_C2, {"orden": 1})
+s = accion("parada", CALL_C2, {"operacion": "en-camino", "orden": 1})
 check("No pude" in mensaje(s) and "En ruta" in mensaje(s), "una transicion invalida se explica en voz")
 
 envios_antes = len(envios_make)
-s = accion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "  "})
+s = accion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "  "})
 check("Necesito el motivo" in mensaje(s), "registrar-fallo exige el motivo")
-s = accion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Cliente ausente"})
+s = accion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Cliente ausente"})
 check("Necesito" not in mensaje(s) and "No pude" in mensaje(s),
       "no se puede fallar una parada que no ha salido (ASIGNADO -> FALLIDO)")
-accion("marcar-en-camino", CALL_C2, {"orden": 2})
-s = funcion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Cliente ausente"})
+accion("parada", CALL_C2, {"operacion": "en-camino", "orden": 2})
+s = funcion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Cliente ausente"})
 check(mensaje(s) == "Voy a registrar la parada 2, Tienda La Esquina, como no entregada por: "
       "Cliente ausente. ¿confirmas?", "registrar-fallo tambien resume antes de ejecutar")
-s = funcion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Cliente ausente", "confirmar": True})
+s = funcion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Cliente ausente", "confirmar": True})
 notificaciones.esperar_envios()
 check("como no entregada por: Cliente ausente" in mensaje(s), "registrar-fallo confirma en voz")
 with app.app_context():
@@ -390,12 +389,19 @@ print("\n== 6. Avisos por Make ==")
 aviso = next((e for e in envios_make if e["json"]["codigo"] == "ASIS-001"), None)
 check(aviso is not None, "marcar-en-camino de El Portal envio un aviso a Make")
 if aviso:
-    check(set(aviso["json"]) == {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora"},
-          "el aviso lleva tipo, codigo, estado, cliente, correo, direccion, ventana y hora")
+    check(set(aviso["json"]) == {"tipo", "codigo", "estado", "cliente", "correo", "direccion", "ventana", "hora",
+                                 "fecha_hora", "realizado_por", "rol_realizado_por", "origen", "realizado_por_publico"},
+          "el aviso lleva tipo, codigo, estado, cliente, correo, direccion, ventana, hora y quien lo origino")
+    check(aviso["json"]["origen"] == "voz" and aviso["json"]["rol_realizado_por"] == "Conductor"
+          and aviso["json"]["realizado_por_publico"] == "Conductor" and aviso["json"]["realizado_por"],
+          f"originado por voz por el conductor; al cliente solo su rol {aviso['json']['realizado_por_publico']}")
     check(aviso["json"]["tipo"] == "pedido_estado", "de tipo pedido_estado")
     check(aviso["json"]["estado"] == "EN_RUTA" and aviso["json"]["correo"] == "compras@portal.invalid"
           and aviso["json"]["ventana"] == "08:00 - 11:00", "con los datos del pedido")
     check(re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", aviso["json"]["hora"]) is not None, "hora AAAA-MM-DD HH:MM")
+    check(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-05:00", aviso["json"]["fecha_hora"]) is not None
+          and aviso["json"]["fecha_hora"].startswith(aviso["json"]["hora"].replace(" ", "T")),
+          f"fecha_hora ISO 8601 con segundos y -05:00 ({aviso['json']['fecha_hora']})")
     check(aviso["url"] == "https://hook.make.invalid/sgds" and aviso["timeout"] == (3, 5),
           "va a MAKE_WEBHOOK_URL con timeout corto")
 check(len([e for e in envios_make if e["json"]["codigo"] == "ASIS-001"]) == 1,
@@ -445,7 +451,7 @@ with app.app_context():
                           estado=EstadoPedido.CANCELADO, ruta_id=ruta2.id, orden_en_ruta=3,
                           creado_por_id=desp_id))
     db.session.commit()
-accion("registrar-fallo", CALL_C2, {"orden": 2, "motivo": "Establecimiento cerrado"})
+accion("parada", CALL_C2, {"operacion": "fallo", "orden": 2, "motivo": "Establecimiento cerrado"})
 notificaciones.esperar_envios()
 with app.app_context():
     check(db.session.query(Ruta).filter_by(codigo="RUT-ASIS-02").one().estado == EstadoRuta.FINALIZADA,
@@ -499,12 +505,11 @@ with app.app_context():
 print("\n== 9. Demo de Make con la semilla ==")
 # Se vuelve a sembrar con SEMILLA_CORREO_CLIENTE, como lo haria la demo, y se
 # recorre el camino del conductor sin ningun paso manual.
-import os, subprocess
-from _preparar import PYTHON, RAIZ
-entorno = {**os.environ, "SEMILLA_CORREO_CLIENTE": "demo@portal.invalid"}
-subprocess.run([str(PYTHON), "-m", "flask", "--app", "run", "reset-db"], cwd=RAIZ,
-               capture_output=True, env=entorno)
-subprocess.run([str(PYTHON), "seed.py"], cwd=RAIZ, capture_output=True, env=entorno)
+envios_antes = len(envios_make)
+_preparar.reiniciar_base(SEMILLA_CORREO_CLIENTE="demo@portal.invalid")
+notificaciones.esperar_envios()
+check(not [e for e in envios_make[envios_antes:] if e["json"].get("tipo") == "accion_asistente"],
+      "con el webhook configurado, la auditoria de ejemplo de la semilla no avisa a Make")
 with app.app_context():
     db.session.remove()
     portal = db.session.query(Cliente).filter_by(nombre="Supermercado El Portal").one()
@@ -521,7 +526,7 @@ with app.app_context():
 conductor1 = sesion("conductor1@sgds.com", "Conductor123*")
 call_demo = pedir_llamada(conductor1, "/conductor/").get_json()["call_id"]
 envios_antes = len(envios_make)
-accion("marcar-en-camino", call_demo, {"orden": orden_demo})
+accion("parada", call_demo, {"operacion": "en-camino", "orden": orden_demo})
 t = token_csrf(conductor1, f"/conductor/parada/{pid_demo}")
 conductor1.post(f"/conductor/parada/{pid_demo}/entregar", data={"csrf_token": t})
 notificaciones.esperar_envios()

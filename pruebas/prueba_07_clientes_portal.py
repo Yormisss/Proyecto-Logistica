@@ -9,7 +9,9 @@ intacto, y que el portal solo muestre las ordenes propias sin filtrar la ruta
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
+_preparar.reiniciar_base()
 from run import app
 from app.extensions import db
 from app.models import (

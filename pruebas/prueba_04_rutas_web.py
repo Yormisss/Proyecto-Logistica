@@ -1,7 +1,9 @@
 import pathlib
 import json, re, sys
 from datetime import date, time
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
+_preparar.reiniciar_base()
 from run import app
 from app.extensions import db
 from app.models import Pedido, Ruta, Usuario, Rol, EstadoPedido, EstadoRuta, EventoPedido
@@ -11,6 +13,11 @@ def check(c,m):
     print(("  OK   " if c else "  FALLA")+f" {m}")
     if not c: fallos.append(m)
 app.config["WTF_CSRF_ENABLED"]=True   # se prueba con CSRF activo
+
+# OSRM simulado (sin internet): la suite prueba lo que la pantalla hace con la
+# respuesta del proveedor; el servicio real se prueba en la suite 03 con --externas.
+from unittest.mock import patch
+patch("app.services.ruteo.requests.get", _preparar.osrm_simulado).start()
 
 def sesion(correo, clave):
     c = app.test_client()
@@ -54,7 +61,7 @@ html = c.get(f"/rutas/nueva?fecha={hoy.isoformat()}").data.decode()
 check("TEST-100" in html and "TEST-103" in html, "lista los pedidos pendientes")
 check(html.count('name="pedido_id"') >= 4, "cada pedido tiene su casilla")
 fila_sin_geo = [f for f in re.findall(r"<tr>.*?</tr>", html, re.S) if "TEST-103" in f]
-check(bool(fila_sin_geo) and "etiqueta-fallido" in fila_sin_geo[0] and "No entra en el calculo" in fila_sin_geo[0],
+check(bool(fila_sin_geo) and "etiqueta-fallido" in fila_sin_geo[0] and "No entra en el cálculo" in fila_sin_geo[0],
       "marca el pedido sin coordenadas")
 
 print("\n== 3. Generacion de ruta (RF3) ==")

@@ -17,12 +17,12 @@
 {% block contenido %}
 <div class="encabezado-pagina">
   <h1 class="titulo-pagina">Big Data</h1>
-  <p class="subtitulo-pagina">Pipeline de datos de la operacion logistica con Apache Spark: del dato crudo a la decision</p>
+  <p class="subtitulo-pagina">Pipeline de datos de la operación logística con Apache Spark: del dato crudo a la decision</p>
 </div>
 
 {% if not listo %}
 <section class="tarjeta">
-  <h2 class="tarjeta-titulo">Aun no hay resultados</h2>
+  <h2 class="tarjeta-titulo">Aún no hay resultados</h2>
   <p>Ejecute el pipeline para generarlos:</p>
   <pre>.venv\Scripts\python bigdata\pipeline.py</pre>
 </section>
@@ -34,43 +34,43 @@
     <span class="kpi-detalle">{{ totales.desde }} a {{ totales.hasta }}</span></article>
   <article class="kpi"><span class="kpi-etiqueta">Eventos de estado</span>
     <span class="kpi-valor">{{ '{:,}'.format(calidad.eventos_salida).replace(',', '.') }}</span>
-    <span class="kpi-detalle">Bitacora de la app movil</span></article>
+    <span class="kpi-detalle">Bitácora de la app móvil</span></article>
   <article class="kpi"><span class="kpi-etiqueta">Movimientos de inventario</span>
     <span class="kpi-valor">{{ '{:,}'.format(calidad.movimientos_salida).replace(',', '.') }}</span>
-    <span class="kpi-detalle">Entradas y salidas del almacen</span></article>
-  <article class="kpi"><span class="kpi-etiqueta">Tasa de exito global</span>
+    <span class="kpi-detalle">Entradas y salidas del almacén</span></article>
+  <article class="kpi"><span class="kpi-etiqueta">Tasa de éxito global</span>
     <span class="kpi-valor">{{ totales.tasa_exito }}<small class="kpi-unidad">%</small></span>
     <span class="kpi-detalle">{{ totales.conductores }} conductores &middot; {{ totales.clientes }} clientes</span></article>
 </section>
 
 {# ---------------------------------------------------------------- 4.1 / 4.2 #}
 <section class="tarjeta">
-  <h2 class="tarjeta-titulo">4.1 Fuentes de datos y 4.2 Volumen y caracteristicas</h2>
+  <h2 class="tarjeta-titulo">4.1 Fuentes de datos y 4.2 Volumen y características</h2>
   <div class="tabla-scroll">
   <table class="tabla">
     <thead><tr><th>Fuente</th><th>Sistema</th><th>Formato</th><th>Tipo de dato</th><th>Llegada</th></tr></thead>
     <tbody>
-      <tr><td>Pedidos reales</td><td>Esta aplicacion (SQLite/MySQL)</td><td>CSV</td><td>Estructurado</td><td>Batch</td></tr>
-      <tr><td>Pedidos historicos</td><td>ERP del cliente</td><td>CSV</td><td>Estructurado, con defectos</td><td>Batch</td></tr>
-      <tr><td>Eventos de estado</td><td>App movil del conductor</td><td>JSON lineal</td><td>Semiestructurado</td><td>Batch y streaming</td></tr>
-      <tr><td>Movimientos de inventario</td><td>Almacen (WMS)</td><td>CSV</td><td>Estructurado</td><td>Batch</td></tr>
+      <tr><td>Pedidos reales</td><td>Esta aplicación (SQLite/MySQL)</td><td>CSV</td><td>Estructurado</td><td>Batch</td></tr>
+      <tr><td>Pedidos históricos</td><td>ERP del cliente</td><td>CSV</td><td>Estructurado, con defectos</td><td>Batch</td></tr>
+      <tr><td>Eventos de estado</td><td>App móvil del conductor</td><td>JSON lineal</td><td>Semiestructurado</td><td>Batch y streaming</td></tr>
+      <tr><td>Movimientos de inventario</td><td>Almacén (WMS)</td><td>CSV</td><td>Estructurado</td><td>Batch</td></tr>
     </tbody>
   </table>
   </div>
   <p class="subtitulo-pagina">Las 5V del proyecto</p>
   <ul>
-    <li><strong>Volumen:</strong> {{ '{:,}'.format(calidad.filas_entrada).replace(',', '.') }} filas de pedidos, {{ '{:,}'.format(calidad.eventos_entrada).replace(',', '.') }} eventos y {{ '{:,}'.format(calidad.movimientos_entrada).replace(',', '.') }} movimientos solo en dos anos; crece de forma lineal con cada cliente nuevo.</li>
+    <li><strong>Volumen:</strong> {{ '{:,}'.format(calidad.filas_entrada).replace(',', '.') }} filas de pedidos, {{ '{:,}'.format(calidad.eventos_entrada).replace(',', '.') }} eventos y {{ '{:,}'.format(calidad.movimientos_entrada).replace(',', '.') }} movimientos solo en dos años; crece de forma lineal con cada cliente nuevo.</li>
     <li><strong>Velocidad:</strong> cada entrega genera hasta 3 eventos en tiempo real desde el terreno.</li>
-    <li><strong>Variedad:</strong> tablas relacionales, JSON de eventos y coordenadas geograficas.</li>
-    <li><strong>Veracidad:</strong> los exports del ERP traen duplicados, ciudades escritas distinto y valores invalidos (ver 4.4).</li>
-    <li><strong>Valor:</strong> predecir y reducir las entregas fallidas, que son el costo oculto de la ultima milla.</li>
+    <li><strong>Variedad:</strong> tablas relacionales, JSON de eventos y coordenadas geográficas.</li>
+    <li><strong>Veracidad:</strong> los exports del ERP traen duplicados, ciudades escritas distinto y valores inválidos (ver 4.4).</li>
+    <li><strong>Valor:</strong> predecir y reducir las entregas fallidas, que son el costo oculto de la última milla.</li>
   </ul>
 </section>
 
 {# ---------------------------------------------------------------- 4.3 #}
 <section class="tarjeta">
   <h2 class="tarjeta-titulo">4.3 Proceso de ingesta</h2>
-  <p><strong>Batch</strong> (<code>ingesta.py</code>): lee los CSV y JSON de cada fuente (<em>raw</em>) y los escribe en Parquet (<em>bronze</em>) con metadatos de linaje: fuente, archivo de origen y fecha de ingestion.</p>
+  <p><strong>Batch</strong> (<code>ingesta.py</code>): lee los CSV y JSON de cada fuente (<em>raw</em>) y los escribe en Parquet (<em>bronze</em>) con metadatos de linaje: fuente, archivo de origen y fecha de ingestión.</p>
   {% if streaming %}
   <p><strong>Streaming</strong> (<code>ingesta_streaming.py</code>, Spark Structured Streaming): {{ streaming.eventos_emitidos }} eventos emitidos en {{ streaming.lotes }} micro-lotes, {{ streaming.eventos_persistidos }} persistidos en bronze y contados por estado en ventanas de 30 segundos.</p>
   <div class="grafica-barras">
@@ -89,14 +89,14 @@
 {# ---------------------------------------------------------------- 4.4 #}
 <section class="tarjeta">
   <h2 class="tarjeta-titulo">4.4 Proceso ETL / ELT</h2>
-  <p><strong>ETL</strong> (<code>etl.py</code>, bronze a silver): limpia, tipa y deduplica. <strong>ELT</strong> (<code>elt_gold.py</code>, silver a gold): las tablas analiticas se construyen en SQL sobre el motor de Spark.</p>
+  <p><strong>ETL</strong> (<code>etl.py</code>, bronze a silver): limpia, tipa y deduplica. <strong>ELT</strong> (<code>elt_gold.py</code>, silver a gold): las tablas analíticas se construyen en SQL sobre el motor de Spark.</p>
   <div class="tabla-scroll">
   <table class="tabla">
     <thead><tr><th>Regla de calidad</th><th class="derecha">Filas afectadas</th><th>Tratamiento</th></tr></thead>
     <tbody>
-      <tr><td>Pedidos duplicados</td><td class="derecha">{{ calidad.duplicados_eliminados }}</td><td>Se conserva la ultima ingestion por codigo</td></tr>
+      <tr><td>Pedidos duplicados</td><td class="derecha">{{ calidad.duplicados_eliminados }}</td><td>Se conserva la última ingestión por código</td></tr>
       <tr><td>Ciudad escrita distinto ("BOGOTA", "Bogot&aacute;", "Bogota D.C.")</td><td class="derecha">{{ calidad.ciudades_normalizadas }}</td><td>Se unifica sin acentos ni sufijos</td></tr>
-      <tr><td>Estado en minuscula</td><td class="derecha">{{ calidad.estados_en_minuscula }}</td><td>Se pasa a mayuscula</td></tr>
+      <tr><td>Estado en minúscula</td><td class="derecha">{{ calidad.estados_en_minuscula }}</td><td>Se pasa a mayúscula</td></tr>
       <tr><td>Distancia negativa o cero</td><td class="derecha">{{ calidad.distancias_invalidas }}</td><td>Se imputa la mediana ({{ calidad.mediana_distancia_imputada_km }} km)</td></tr>
       <tr><td>Prioridad nula</td><td class="derecha">{{ calidad.prioridades_nulas }}</td><td>Se asigna prioridad media (3)</td></tr>
       <tr><td>Cliente sin nombre</td><td class="derecha">{{ calidad.clientes_sin_nombre }}</td><td>Se completa desde su id</td></tr>
@@ -108,18 +108,18 @@
 
 {# ---------------------------------------------------------------- 4.5 / 4.7 #}
 <section class="tarjeta">
-  <h2 class="tarjeta-titulo">4.5 Almacenamiento y 4.7 Tecnologia utilizada</h2>
-  <p>Data lake en capas sobre <strong>Parquet</strong> (columnar, comprimido, particionado por anio y mes). El mismo codigo funciona sobre HDFS cambiando solo la variable <code>BIGDATA_LAKE</code>.</p>
+  <h2 class="tarjeta-titulo">4.5 Almacenamiento y 4.7 Tecnología utilizada</h2>
+  <p>Data lake en capas sobre <strong>Parquet</strong> (columnar, comprimido, particionado por año y mes). El mismo código funciona sobre HDFS cambiando solo la variable <code>BIGDATA_LAKE</code>.</p>
   {{ barras(capas, 'nombre', 'mb', ' MB') }}
   <div class="tabla-scroll">
   <table class="tabla">
-    <thead><tr><th>Tecnologia</th><th>Uso en el proyecto</th><th>Justificacion</th></tr></thead>
+    <thead><tr><th>Tecnología</th><th>Uso en el proyecto</th><th>Justificación</th></tr></thead>
     <tbody>
       <tr><td>Apache Spark / PySpark</td><td>Ingesta, ETL, SQL y ML</td><td>Procesa en paralelo lo que no cabe en una consulta de base de datos relacional</td></tr>
       <tr><td>Spark SQL</td><td>Tablas gold (ELT)</td><td>Funciones de ventana y agregaciones distribuidas sobre millones de filas</td></tr>
-      <tr><td>Structured Streaming</td><td>Eventos en tiempo real</td><td>Mismo API que batch; se reemplaza por Kafka en produccion</td></tr>
-      <tr><td>Spark MLlib</td><td>Prediccion de fallos</td><td>El entrenamiento escala con el cluster</td></tr>
-      <tr><td>Parquet</td><td>Formato del lake</td><td>Lectura por columnas, esquema embebido y compresion</td></tr>
+      <tr><td>Structured Streaming</td><td>Eventos en tiempo real</td><td>Mismo API que batch; se reemplaza por Kafka en producción</td></tr>
+      <tr><td>Spark MLlib</td><td>Predicción de fallos</td><td>El entrenamiento escala con el clúster</td></tr>
+      <tr><td>Parquet</td><td>Formato del lake</td><td>Lectura por columnas, esquema embebido y compresión</td></tr>
       <tr><td>Power BI</td><td>Dashboards</td><td>Consume los CSV de <code>bigdata/resultados/powerbi</code></td></tr>
     </tbody>
   </table>
@@ -128,8 +128,8 @@
 
 {# ---------------------------------------------------------------- 4.6 / 4.8 #}
 <section class="tarjeta">
-  <h2 class="tarjeta-titulo">4.6 Procesamiento y 4.8 Analisis y transformacion</h2>
-  <p>Nueve tablas gold producidas con Spark SQL: indicadores mensuales, fallos por zona y franja, ranking de conductores, demanda por producto con clasificacion ABC, tiempos entre estados (con <code>LAG</code> sobre la bitacora) y clientes de riesgo.</p>
+  <h2 class="tarjeta-titulo">4.6 Procesamiento y 4.8 Análisis y transformación</h2>
+  <p>Nueve tablas gold producidas con Spark SQL: indicadores mensuales, fallos por zona y franja, ranking de conductores, demanda por producto con clasificación ABC, tiempos entre estados (con <code>LAG</code> sobre la bitácora) y clientes de riesgo.</p>
   <div class="tabla-scroll">
   <table class="tabla">
     <thead><tr><th>Estado</th><th class="derecha">Transiciones</th><th class="derecha">Promedio (min)</th><th class="derecha">P90 (min)</th></tr></thead>
@@ -148,19 +148,19 @@
 
   <h3>Tasa de fallo por zona (%)</h3>
   {{ barras(fallos_zona, 'zona', 'tasa', '%') }}
-  <p class="subtitulo-pagina">Las zonas Sur, Occidente y la periferia concentran los fallos: es donde conviene reforzar la confirmacion previa con el cliente y la asignacion de conductores.</p>
+  <p class="subtitulo-pagina">Las zonas Sur, Occidente y la periferia concentran los fallos: es donde conviene reforzar la confirmación previa con el cliente y la asignación de conductores.</p>
 
   <h3>Causas de entrega fallida (%)</h3>
   {{ barras(motivos, 'motivo', 'porcentaje', '%') }}
 
   <h3>Productos de mayor salida</h3>
   {{ barras(sku, 'sku', 'unidades', ' u') }}
-  <p class="subtitulo-pagina">Clasificacion ABC: {{ abc.A }} productos clase A (80% de la demanda), {{ abc.B }} clase B, {{ abc.C }} clase C.</p>
+  <p class="subtitulo-pagina">Clasificación ABC: {{ abc.A }} productos clase A (80% de la demanda), {{ abc.B }} clase B, {{ abc.C }} clase C.</p>
 
-  <h3>Conductores: mejores y peores por tasa de exito</h3>
+  <h3>Conductores: mejores y peores por tasa de éxito</h3>
   <div class="tabla-scroll">
   <table class="tabla">
-    <thead><tr><th>Conductor</th><th class="derecha">Intentos</th><th class="derecha">Tasa de exito</th></tr></thead>
+    <thead><tr><th>Conductor</th><th class="derecha">Intentos</th><th class="derecha">Tasa de éxito</th></tr></thead>
     <tbody>
       {% for c in mejores %}<tr><td>#{{ c.conductor_id }} (mejor)</td><td class="derecha">{{ c.intentos }}</td><td class="derecha">{{ c.tasa_exito }}%</td></tr>{% endfor %}
       {% for c in peores %}<tr><td>#{{ c.conductor_id }} (a reforzar)</td><td class="derecha">{{ c.intentos }}</td><td class="derecha">{{ c.tasa_exito }}%</td></tr>{% endfor %}
@@ -170,7 +170,7 @@
 
   {% if ml %}
   <h3>Modelo predictivo de entregas fallidas</h3>
-  <p>{{ ml.modelo }}, entrenado con {{ '{:,}'.format(ml.filas_entrenamiento).replace(',', '.') }} entregas y evaluado con {{ '{:,}'.format(ml.filas_prueba).replace(',', '.') }}. AUC {{ ml.auc }}; detecta el {{ (ml.recall_fallos * 100) | round(1) }}% de los fallos reales (precision {{ (ml.precision_fallos * 100) | round(1) }}%). La tasa base de fallo es {{ ml.tasa_fallo_base_pct }}%, asi que el modelo prioriza a que pedidos darles seguimiento, no los descarta.</p>
+  <p>{{ ml.modelo }}, entrenado con {{ '{:,}'.format(ml.filas_entrenamiento).replace(',', '.') }} entregas y evaluado con {{ '{:,}'.format(ml.filas_prueba).replace(',', '.') }}. AUC {{ ml.auc }}; detecta el {{ (ml.recall_fallos * 100) | round(1) }}% de los fallos reales (precisión {{ (ml.precision_fallos * 100) | round(1) }}%). La tasa base de fallo es {{ ml.tasa_fallo_base_pct }}%, así que el modelo prioriza a qué pedidos darles seguimiento, no los descarta.</p>
   {% set importancias = ml.importancia_variables | selectattr('importancia', '>', 0.01) | list %}
   {{ barras(importancias, 'variable', 'importancia') }}
   {% endif %}
@@ -178,7 +178,7 @@
   <h3>Indicadores mensuales</h3>
   <div class="tabla-scroll">
   <table class="tabla">
-    <thead><tr><th>Mes</th><th class="derecha">Pedidos</th><th class="derecha">Entregados</th><th class="derecha">Fallidos</th><th class="derecha">Exito</th><th class="derecha">Ventana</th></tr></thead>
+    <thead><tr><th>Mes</th><th class="derecha">Pedidos</th><th class="derecha">Entregados</th><th class="derecha">Fallidos</th><th class="derecha">Éxito</th><th class="derecha">Ventana</th></tr></thead>
     <tbody>
       {% for k in kpi_mensual[-12:] %}
       <tr><td>{{ k.anio }}-{{ '%02d' | format(k.mes) }}</td><td class="derecha">{{ k.pedidos }}</td><td class="derecha">{{ k.entregados }}</td><td class="derecha">{{ k.fallidos }}</td><td class="derecha">{{ k.tasa_exito }}%</td><td class="derecha">{{ k.cumplimiento_ventana }}%</td></tr>

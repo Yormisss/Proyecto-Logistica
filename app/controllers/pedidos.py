@@ -26,8 +26,12 @@ from app.extensions import db
 from app.models import (
     Cliente, EstadoPedido, Pedido, Producto, Rol,
 )
+from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
 from app.services.clientes import resolver_destino
-from app.services.pedidos import crear_pedido, validar_pedido
+from app.services.pedidos import (
+    AVISO_RECALCULAR, campos_editables, crear_pedido, editar_pedido, validar_pedido,
+)
+from app.services.validacion import DatosInvalidos
 from app.services.despacho import TransicionInvalida, anular_pedido
 from app.services.importador import (
     ErrorImportacion, analizar_csv, generar_plantilla_csv, guardar_pedidos,
@@ -42,14 +46,14 @@ PRIORIDADES = [("1", "Alta"), ("2", "Media"), ("3", "Baja")]
 class FormularioPedido(FlaskForm):
     """Carga manual de una orden (RF2)."""
 
-    codigo = StringField("Codigo", validators=[Optional(), Length(max=40)])
+    codigo = StringField("Código", validators=[Optional(), Length(max=40)])
     cliente_nombre = StringField(
         "Nombre del cliente", validators=[DataRequired("Indique el cliente."), Length(max=160)]
     )
     cliente_documento = StringField(
         "NIT o documento", validators=[Optional(), Length(max=30)]
     )
-    cliente_telefono = StringField("Telefono", validators=[Optional(), Length(max=30)])
+    cliente_telefono = StringField("Teléfono", validators=[Optional(), Length(max=30)])
     direccion = StringField(
         "Direccion de entrega", validators=[DataRequired("Indique la direccion."), Length(max=255)]
     )
@@ -61,6 +65,17 @@ class FormularioPedido(FlaskForm):
     ventana_fin = TimeField("Ventana hasta", validators=[Optional()])
     prioridad = SelectField("Prioridad", choices=PRIORIDADES, default="3")
     observaciones = TextAreaField("Observaciones", validators=[Optional(), Length(max=1000)])
+
+
+class FormularioEdicion(FlaskForm):
+    """Edicion de un pedido; los campos que aplican dependen de su estado."""
+
+    fecha_despacho = StringField("Fecha de despacho", validators=[Optional()])
+    sede_id = SelectField("Sede", coerce=int, validate_choice=False, validators=[Optional()])
+    ventana_inicio = StringField("Ventana desde", validators=[Optional()])
+    ventana_fin = StringField("Ventana hasta", validators=[Optional()])
+    prioridad = SelectField("Prioridad", choices=PRIORIDADES, validators=[Optional()])
+    observaciones = TextAreaField("Observaciones", validators=[Optional()])
 
 
 class FormularioImportacion(FlaskForm):
@@ -166,7 +181,72 @@ def detalle(pedido_id):
     pedido = db.session.get(Pedido, pedido_id)
     if pedido is None:
         abort(404)
-    return render_template("pedidos/detalle.html", pedido=pedido)
+    return render_template("pedidos/detalle.html", pedido=pedido,
+                           editable=bool(campos_editables(pedido)))
+
+
+@pedidos_bp.route("/<int:pedido_id>/editar", methods=["GET", "POST"])
+@login_required
+@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+def editar(pedido_id):
+    """Edicion de un pedido: PENDIENTE casi todo; ASIGNADO solo ventana, prioridad
+    y observaciones; los demas estados no se editan. Reglas en app.services.pedidos."""
+    pedido = db.session.get(Pedido, pedido_id)
+    if pedido is None:
+        abort(404)
+    editables = campos_editables(pedido)
+    if not editables:
+        flash(f"Un pedido {pedido.estado_etiqueta.lower()} no se puede editar.", "error")
+        return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
+
+    formulario = FormularioEdicion()
+    sedes = [s for s in pedido.cliente.direcciones if s.activa] if pedido.cliente else []
+    formulario.sede_id.choices = [(s.id, f"{s.etiqueta} — {s.direccion}") for s in sedes]
+    productos = (
+        db.session.query(Producto).filter(Producto.activo.is_(True)).order_by(Producto.nombre).all()
+    )
+    items_enviados = [(i.producto_id, i.cantidad) for i in pedido.items]
+
+    if formulario.validate_on_submit():
+        datos = {campo: getattr(formulario, campo).data for campo in
+                 ("fecha_despacho", "sede_id", "ventana_inicio", "ventana_fin", "prioridad", "observaciones")
+                 if campo in editables}
+        errores_lectura = []
+        if "items" in editables:
+            datos["items"], errores_lectura = _leer_items_del_formulario()
+            items_enviados = datos["items"]
+        for error in errores_lectura:
+            flash(error, "error")
+        if not errores_lectura:
+            try:
+                cambios, advertencias = editar_pedido(pedido, datos, current_user.id)
+            except DatosInvalidos as error:
+                db.session.rollback()
+                _mostrar_errores(formulario, error.errores)
+            else:
+                if cambios:
+                    auditar_pantalla(
+                        "Editar pedido", "pedido",
+                        f"Editó el pedido {pedido.codigo} ({pedido.estado_etiqueta.lower()}): "
+                        f"{campos_cambiados(cambios)}.",
+                        cambios_legibles(cambios), entidad_id=pedido.codigo,
+                    )
+                db.session.commit()
+                flash(f"Pedido {pedido.codigo} actualizado.", "exito")
+                for advertencia in advertencias:
+                    flash(advertencia, "advertencia")
+                return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
+    elif not formulario.is_submitted():
+        formulario.fecha_despacho.data = pedido.fecha_despacho.isoformat()
+        formulario.sede_id.data = pedido.direccion_id
+        formulario.ventana_inicio.data = pedido.ventana_inicio.strftime("%H:%M") if pedido.ventana_inicio else ""
+        formulario.ventana_fin.data = pedido.ventana_fin.strftime("%H:%M") if pedido.ventana_fin else ""
+        formulario.prioridad.data = str(pedido.prioridad)
+        formulario.observaciones.data = pedido.observaciones or ""
+
+    return render_template("pedidos/editar.html", pedido=pedido, formulario=formulario,
+                           editables=editables, productos=productos, items_enviados=items_enviados,
+                           aviso_recalcular=AVISO_RECALCULAR)
 
 
 # --------------------------------------------------------------------------
@@ -233,6 +313,15 @@ def nuevo():
                 observaciones=formulario.observaciones.data,
                 **reglas,
             )
+            auditar_pantalla(
+                "Crear pedido", "pedido",
+                f"Creó el pedido {pedido.codigo} para {pedido.cliente_nombre}, para el "
+                f"{pedido.fecha_despacho.isoformat()}.",
+                {"cliente": pedido.cliente_nombre, "direccion": pedido.direccion,
+                 "fecha": pedido.fecha_despacho.isoformat(), "prioridad": pedido.prioridad,
+                 "productos": [f"{i.cantidad} de {i.producto.nombre}" for i in pedido.items]},
+                entidad_id=pedido.codigo,
+            )
             db.session.commit()
 
             flash(f"Pedido {pedido.codigo} registrado correctamente.", "exito")
@@ -260,11 +349,15 @@ def anular(pedido_id):
         return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
 
     try:
+        estado_anterior = pedido.estado_etiqueta
         anular_pedido(pedido, current_user.id, motivo)
     except TransicionInvalida as error:
         flash(str(error), "error")
         return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
 
+    auditar_pantalla("Anular pedido", "pedido",
+                     f"Anuló el pedido {pedido.codigo} de {pedido.cliente_nombre} por: {motivo}.",
+                     {"estado_anterior": estado_anterior, "motivo": motivo}, entidad_id=pedido.codigo)
     db.session.commit()
     flash(f"Pedido {pedido.codigo} anulado.", "exito")
     return redirect(url_for("pedidos.lista"))
@@ -339,6 +432,12 @@ def confirmar_importacion():
         return redirect(url_for("pedidos.importar"))
 
     creados = guardar_pedidos(pedidos, current_user.id)
+    # Una sola linea por importacion, no una por pedido.
+    auditar_pantalla("Importar pedidos", "pedido",
+                     f"Importó {creados} pedido(s) desde un CSV"
+                     + (f"; se omitieron {len(errores)} fila(s) con errores." if errores else "."),
+                     {"pedidos_creados": creados, "filas_omitidas": len(errores)})
+    db.session.commit()
 
     mensaje = f"{creados} pedido(s) cargados correctamente."
     if errores:

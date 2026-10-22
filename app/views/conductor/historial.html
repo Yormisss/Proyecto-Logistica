@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block titulo %}Historial | {{ nombre_sistema }}{% endblock %}
-{% block clase_body %}vista-movil{% endblock %}
+{% block clase_body %}vista-móvil{% endblock %}
 
 {% block contenido %}
 <div class="encabezado-pagina">
@@ -18,11 +18,12 @@
       </div>
       <p class="fecha-historial">{{ ruta.fecha.strftime('%d/%m/%Y') }}</p>
       <div class="barra-avance"><span style="width: {{ ruta.avance_porcentaje }}%"></span></div>
-      <small>{{ ruta.paradas_cerradas }} de {{ ruta.total_paradas }} entregas &middot; {{ ruta.distancia_km|round(1) }} km</small>
+      {% set entregadas = ruta.contar(EstadoPedido.ENTREGADO) %}{% set fallidas = ruta.contar(EstadoPedido.FALLIDO) %}
+      <small>{{ ruta.paradas_cerradas }} de {{ ruta.total_paradas }} cerradas &middot; {{ entregadas }} entregada{{ 's' if entregadas != 1 }} &middot; {{ fallidas }} fallida{{ 's' if fallidas != 1 }} &middot; {{ ruta.distancia_km|round(1) }} km</small>
     </li>
   {% endfor %}
   </ul>
 {% else %}
-  <div class="tarjeta vacio-centrado"><p>Aun no tiene rutas registradas.</p></div>
+  <div class="tarjeta vacio-centrado"><p>Aún no tiene rutas registradas.</p></div>
 {% endif %}
 {% endblock %}

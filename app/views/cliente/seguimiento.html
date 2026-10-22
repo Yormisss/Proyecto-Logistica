@@ -14,14 +14,14 @@
 </div>
 
 {% if pedido.estado == EstadoPedido.EN_RUTA %}
-  <div class="alerta alerta-exito">Su pedido va en camino a la direccion de entrega.</div>
+  <div class="alerta alerta-exito">Su pedido va en camino a la dirección de entrega.</div>
 {% elif pedido.estado == EstadoPedido.FALLIDO %}
   <div class="alerta alerta-advertencia">
-    No fue posible completar la entrega. El centro de distribucion reprogramara el despacho.
+    No fue posible completar la entrega. El centro de distribución reprogramará el despacho.
   </div>
 {% elif pedido.estado == EstadoPedido.CANCELADO %}
   <div class="alerta alerta-advertencia">
-    Este pedido fue anulado por el centro de distribucion y no sera despachado.
+    Este pedido fue anulado por el centro de distribución y no será despachado.
   </div>
 {% endif %}
 
@@ -30,15 +30,15 @@
     <section class="tarjeta">
       <h2 class="tarjeta-titulo">Datos de la entrega</h2>
       <dl class="lista-datos">
-        <dt>Direccion</dt><dd>{{ pedido.direccion }}, {{ pedido.ciudad }}</dd>
+        <dt>Dirección</dt><dd>{{ pedido.direccion }}, {{ pedido.ciudad }}</dd>
         <dt>Ventana horaria</dt><dd>{{ pedido.ventana_texto }}</dd>
-        <dt>Telefono</dt><dd>{{ pedido.cliente_telefono or '—' }}</dd>
+        <dt>Teléfono</dt><dd>{{ pedido.cliente_telefono or '—' }}</dd>
         {% if pedido.observaciones %}
         <dt>Observaciones</dt><dd>{{ pedido.observaciones }}</dd>
         {% endif %}
       </dl>
       <p class="nota-pie">
-        Los datos corresponden a la direccion registrada al momento del despacho.
+        Los datos corresponden a la dirección registrada al momento del despacho.
       </p>
     </section>
 
@@ -70,7 +70,7 @@
       {% endfor %}
       </ol>
     {% else %}
-      <p class="vacio">Aun no hay movimientos registrados.</p>
+      <p class="vacio">Aún no hay movimientos registrados.</p>
     {% endif %}
 
     {% if pedido.prueba_entrega %}

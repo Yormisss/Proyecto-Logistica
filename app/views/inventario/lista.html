@@ -4,8 +4,8 @@
 {% block contenido %}
 <div class="encabezado-pagina fila-encabezado">
   <div>
-    <h1 class="titulo-pagina">Inventario del almacen</h1>
-    <p class="subtitulo-pagina">{{ productos|length }} producto(s) en catalogo</p>
+    <h1 class="titulo-pagina">Inventario del almacén</h1>
+    <p class="subtitulo-pagina">{{ productos|length }} producto(s) en catálogo</p>
   </div>
   <div class="acciones-encabezado">
     <a class="boton boton-primario" href="{{ url_for('inventario.nuevo') }}">Nuevo producto</a>
@@ -16,7 +16,7 @@
   <input type="search" name="q" placeholder="SKU o nombre" value="{{ filtros.q }}">
   <label class="campo-inline">
     <input type="checkbox" name="criticos" value="1" {{ 'checked' if filtros.criticos == '1' }}>
-    <span>Solo bajo minimo</span>
+    <span>Solo bajo mínimo</span>
   </label>
   <button type="submit" class="boton boton-primario">Filtrar</button>
   <a class="boton boton-plano" href="{{ url_for('inventario.lista') }}">Limpiar</a>
@@ -27,7 +27,7 @@
   <div class="tabla-scroll">
     <table class="tabla">
       <thead>
-        <tr><th>SKU</th><th>Producto</th><th class="derecha">Stock</th><th class="derecha">Minimo</th><th>Estado</th><th></th></tr>
+        <tr><th>SKU</th><th>Producto</th><th class="derecha">Stock</th><th class="derecha">Mínimo</th><th>Estado</th><th></th></tr>
       </thead>
       <tbody>
       {% for producto in productos %}
@@ -41,7 +41,7 @@
           <td class="derecha">{{ producto.stock_minimo }}</td>
           <td>
             {% if producto.bajo_minimo %}
-              <span class="etiqueta etiqueta-fallido">Bajo minimo</span>
+              <span class="etiqueta etiqueta-fallido">Bajo mínimo</span>
             {% else %}
               <span class="etiqueta etiqueta-entregado">Disponible</span>
             {% endif %}
@@ -56,7 +56,7 @@
     </table>
   </div>
   {% else %}
-    <p class="vacio">No hay productos que coincidan con la busqueda.</p>
+    <p class="vacio">No hay productos que coincidan con la búsqueda.</p>
   {% endif %}
 </div>
 {% endblock %}

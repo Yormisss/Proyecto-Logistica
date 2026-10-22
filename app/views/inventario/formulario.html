@@ -13,7 +13,13 @@
     <div class="rejilla-campos">
       <div class="campo">
         {{ formulario.sku.label }}
-        {{ formulario.sku(placeholder="SKU-1007") }}
+        {% if sku_fijo %}
+          {{ formulario.sku(readonly=True) }}
+          <small class="ayuda-campo">El SKU queda fijo porque el producto ya tiene movimientos de inventario.</small>
+        {% else %}
+          {{ formulario.sku(placeholder="SKU-1007") }}
+          <small class="ayuda-campo">Con stock inicial o con cualquier movimiento, el SKU queda fijo.</small>
+        {% endif %}
         {% for e in formulario.sku.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
       </div>
       <div class="campo">
@@ -30,10 +36,17 @@
         {{ formulario.descripcion(rows=2) }}
       </div>
       <div class="campo">
-        {{ formulario.stock_actual.label }}
-        {{ formulario.stock_actual() }}
-        {% for e in formulario.stock_actual.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
-        {% if producto %}<small class="ayuda-campo">Cambiarlo registra un movimiento de ajuste.</small>{% endif %}
+        {% if producto %}
+          <label>Stock actual</label>
+          <p class="valor-fijo">{{ producto.stock_actual }} {{ producto.unidad }}</p>
+          <small class="ayuda-campo">El stock solo cambia con una entrada o un ajuste con motivo:
+            <a href="{{ url_for('inventario.detalle', producto_id=producto.id) }}">registrar un movimiento</a>.</small>
+        {% else %}
+          {{ formulario.stock_inicial.label }}
+          {{ formulario.stock_inicial() }}
+          {% for e in formulario.stock_inicial.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+          <small class="ayuda-campo">Entra como movimiento de entrada.</small>
+        {% endif %}
       </div>
       <div class="campo">
         {{ formulario.stock_minimo.label }}

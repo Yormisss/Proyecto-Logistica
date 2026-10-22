@@ -149,7 +149,7 @@ def _descontar_inventario(pedido, usuario_id):
         )
         db.session.add(movimiento)
         movimientos.append(movimiento)
-        aviso_stock(producto, stock_previo, pedido=pedido.codigo)
+        aviso_stock(producto, stock_previo, pedido=pedido.codigo, usuario_id=usuario_id)
 
         # Un stock negativo revela un descuadre entre el inventario registrado y
         # el fisico. No se bloquea la entrega (la mercancia ya salio), pero se
@@ -204,8 +204,13 @@ def cambiar_estado(
     receptor_documento=None,
     motivo_fallo=None,
     observacion=None,
+    motivo_id=None,
 ):
     """Aplica una transicion de estado sobre un pedido (RF4).
+
+    En un FALLIDO, `motivo_fallo` es el texto a guardar (el nombre del motivo
+    del catalogo, o lo escrito si es "Otro") y `motivo_id` el motivo del
+    catalogo; ver `app.services.configuracion`.
 
     Registra el evento en la bitacora, guarda la prueba de entrega cuando
     corresponde, descuenta el inventario si el pedido se marca como entregado
@@ -238,17 +243,20 @@ def cambiar_estado(
     if nuevo_estado == EstadoPedido.ENTREGADO:
         movimientos, advertencias = _descontar_inventario(pedido, usuario_id)
 
-    # Prueba de entrega: aplica tanto a la entrega exitosa como al intento fallido.
+    # Prueba de entrega: aplica tanto a la entrega exitosa como al intento
+    # fallido. Cada cierre agrega la suya; las de intentos anteriores se conservan.
     if nuevo_estado in EstadoPedido.CERRADOS:
-        prueba = pedido.prueba_entrega or PruebaEntrega(pedido_id=pedido.id)
-        prueba.receptor_nombre = receptor_nombre or prueba.receptor_nombre
-        prueba.receptor_documento = receptor_documento or prueba.receptor_documento
-        prueba.observacion = observacion or prueba.observacion
-        prueba.motivo_fallo = motivo_fallo if nuevo_estado == EstadoPedido.FALLIDO else None
-        prueba.latitud = latitud if latitud is not None else prueba.latitud
-        prueba.longitud = longitud if longitud is not None else prueba.longitud
-        prueba.registrado_en = ahora()
-        db.session.add(prueba)
+        fallido = nuevo_estado == EstadoPedido.FALLIDO
+        pedido.pruebas_entrega.append(PruebaEntrega(
+            receptor_nombre=receptor_nombre,
+            receptor_documento=receptor_documento,
+            observacion=observacion,
+            motivo_fallo=motivo_fallo if fallido else None,
+            motivo_id=motivo_id if fallido else None,
+            latitud=latitud,
+            longitud=longitud,
+            registrado_en=ahora(),
+        ))
 
     db.session.add(
         EventoPedido(
@@ -266,6 +274,7 @@ def cambiar_estado(
     # despues del commit del controlador, y en segundo plano.
     aviso_estado_pedido(
         pedido, motivo=motivo_fallo if nuevo_estado == EstadoPedido.FALLIDO else None,
+        usuario_id=usuario_id,
     )
 
     _sincronizar_estado_ruta(pedido.ruta)
@@ -317,7 +326,7 @@ def anular_pedido(pedido, usuario_id, motivo, origen=None):
             nota=f"{PREFIJO_ANULACION}{motivo}" + (f". {origen}" if origen else ""),
         )
     )
-    aviso_estado_pedido(pedido, motivo=motivo)
+    aviso_estado_pedido(pedido, motivo=motivo, usuario_id=usuario_id)
 
     _sincronizar_estado_ruta(pedido.ruta)
 

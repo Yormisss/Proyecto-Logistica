@@ -6,13 +6,13 @@
   <div>
     <h1 class="titulo-pagina">Tiempos de respuesta</h1>
     <p class="subtitulo-pagina">
-      RNF2 &middot; Limite establecido: {{ (datos.umbral_maximo_ms / 1000)|int }} segundos
+      RNF2 &middot; Límite establecido: {{ (datos.umbral_maximo_ms / 1000)|int }} segundos
     </p>
   </div>
   <nav class="selector-rango">
     <a href="{{ url_for('admin.rendimiento', horas=1) }}" class="{{ 'activo' if datos.horas == 1 }}">1 hora</a>
     <a href="{{ url_for('admin.rendimiento', horas=24) }}" class="{{ 'activo' if datos.horas == 24 }}">24 horas</a>
-    <a href="{{ url_for('admin.rendimiento', horas=168) }}" class="{{ 'activo' if datos.horas == 168 }}">7 dias</a>
+    <a href="{{ url_for('admin.rendimiento', horas=168) }}" class="{{ 'activo' if datos.horas == 168 }}">7 días</a>
   </nav>
 </div>
 
@@ -28,7 +28,7 @@
   <article class="kpi">
     <span class="kpi-etiqueta">Mediana</span>
     <span class="kpi-valor">{{ datos.mediana_ms }}<small class="kpi-unidad">ms</small></span>
-    <span class="kpi-detalle">La mitad de las peticiones responde mas rapido</span>
+    <span class="kpi-detalle">La mitad de las peticiones responde más rápido</span>
   </article>
   <article class="kpi">
     <span class="kpi-etiqueta">Percentil 95</span>
@@ -39,12 +39,12 @@
 
 <section class="tarjeta">
   <div class="grafica-encabezado">
-    <h2 class="tarjeta-titulo sin-borde">Percentil 95 por transaccion critica</h2>
-    <span class="nota-umbral">Linea roja: limite de {{ (datos.umbral_maximo_ms / 1000)|int }} s</span>
+    <h2 class="tarjeta-titulo sin-borde">Percentil 95 por transacción crítica</h2>
+    <span class="nota-umbral">Línea roja: límite de {{ (datos.umbral_maximo_ms / 1000)|int }} s</span>
   </div>
 
   <div class="grafica-barras grafica-latencia" role="img"
-       aria-label="Percentil 95 del tiempo de respuesta por transaccion critica">
+       aria-label="Percentil 95 del tiempo de respuesta por transacción crítica">
   {% for fila in datos.transacciones %}
     <div class="fila-barra"
          data-tooltip="{{ fila.nombre }} — mediana {{ fila.mediana_ms }} ms, p95 {{ fila.p95_ms }} ms, maximo {{ fila.maximo_ms }} ms ({{ fila.muestras }} muestras)">
@@ -59,14 +59,14 @@
   </div>
 
   <details class="tabla-alterna" open>
-    <summary>Detalle por transaccion</summary>
+    <summary>Detalle por transacción</summary>
     <div class="tabla-scroll">
       <table class="tabla">
         <thead>
           <tr>
-            <th>Transaccion</th><th class="derecha">Muestras</th>
+            <th>Transacción</th><th class="derecha">Muestras</th>
             <th class="derecha">Mediana</th><th class="derecha">P95</th>
-            <th class="derecha">Maximo</th><th>Cumple</th>
+            <th class="derecha">Máximo</th><th>Cumple</th>
           </tr>
         </thead>
         <tbody>
@@ -79,7 +79,7 @@
             <td class="derecha">{{ fila.maximo_ms }} ms</td>
             <td>
               {% if fila.cumple %}
-                <span class="etiqueta etiqueta-entregado">&#10003; Si</span>
+                <span class="etiqueta etiqueta-entregado">&#10003; Sí</span>
               {% else %}
                 <span class="etiqueta etiqueta-fallido">&#10007; No</span>
               {% endif %}
@@ -92,15 +92,15 @@
   </details>
 
   <p class="nota-pie">
-    La medicion se toma en el servidor, por lo que no incluye la latencia de la red
-    movil del conductor. El propio RNF2 la contempla aparte al condicionar el limite
-    "a la conexion a internet movil".
+    La medición se toma en el servidor, por lo que no incluye la latencia de la red
+    móvil del conductor. El propio RNF2 la contempla aparte al condicionar el límite
+    "a la conexión a internet móvil".
   </p>
 </section>
 {% else %}
 <div class="tarjeta vacio-centrado">
-  <p>Aun no hay mediciones registradas en las ultimas {{ datos.horas }} horas.</p>
-  <small>Use el sistema con normalidad y las mediciones apareceran aqui automaticamente.</small>
+  <p>Aún no hay mediciones registradas en las últimas {{ datos.horas }} horas.</p>
+  <small>Use el sistema con normalidad y las mediciones aparecerán aquí automáticamente.</small>
 </div>
 {% endif %}
 {% endblock %}

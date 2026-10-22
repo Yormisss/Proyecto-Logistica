@@ -20,13 +20,13 @@ PERMITIDAS_CON_TEMPORAL = {"auth.perfil", "auth.logout", "static"}
 class FormularioLogin(FlaskForm):
     correo = campo_correo(obligatorio="Ingrese su correo.")
     contrasena = PasswordField(
-        "Contrasena", validators=[DataRequired("Ingrese su contrasena.")]
+        "Contraseña", validators=[DataRequired("Ingrese su contrasena.")]
     )
-    recordar = BooleanField("Mantener sesion iniciada")
+    recordar = BooleanField("Mantener sesión iniciada")
 
 
 class FormularioCambioContrasena(FlaskForm):
-    contrasena_actual = PasswordField("Contrasena actual", validators=[DataRequired()])
+    contrasena_actual = PasswordField("Contraseña actual", validators=[DataRequired()])
     contrasena_nueva = PasswordField(
         "Nueva contrasena",
         validators=[DataRequired(), Length(min=8, message="Minimo 8 caracteres.")],
