@@ -16,9 +16,9 @@ from flask_login import login_required
 from flask_wtf import FlaskForm
 from sqlalchemy import func, or_
 from wtforms import BooleanField, StringField, TimeField
-from wtforms.validators import DataRequired, Email, Length, Optional
+from wtforms.validators import DataRequired, Length, Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import campo_correo, requiere_rol
 from app.extensions import db
 from app.models import (
     Cliente, DireccionCliente, EstadoPedido, Pedido, Rol, normalizar_texto,
@@ -34,9 +34,7 @@ class FormularioCliente(FlaskForm):
     )
     documento = StringField("NIT o documento", validators=[Optional(), Length(max=30)])
     telefono = StringField("Telefono", validators=[Optional(), Length(max=30)])
-    correo = StringField(
-        "Correo", validators=[Optional(), Email("Correo no valido."), Length(max=120)]
-    )
+    correo = campo_correo("Correo")
     activo = BooleanField("Cliente activo", default=True)
 
 

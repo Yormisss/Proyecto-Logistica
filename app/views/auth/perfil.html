@@ -4,6 +4,13 @@
 {% block contenido %}
 <h1 class="titulo-pagina">Mi perfil</h1>
 
+{% if current_user.debe_cambiar_contrasena %}
+<div class="alerta alerta-advertencia">
+  Su contrasena fue asignada por el administrador. Defina una propia para usar el
+  sistema: hasta entonces solo puede cambiarla o cerrar sesion.
+</div>
+{% endif %}
+
 <div class="tarjeta">
   <dl class="lista-datos">
     <dt>Nombre</dt><dd>{{ current_user.nombre }}</dd>

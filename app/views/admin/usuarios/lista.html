@@ -8,6 +8,7 @@
     <p class="subtitulo-pagina">{{ usuarios|length }} cuenta(s) &middot; gestion de usuarios y roles (RF1)</p>
   </div>
   <div class="acciones-encabezado">
+    <a class="boton boton-plano" href="{{ url_for('usuarios.contrasenas') }}">Contrasenas</a>
     <a class="boton boton-primario" href="{{ url_for('usuarios.nuevo') }}">Nueva cuenta</a>
   </div>
 </div>
@@ -71,11 +72,13 @@
           </td>
           <td class="derecha acciones-fila">
             <a href="{{ url_for('usuarios.editar', usuario_id=usuario.id) }}">Editar</a>
+            {% if usuario.contrasena_administrable %}
             <form method="post" action="{{ url_for('usuarios.restablecer', usuario_id=usuario.id) }}"
                   onsubmit="return confirm('¿Generar una contrasena temporal para {{ usuario.nombre }}? La actual dejara de servir.');">
               {{ formulario.hidden_tag() }}
               <button type="submit" class="boton-enlace">Restablecer clave</button>
             </form>
+            {% endif %}
             {% if usuario.id != current_user.id %}
             <form method="post" action="{{ url_for('usuarios.alternar_estado', usuario_id=usuario.id) }}"
                   onsubmit="return confirm('¿{{ 'Desactivar' if usuario.activo else 'Activar' }} la cuenta de {{ usuario.nombre }}?');">

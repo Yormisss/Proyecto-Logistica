@@ -19,6 +19,11 @@ class ConfiguracionBase:
     SECRET_KEY = os.getenv("SECRET_KEY", "clave-de-desarrollo-cambiar-en-produccion")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # RNF5 - Tras este numero de contrasenas equivocadas seguidas, el login de
+    # ese correo se rechaza durante LOGIN_BLOQUEO_SEGUNDOS (ver services/acceso.py).
+    LOGIN_MAX_INTENTOS = 6
+    LOGIN_BLOQUEO_SEGUNDOS = 60
+
     # RF3 - Generacion de rutas: proveedor de geolocalizacion y su clave.
     PROVEEDOR_MAPAS = os.getenv("PROVEEDOR_MAPAS", "OSRM")
     MAPAS_API_KEY = os.getenv("MAPAS_API_KEY", "")

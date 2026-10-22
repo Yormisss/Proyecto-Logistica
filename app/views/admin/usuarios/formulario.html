@@ -88,21 +88,45 @@
 
   <section class="tarjeta">
     <h2 class="tarjeta-titulo">Contrasena</h2>
+    {% if usuario %}
+      <p class="nota-pie">
+        {% if es_propia %}
+          Su contrasena se cambia, con la actual, en
+          <a href="{{ url_for('usuarios.contrasena', usuario_id=usuario.id) }}">Contrasenas</a>.
+        {% elif usuario.es_cliente %}
+          Solo el cliente puede cambiar su contrasena, desde su perfil.
+        {% elif not usuario.contrasena_administrable %}
+          Solo este administrador puede cambiar su contrasena, desde su perfil.
+        {% else %}
+          La contrasena se gestiona en su apartado:
+          <a href="{{ url_for('usuarios.contrasena', usuario_id=usuario.id) }}">asignar, generar
+          una temporal o exigir el cambio</a>.
+        {% endif %}
+      </p>
+    {% else %}
     <div class="rejilla-campos">
       <div class="campo campo-ancho">
         {{ formulario.contrasena.label }}
         {{ formulario.contrasena(placeholder="Dejar vacio para generar una temporal", autocomplete="new-password") }}
         {% for e in formulario.contrasena.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
         <small class="ayuda-campo">
-          {% if usuario %}
-            Dejela vacia para conservar la contrasena actual. Minimo {{ longitud_minima }} caracteres.
-          {% else %}
-            Si la deja vacia, el sistema genera una contrasena temporal y la muestra una
-            sola vez para que la entregue por un canal aparte.
-          {% endif %}
+          Si la deja vacia, el sistema genera una contrasena temporal y la muestra una
+          sola vez para que la entregue por un canal aparte. Minimo {{ longitud_minima }} caracteres.
+        </small>
+      </div>
+      <div class="campo campo-ancho">
+        <label class="campo-inline">
+          {{ formulario.exigir_cambio() }}
+          <span>{{ formulario.exigir_cambio.label.text }}</span>
+        </label>
+        <small class="ayuda-campo">
+          Aplica a la contrasena que usted escriba para un gestor logistico o un conductor.
+          La generada por el sistema, y la inicial de un cliente o de otro administrador,
+          siempre se deben cambiar: solo ellos conoceran la definitiva.
         </small>
       </div>
     </div>
+    {% endif %}
   </section>
 
   <div class="acciones-formulario">

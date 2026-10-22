@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               929 verificaciones automatizadas en 12 suites
+├── pruebas/               1205 verificaciones automatizadas en 14 suites
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -61,6 +61,7 @@ cp .env.example .env
 .venv/bin/flask --app run sembrar          # Cargar datos de demostración
 .venv/bin/flask --app run migrar-clientes  # Normalizar clientes en una base con datos
 .venv/bin/flask --app run migrar-asistente # Crear o actualizar las tablas del asistente de voz
+.venv/bin/flask --app run migrar-contrasenas # Columnas de gestión de contraseñas y tabla de intentos de acceso
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -176,9 +177,110 @@ ya no representa.
 
 ### Contraseñas
 
-Si el administrador deja el campo en blanco, el sistema genera una contraseña temporal con
-`secrets` y **la muestra una sola vez** para que se entregue por un canal aparte. *Restablecer
-clave* hace lo mismo sobre una cuenta existente. El usuario la cambia luego desde su perfil.
+Al crear una cuenta, si el administrador deja el campo en blanco, el sistema genera una
+contraseña temporal con `secrets` y **la muestra una sola vez** para que se entregue por un
+canal aparte. *Restablecer clave* hace lo mismo sobre una cuenta existente.
+
+El apartado **Contraseñas** (menú del administrador, `/admin/usuarios/contrasenas`) muestra
+el estado de la contraseña de todas las cuentas. Como solo se guarda el hash (RNF5),
+**nadie puede ver una contraseña**, tampoco el administrador.
+
+Quién puede cambiar cada contraseña:
+
+| Cuenta | Quién la cambia |
+|---|---|
+| Gestor logístico, conductor | El administrador (desde el apartado) o la propia persona (desde *Mi perfil*) |
+| El propio administrador | Él mismo, con la actual, desde el apartado o desde *Mi perfil* |
+| Cliente | **Solo el cliente**, desde *Mi perfil* |
+| Otro administrador | Solo ese administrador |
+
+El administrador entrega la contraseña inicial al crear una cuenta, pero la de un cliente o
+de otro administrador **siempre es temporal**: deben cambiarla al entrar, así que solo ellos
+conocen la definitiva. La regla se valida en el servidor (`_rechazo_contrasena` en
+`app/controllers/usuarios.py`), no solo ocultando botones. Un POST fabricado contra la
+cuenta de un cliente se rechaza. La regla depende del rol actual de la cuenta, y cambiar el
+rol sigue siendo facultad del administrador.
+
+El apartado muestra:
+
+| Columna | Qué indica |
+|---|---|
+| Último cambio | Fecha del último cambio. Las cuentas anteriores a `migrar-contrasenas` aparecen *Sin registro* |
+| Estado | *Pendiente de cambio* (temporal o cambio exigido) o *Vigente* |
+| Protección | *PBKDF2-SHA256* si el hash sigue `METODO_HASH`; *Revisar* si usa otro algoritmo |
+
+Acciones sobre gestores logísticos y conductores:
+
+| Acción | Efecto |
+|---|---|
+| **Asignar** | Fija una contraseña concreta (con confirmación). Por defecto exige cambiarla al entrar |
+| **Generar temporal** | Reemplaza la contraseña por una aleatoria que se muestra una sola vez |
+| **Exigir cambio** | No toca el hash: la persona entra con la contraseña que ya conoce y el sistema le pide una nueva. Se puede retirar |
+| **Exigir cambio a las seleccionadas** | Lo mismo en bloque, por ejemplo ante una sospecha de filtración. Omite clientes y administradores aunque el POST los incluya |
+| **Cambiar la mía** | Solo en la fila propia: pide la actual, la nueva y su confirmación |
+
+Una cuenta pendiente de cambio solo puede entrar a **Mi perfil** o cerrar sesión: cualquier
+otra ruta la devuelve al perfil (`auth.exigir_cambio_contrasena`). La regla se revisa en
+cada petición, así que la exigencia alcanza también a las sesiones ya abiertas. El perfil
+rechaza repetir la contraseña actual.
+
+Cada cambio de contraseña **cierra las sesiones abiertas** de esa cuenta: el identificador de
+sesión de Flask-Login incluye `version_credencial`, que aumenta con cada cambio. Quien la
+cambia desde su perfil conserva su sesión actual y pierde las demás.
+
+### Correo electrónico: solo caracteres permitidos
+
+El correo del login, de las cuentas de acceso y de los clientes se valida con una **lista
+blanca** (OWASP): en vez de buscar caracteres peligrosos, solo se acepta lo que un correo
+necesita.
+
+| Parte | Permitido |
+|---|---|
+| Antes de la `@` | Letras sin tilde, números y `.` `_` `-` `+` |
+| `@` | Exactamente una |
+| Dominio | Letras, números y `-`, separados por puntos, terminado en una extensión de letras |
+
+Todo lo demás se rechaza: espacios, comillas, `< > ; = / \ ( ) { } | #`, tildes y la `ñ`.
+Antes, el validador `Email` por sí solo aceptaba `'`, `=`, `/`, `|`, `{ }`, `#`, tildes y
+`ñ`, porque el estándar RFC 5322 los permite.
+
+- **La regla es una sola** (`campo_correo` en `app/controllers/seguridad.py`) y la usan los
+  tres formularios. Si el alta aceptara un correo que el login rechaza, esa cuenta no podría
+  entrar.
+- **El servidor es la validación que cuenta.** En el navegador, el campo descarta al
+  escribir o pegar cualquier carácter fuera de la lista, así que ni siquiera se pueden
+  introducir. Eso es comodidad, porque se puede saltar.
+- Los espacios de los extremos, que suelen llegar al copiar y pegar, se descartan antes de
+  validar. El correo tiene un máximo de 120 caracteres, el de la columna.
+- Un correo bien formado que no existe sigue recibiendo el mensaje genérico de credenciales
+  inválidas, que no revela qué cuentas existen.
+
+No es la única defensa contra inyección: las consultas pasan por el ORM con parámetros y
+Jinja escapa lo que se muestra. Es defensa en profundidad.
+
+### Bloqueo por intentos fallidos
+
+Aplica a los cuatro roles, porque todos entran por el mismo login.
+
+| Situación | Qué ve la persona |
+|---|---|
+| Fallos 1 a 5 | *Credenciales invalidas. Verifique sus datos. Intento fallido N de 6.* |
+| Fallo 6 | *Acceso no valido: se superaron los 6 intentos permitidos. Espere 1 minuto para volver a intentar iniciar sesion.* |
+| Cualquier intento durante ese minuto | El mismo mensaje, con los segundos que faltan. **Ni la contraseña correcta entra**, y ni siquiera se verifica |
+
+- **El contador vuelve a cero** al entrar con la contraseña correcta, al cumplirse el
+  minuto, o tras un día sin fallos. Los intentos durante el bloqueo no suman.
+- **El contador es por correo escrito, no por cuenta.** También cuenta los correos que no
+  existen, que reciben exactamente los mismos mensajes. Si solo se bloquearan las cuentas
+  reales, el bloqueo revelaría qué correos están registrados. Por eso `intentos_acceso`
+  no tiene clave ajena a `usuarios` y aparece suelta en el diagrama EER.
+- **La contraseña actual que pide *Mi perfil* cuenta para el mismo bloqueo.** Si no, una
+  sesión abierta permitiría adivinarla sin límite.
+- El bloqueo afecta al inicio de sesión, no a las sesiones ya abiertas.
+- En **Contraseñas**, la columna *Intentos fallidos* muestra los fallos acumulados de
+  cada cuenta y, si está bloqueada, cuánto le falta.
+- El límite y la espera se ajustan en `config.py` (`LOGIN_MAX_INTENTOS`,
+  `LOGIN_BLOQUEO_SEGUNDOS`). La lógica está en `app/services/acceso.py`.
 
 ### Las cuentas no se eliminan
 
@@ -194,6 +296,9 @@ clientes, referenciados por `pedidos.cliente_id`.
 |---|---|
 | Un administrador intenta cambiarse el rol | Bloqueado: perdería la capacidad de revertirlo |
 | Un administrador intenta desactivar su propia cuenta | Bloqueado, tanto editando como con la acción rápida |
+| Un administrador intenta restablecerse o exigirse el cambio de su propia contraseña | Bloqueado: la cambia con la actual, en *Contraseñas* o en *Mi perfil* |
+| Un administrador intenta asignar, restablecer o exigir el cambio de la contraseña de un cliente | Bloqueado: solo el cliente cambia la suya |
+| Un administrador intenta lo mismo sobre otro administrador | Bloqueado: solo cada administrador cambia la suya |
 | Se desactiva o degrada al último administrador activo | Bloqueado: debe quedar al menos uno |
 | Se cambia el rol de un conductor con rutas sin cerrar | Se permite, pero avisa cuántas hay que reasignar |
 | Se registra un cliente homónimo de otro y ninguno tiene NIT | Bloqueado: casi siempre es un duplicado por error de escritura |
@@ -756,7 +861,7 @@ Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
 .venv/bin/python pruebas/ejecutar_todas.py
 ```
 
-**929 verificaciones en 12 suites**, todas pasando. Cada suite reinicia y resiembra la
+**1205 verificaciones en 14 suites**, todas pasando. Cada suite reinicia y resiembra la
 base, por lo que los resultados son reproducibles.
 
 **Cada suite borra la base configurada.** Si su `.env` apunta a una base con datos que
@@ -773,18 +878,20 @@ DATABASE_URL=mysql+pymysql://sgds:sgds_clave@127.0.0.1:3307/logistica_pruebas .v
 
 | Suite | Cubre | Pruebas |
 |---|---|---|
-| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción, inventario sembrado | 46 |
+| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción, inventario sembrado, lista blanca del correo en el login | 82 |
 | `prueba_02_pedidos_csv.py` | RF2 · alta manual, importación CSV, inventario, anulación | 64 |
 | `prueba_03_ruteo.py` | RF3 · OSRM, ordenamientos, respaldo offline | 31 |
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
 | `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 67 |
 | `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 68 |
-| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes | 79 |
+| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes, lista blanca del correo en ambos formularios | 99 |
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 97 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 74 |
 | `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 211 |
 | `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 83 |
+| `prueba_13_contrasenas.py` | RF1/RNF5 · apartado de contraseñas: acceso solo del admin, sin hash ni contraseña en la página, asignar, generar temporal, exigir cambio (uno y en bloque), cambio obligatorio en el perfil, cierre de sesiones abiertas, hash fuera de política, reglas por rol (cliente y otros administradores fuera de su alcance, la propia con la actual), migración `m005` | 153 |
+| `prueba_14_bloqueo_acceso.py` | RNF5 · bloqueo tras 6 intentos fallidos en los cuatro roles: contador visible, un minuto de espera aun con la contraseña correcta, reinicio del contador, mismos mensajes para correos inexistentes, contraseña actual del perfil, columna en el apartado del admin, configuración, migración `m006` | 67 |
 
 La suite de ruteo requiere internet para probar OSRM; sin conexión verifica igualmente
 el algoritmo local de respaldo. La del asistente corre sin internet: simula Retell y
@@ -879,6 +986,17 @@ a partir de las claves ajenas declaradas**, así que sin él las tablas de clien
 aparecerían sueltas, sin las líneas que las unen a `pedidos`, y esas dos columnas
 quedarían sin integridad referencial. Verificado contra una base MySQL con datos: el
 esquema resultante es idéntico al que produce `init-db` sobre una base vacía.
+
+Sobre una base anterior al apartado de contraseñas:
+
+```bash
+.venv/bin/flask --app run migrar-contrasenas
+```
+
+Agrega a `usuarios` las columnas `contrasena_actualizada_en`, `debe_cambiar_contrasena` y
+`version_credencial`, y crea la tabla `intentos_acceso` del bloqueo por intentos fallidos.
+Es idempotente. Las sesiones abiertas antes de aplicarla piden iniciar
+sesión una vez más.
 
 ### Conectar MySQL Workbench
 

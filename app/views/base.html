@@ -35,8 +35,11 @@
         <a href="{{ url_for('solicitudes.lista') }}"
            class="{{ 'activo' if request.blueprint == 'solicitudes' }}">Solicitudes</a>
         {% if current_user.es_admin %}
+        {% set en_contrasenas = request.endpoint in ('usuarios.contrasenas', 'usuarios.contrasena') %}
         <a href="{{ url_for('usuarios.lista') }}"
-           class="{{ 'activo' if request.blueprint == 'usuarios' }}">Usuarios</a>
+           class="{{ 'activo' if request.blueprint == 'usuarios' and not en_contrasenas }}">Usuarios</a>
+        <a href="{{ url_for('usuarios.contrasenas') }}"
+           class="{{ 'activo' if en_contrasenas }}">Contrasenas</a>
         <a href="{{ url_for('admin.rendimiento') }}"
            class="{{ 'activo' if request.endpoint == 'admin.rendimiento' }}">Rendimiento</a>
         {% endif %}
@@ -96,6 +99,18 @@
 </div>
 <script type="module" src="{{ url_for('static', filename='js/asistente.js') }}"></script>
 {% endif %}
+
+<script>
+// RNF5: los campos de correo (`campo_correo` en seguridad.py) descartan al
+// escribir o pegar cualquier caracter fuera de la lista blanca. Es comodidad:
+// el servidor lo vuelve a validar, porque esto se puede saltar.
+document.querySelectorAll("input[data-correo]").forEach(function (campo) {
+  campo.addEventListener("input", function () {
+    var limpio = campo.value.replace(/[^A-Za-z0-9._+@-]/g, "");
+    if (limpio !== campo.value) campo.value = limpio;
+  });
+});
+</script>
 
 {% block scripts %}{% endblock %}
 </body>

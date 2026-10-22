@@ -19,13 +19,17 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from wtforms import BooleanField, PasswordField, SelectField, StringField
-from wtforms.validators import DataRequired, Email, Length, Optional
+from wtforms.validators import DataRequired, EqualTo, Length, Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.auth import cambiar_contrasena_propia
+from app.controllers.seguridad import campo_correo, es_redireccion_segura, requiere_rol
 from app.extensions import db
 from app.models import Cliente, EstadoRuta, Rol, Ruta, Usuario
+from app.models.usuario import METODO_HASH
+from app.services import acceso
+from app.tiempo import ahora
 
 usuarios_bp = Blueprint("usuarios", __name__)
 
@@ -38,7 +42,7 @@ def generar_contrasena(longitud=12):
 
     Se usa `secrets` y no `random`: este valor es una credencial, no un dato de
     demostracion. Se muestra una sola vez al administrador para que la entregue
-    por un canal aparte; el usuario la cambia desde su perfil.
+    por un canal aparte; el usuario debe cambiarla al iniciar sesion.
     """
     alfabeto = string.ascii_letters + string.digits + "!*-_"
     return "".join(secrets.choice(alfabeto) for _ in range(longitud))
@@ -62,10 +66,7 @@ class FormularioUsuario(FlaskForm):
         "Nombre completo",
         validators=[DataRequired("Indique el nombre."), Length(max=120)],
     )
-    correo = StringField(
-        "Correo electronico",
-        validators=[DataRequired("Indique el correo."), Email("Correo no valido."), Length(max=120)],
-    )
+    correo = campo_correo(obligatorio="Indique el correo.")
     documento = StringField("Documento", validators=[Optional(), Length(max=30)])
     telefono = StringField("Telefono", validators=[Optional(), Length(max=30)])
     # `validate_choice=False` en ambos selects: la comprobacion de opciones de
@@ -82,6 +83,9 @@ class FormularioUsuario(FlaskForm):
         validators=[Optional(), Length(min=LONGITUD_MINIMA,
                                       message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
     )
+    # Solo en el alta, si el administrador escribio la contrasena y la cuenta es
+    # de un rol cuya contrasena administra: las demas siempre son temporales.
+    exigir_cambio = BooleanField("Exigir cambio al primer inicio de sesion", default=True)
     activo = BooleanField("Cuenta activa", default=True)
 
     def __init__(self, *args, usuario=None, **kwargs):
@@ -92,6 +96,88 @@ class FormularioUsuario(FlaskForm):
 
 class FormularioAccion(FlaskForm):
     """Acciones POST sin datos propios; solo aporta el token CSRF."""
+
+
+class FormularioAsignarContrasena(FlaskForm):
+    contrasena = PasswordField(
+        "Nueva contrasena",
+        validators=[DataRequired("Indique la contrasena."),
+                    Length(min=LONGITUD_MINIMA,
+                           message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
+    )
+    confirmacion = PasswordField(
+        "Confirmar contrasena",
+        validators=[DataRequired("Repita la contrasena."),
+                    EqualTo("contrasena", message="Las contrasenas no coinciden.")],
+    )
+    exigir_cambio = BooleanField("Exigir cambio al iniciar sesion", default=True)
+
+
+class FormularioContrasenaPropia(FlaskForm):
+    contrasena_actual = PasswordField(
+        "Contrasena actual", validators=[DataRequired("Indique su contrasena actual.")]
+    )
+    contrasena = PasswordField(
+        "Nueva contrasena",
+        validators=[DataRequired("Indique la contrasena."),
+                    Length(min=LONGITUD_MINIMA,
+                           message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
+    )
+    confirmacion = PasswordField(
+        "Confirmar contrasena",
+        validators=[DataRequired("Repita la contrasena."),
+                    EqualTo("contrasena", message="Las contrasenas no coinciden.")],
+    )
+
+
+def _rechazo_contrasena(usuario):
+    """Por que el administrador no puede gestionar esta contrasena, o None.
+
+    El cliente es el unico que cambia la suya, y la de un administrador solo
+    la cambia el mismo, con la actual: asi ninguna cuenta con acceso total
+    puede apropiarse de otra.
+    """
+    if usuario.id == current_user.id:
+        return "Su propia contrasena se cambia en Contrasenas, con la actual."
+    if usuario.rol == Rol.CLIENTE:
+        return "Solo el cliente puede cambiar su propia contrasena."
+    if not usuario.contrasena_administrable:
+        return "Solo cada administrador puede cambiar su propia contrasena."
+    return None
+
+
+def _filtrar_rol_y_texto(consulta):
+    """Filtros comunes del listado de cuentas y del apartado de contrasenas."""
+    rol = request.args.get("rol", "").strip()
+    if rol in Rol.ETIQUETAS:
+        consulta = consulta.filter(Usuario.rol == rol)
+    else:
+        rol = ""
+
+    busqueda = request.args.get("q", "").strip()
+    if busqueda:
+        patron = f"%{busqueda}%"
+        consulta = consulta.filter(
+            or_(
+                Usuario.nombre.ilike(patron),
+                Usuario.correo.ilike(patron),
+                Usuario.documento.ilike(patron),
+            )
+        )
+    return consulta, rol, busqueda
+
+
+def _volver(por_defecto):
+    """Destino tras una accion que se lanza desde varias pantallas."""
+    destino = request.form.get("volver", "")
+    return destino if es_redireccion_segura(destino) else por_defecto
+
+
+def _usuario_o_404(usuario_id):
+    usuario = db.session.get(Usuario, usuario_id)
+    if usuario is None:
+        abort(404)
+    return usuario
 
 
 def _opciones_cliente(usuario=None):
@@ -229,13 +315,7 @@ def _rutas_abiertas(usuario):
 @login_required
 @requiere_rol(Rol.ADMIN)
 def lista():
-    consulta = db.session.query(Usuario)
-
-    rol = request.args.get("rol", "").strip()
-    if rol in Rol.ETIQUETAS:
-        consulta = consulta.filter(Usuario.rol == rol)
-    else:
-        rol = ""
+    consulta, rol, busqueda = _filtrar_rol_y_texto(db.session.query(Usuario))
 
     estado = request.args.get("estado", "").strip()
     if estado == "activos":
@@ -244,17 +324,6 @@ def lista():
         consulta = consulta.filter(Usuario.activo.is_(False))
     else:
         estado = ""
-
-    busqueda = request.args.get("q", "").strip()
-    if busqueda:
-        patron = f"%{busqueda}%"
-        consulta = consulta.filter(
-            or_(
-                Usuario.nombre.ilike(patron),
-                Usuario.correo.ilike(patron),
-                Usuario.documento.ilike(patron),
-            )
-        )
 
     usuarios = consulta.order_by(Usuario.rol, Usuario.nombre).all()
 
@@ -324,7 +393,14 @@ def nuevo():
             # Sin contrasena explicita se genera una temporal y se muestra una
             # sola vez: evita que el administrador reutilice una clave conocida.
             temporal = formulario.contrasena.data or generar_contrasena()
-            usuario.establecer_contrasena(temporal)
+            usuario.establecer_contrasena(
+                temporal,
+                temporal=(
+                    not formulario.contrasena.data
+                    or formulario.exigir_cambio.data
+                    or not usuario.contrasena_administrable
+                ),
+            )
 
             db.session.add(usuario)
             db.session.flush()
@@ -401,9 +477,6 @@ def editar(usuario_id):
             usuario.rol = formulario.rol.data
             usuario.activo = formulario.activo.data
 
-            if formulario.contrasena.data:
-                usuario.establecer_contrasena(formulario.contrasena.data)
-
             _aplicar_vinculo_cliente(usuario, formulario.cliente_id.data)
             db.session.commit()
 
@@ -471,21 +544,203 @@ def alternar_estado(usuario_id):
 @requiere_rol(Rol.ADMIN)
 def restablecer(usuario_id):
     """Emite una contrasena temporal nueva y la muestra una sola vez."""
-    usuario = db.session.get(Usuario, usuario_id)
-    if usuario is None:
-        abort(404)
+    usuario = _usuario_o_404(usuario_id)
+    destino = _volver(url_for("usuarios.lista"))
 
     if not FormularioAccion().validate_on_submit():
         flash("Solicitud invalida. Intente nuevamente.", "error")
-        return redirect(url_for("usuarios.lista"))
+        return redirect(destino)
+
+    # La propia tampoco: cerraria la sesion en curso (ver `get_id`) y saltaria
+    # la verificacion de la contrasena actual.
+    rechazo = _rechazo_contrasena(usuario)
+    if rechazo:
+        flash(rechazo, "error")
+        return redirect(destino)
 
     temporal = generar_contrasena()
-    usuario.establecer_contrasena(temporal)
+    usuario.establecer_contrasena(temporal, temporal=True)
     db.session.commit()
 
     flash(
         f"Contrasena temporal de {usuario.correo}: {temporal} — entreguela por un "
-        "canal aparte; no se volvera a mostrar.",
+        "canal aparte; no se volvera a mostrar. Sus sesiones abiertas se cerraron "
+        "y debera cambiarla al iniciar sesion.",
         "advertencia",
     )
-    return redirect(url_for("usuarios.lista"))
+    return redirect(destino)
+
+
+# --------------------------------------------------------------------------
+# Apartado de contrasenas
+# --------------------------------------------------------------------------
+
+@usuarios_bp.route("/contrasenas")
+@login_required
+@requiere_rol(Rol.ADMIN)
+def contrasenas():
+    """Estado de la contrasena de cada cuenta. Nunca la contrasena misma.
+
+    Solo se guarda el hash (RNF5), asi que no hay nada que mostrar: lo que el
+    administrador gestiona es cuando cambio, si debe cambiarla y con que
+    algoritmo esta protegida.
+    """
+    consulta, rol, busqueda = _filtrar_rol_y_texto(db.session.query(Usuario))
+
+    estado = request.args.get("estado", "").strip()
+    if estado == "pendientes":
+        consulta = consulta.filter(Usuario.debe_cambiar_contrasena.is_(True))
+    elif estado == "vigentes":
+        consulta = consulta.filter(Usuario.debe_cambiar_contrasena.is_(False))
+    else:
+        estado = ""
+
+    usuarios = consulta.order_by(
+        Usuario.debe_cambiar_contrasena.desc(), Usuario.rol, Usuario.nombre
+    ).all()
+
+    # COUNT(CASE ...) y no COUNT(...) FILTER: MySQL no admite FILTER.
+    resumen = db.session.query(
+        func.count(Usuario.id),
+        func.count(case((Usuario.debe_cambiar_contrasena.is_(True), 1))),
+        func.count(case((Usuario.contrasena_hash.like(METODO_HASH + "$%"), 1))),
+    ).one()
+
+    return render_template(
+        "admin/usuarios/contrasenas.html",
+        usuarios=usuarios,
+        intentos=acceso.resumen(u.correo for u in usuarios),
+        maximo_intentos=acceso.maximo_intentos(),
+        total=resumen[0],
+        pendientes=resumen[1],
+        protegidas=resumen[2],
+        metodo_hash=METODO_HASH,
+        hoy=ahora(),
+        formulario=FormularioAccion(),
+        filtros={"rol": rol, "estado": estado, "q": busqueda},
+        roles=Rol.opciones(),
+    )
+
+
+@usuarios_bp.route("/<int:usuario_id>/contrasena", methods=["GET", "POST"])
+@login_required
+@requiere_rol(Rol.ADMIN)
+def contrasena(usuario_id):
+    """Ficha de la contrasena de una cuenta: la propia o la de un gestor o conductor."""
+    usuario = _usuario_o_404(usuario_id)
+    if usuario.id == current_user.id:
+        return _contrasena_propia(usuario)
+
+    rechazo = _rechazo_contrasena(usuario)
+    if rechazo:
+        flash(rechazo, "error")
+        return redirect(url_for("usuarios.contrasenas"))
+
+    formulario = FormularioAsignarContrasena()
+    if formulario.validate_on_submit():
+        usuario.establecer_contrasena(
+            formulario.contrasena.data, temporal=formulario.exigir_cambio.data
+        )
+        db.session.commit()
+
+        flash(
+            f"Contrasena de {usuario.nombre} actualizada. Sus sesiones abiertas se cerraron"
+            + ("; debera cambiarla al iniciar sesion." if usuario.debe_cambiar_contrasena
+               else "."),
+            "exito",
+        )
+        return redirect(url_for("usuarios.contrasenas"))
+
+    return render_template(
+        "admin/usuarios/contrasena.html", usuario=usuario, formulario=formulario,
+        accion=FormularioAccion(), longitud_minima=LONGITUD_MINIMA, hoy=ahora(),
+        propia=False,
+    )
+
+
+def _contrasena_propia(usuario):
+    """El administrador cambia la suya como cualquier usuario: con la actual."""
+    formulario = FormularioContrasenaPropia()
+    if formulario.validate_on_submit():
+        error = cambiar_contrasena_propia(
+            usuario, formulario.contrasena_actual.data, formulario.contrasena.data
+        )
+        if error:
+            flash(error, "error")
+        else:
+            flash("Su contrasena fue actualizada. Sus otras sesiones se cerraron.", "exito")
+            return redirect(url_for("usuarios.contrasenas"))
+
+    return render_template(
+        "admin/usuarios/contrasena.html", usuario=usuario, formulario=formulario,
+        longitud_minima=LONGITUD_MINIMA, hoy=ahora(), propia=True,
+    )
+
+
+@usuarios_bp.route("/<int:usuario_id>/alternar-exigencia", methods=["POST"])
+@login_required
+@requiere_rol(Rol.ADMIN)
+def alternar_exigencia(usuario_id):
+    """Marca o desmarca que la cuenta debe cambiar su contrasena."""
+    usuario = _usuario_o_404(usuario_id)
+    destino = _volver(url_for("usuarios.contrasenas"))
+
+    if not FormularioAccion().validate_on_submit():
+        flash("Solicitud invalida. Intente nuevamente.", "error")
+        return redirect(destino)
+
+    rechazo = _rechazo_contrasena(usuario)
+    if rechazo:
+        flash(rechazo, "error")
+        return redirect(destino)
+
+    usuario.debe_cambiar_contrasena = not usuario.debe_cambiar_contrasena
+    db.session.commit()
+
+    flash(
+        f"{usuario.nombre} "
+        + ("debera cambiar su contrasena en su proxima peticion."
+           if usuario.debe_cambiar_contrasena else "ya no esta obligado a cambiar su contrasena."),
+        "exito",
+    )
+    return redirect(destino)
+
+
+@usuarios_bp.route("/contrasenas/exigir-cambio", methods=["POST"])
+@login_required
+@requiere_rol(Rol.ADMIN)
+def exigir_cambio_masivo():
+    """Obliga a varias cuentas a renovar su contrasena (p. ej. ante una fuga).
+
+    No toca el hash: cada persona entra con la contrasena que ya conoce y el
+    sistema le pide reemplazarla. Las sesiones abiertas quedan retenidas en el
+    perfil desde su siguiente peticion. Solo alcanza a gestores y conductores,
+    aunque el POST traiga otras cuentas.
+    """
+    destino = url_for("usuarios.contrasenas")
+    if not FormularioAccion().validate_on_submit():
+        flash("Solicitud invalida. Intente nuevamente.", "error")
+        return redirect(destino)
+
+    ids = set(request.form.getlist("usuarios", type=int))
+    administrables = [
+        id_ for (id_,) in db.session.query(Usuario.id).filter(
+            Usuario.id.in_(ids), Usuario.rol.in_(Rol.CONTRASENA_ADMINISTRADA)
+        )
+    ]
+    if not administrables:
+        flash("Seleccione al menos una cuenta de gestor logistico o conductor.", "error")
+        return redirect(destino)
+
+    marcadas = (
+        db.session.query(Usuario)
+        .filter(Usuario.id.in_(administrables), Usuario.debe_cambiar_contrasena.is_(False))
+        .update({Usuario.debe_cambiar_contrasena: True}, synchronize_session=False)
+    )
+    db.session.commit()
+
+    flash(f"{marcadas} cuenta(s) deberan cambiar su contrasena.", "exito")
+    if len(administrables) < len(ids):
+        flash("Se omitieron las cuentas de clientes y administradores: solo ellos "
+              "cambian la suya.", "advertencia")
+    return redirect(destino)

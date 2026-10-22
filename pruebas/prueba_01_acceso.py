@@ -203,6 +203,57 @@ with app.app_context():
               f"{producto.sku}: entrada inicial de {inicial.cantidad if inicial else '?'} y "
               f"{len(movimientos) - 1} salidas que encadenan hasta {producto.stock_actual} ({rotos} rotos)")
 
+print("\n== 10. Correo del login: lista blanca de caracteres (RNF5) ==")
+from app.controllers.seguridad import MENSAJE_CORREO, PATRON_CORREO
+
+with app.test_client() as c:
+    html = c.get("/auth/login").data.decode()
+    check("data-correo" in html and 'maxlength="120"' in html,
+          "el campo de correo lleva el filtro del navegador y el limite de 120")
+    check(f'pattern="{PATRON_CORREO}"' in html, "y el patron de la lista blanca")
+    check("[^A-Za-z0-9._+@-]" in html, "la pagina incluye el filtro que descarta lo demas al escribir")
+
+for correo, descripcion in (
+    ("admin@sgds.com' OR '1'='1", "comillas de una inyeccion SQL"),
+    ("<script>alert(1)</script>@sgds.com", "etiquetas HTML"),
+    ("admin;--@sgds.com", "punto y coma y comentario SQL"),
+    ("ad min@sgds.com", "un espacio en medio"),
+    ("josé@sgds.com", "tildes"),
+    ("ñandu@sgds.com", "la ñ"),
+    ("admin@sgds@com", "dos arrobas"),
+    ("admin(1)@sgds.com", "parentesis"),
+    ("admin/x@sgds.com", "barras"),
+    # Los siguientes los aceptaba el validador Email por si solo (RFC 5322).
+    ("o'brien@sgds.com", "una comilla simple"),
+    ("a=b@sgds.com", "el signo igual"),
+    ("a|b@sgds.com", "la barra vertical"),
+    ("a{b}@sgds.com", "llaves"),
+    ("a#b@sgds.com", "numeral"),
+    ("a" * 112 + "@sgds.com", "mas de 120 caracteres"),
+):
+    with app.test_client() as c:
+        r = c.post("/auth/login", data={"correo": correo, "contrasena": "Admin123*"})
+        html = r.data.decode()
+        rechazado = MENSAJE_CORREO in html or "Maximo 120" in html
+        check(r.status_code == 200 and rechazado and "Credenciales invalidas" not in html,
+              f"rechaza {descripcion} antes de consultar la base")
+        check(c.get("/admin/").status_code == 302, f"   y no abre sesion ({descripcion})")
+
+for correo, descripcion in (
+    ("  admin@sgds.com  ", "con espacios en los extremos, que se descartan"),
+    ("ADMIN@SGDS.COM", "en mayusculas"),
+):
+    with app.test_client() as c:
+        r = c.post("/auth/login", data={"correo": correo, "contrasena": "Admin123*"})
+        check(r.status_code == 302 and c.get("/admin/").status_code == 200,
+              f"acepta el correo valido {descripcion}")
+
+with app.test_client() as c:
+    r = c.post("/auth/login", data={"correo": "nadie+pruebas@sgds.com", "contrasena": "x"},
+               follow_redirects=True)
+    check(b"Credenciales invalidas" in r.data,
+          "un correo valido que no existe recibe el mensaje generico (no revela cuentas)")
+
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))
 sys.exit(1 if fallos else 0)

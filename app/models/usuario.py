@@ -39,6 +39,11 @@ class Rol:
     # proposito: solo consulta sus propias ordenes.
     INTERNOS = (ADMIN, DESPACHADOR, CONDUCTOR)
 
+    # Roles cuya contrasena administra el administrador. Fuera quedan el
+    # cliente, que solo cambia la suya, y los demas administradores; la propia
+    # cada administrador la cambia con la actual.
+    CONTRASENA_ADMINISTRADA = (DESPACHADOR, CONDUCTOR)
+
     @classmethod
     def opciones(cls):
         return list(cls.ETIQUETAS.items())
@@ -57,6 +62,15 @@ class Usuario(UserMixin, db.Model):
     rol = db.Column(db.String(20), nullable=False, default=Rol.CONDUCTOR, index=True)
     activo = db.Column(db.Boolean, nullable=False, default=True)
     creado_en = db.Column(db.DateTime, default=ahora)
+    # Gestion de contrasenas del administrador. Las cuentas anteriores a la
+    # migracion m005 quedan con la fecha en NULL: no se sabe cuando cambio.
+    contrasena_actualizada_en = db.Column(db.DateTime, default=ahora)
+    # True cuando la contrasena la asigno el administrador: solo sirve para
+    # entrar y reemplazarla (ver `auth.exigir_cambio_contrasena`).
+    debe_cambiar_contrasena = db.Column(db.Boolean, nullable=False, default=False)
+    # Forma parte del identificador de sesion (`get_id`): cada cambio de
+    # contrasena la incrementa y las sesiones abiertas con la anterior caducan.
+    version_credencial = db.Column(db.Integer, nullable=False, default=0)
 
     rutas = db.relationship("Ruta", back_populates="conductor", lazy="dynamic")
     vehiculo = db.relationship("Vehiculo", back_populates="conductor", uselist=False)
@@ -65,11 +79,35 @@ class Usuario(UserMixin, db.Model):
     cliente = db.relationship("Cliente", back_populates="usuario", uselist=False)
 
     # --- Seguridad (RNF5) -------------------------------------------------
-    def establecer_contrasena(self, contrasena):
+    def establecer_contrasena(self, contrasena, temporal=False):
+        """Guarda el hash de `contrasena` y cierra las sesiones abiertas.
+
+        `temporal=True` marca una contrasena asignada por el administrador: el
+        usuario debera reemplazarla antes de operar. Quien la cambia desde su
+        perfil vuelve a iniciar sesion en esa misma peticion (`auth.perfil`).
+        """
         self.contrasena_hash = generate_password_hash(contrasena, method=METODO_HASH)
+        self.contrasena_actualizada_en = ahora()
+        self.debe_cambiar_contrasena = temporal
+        self.version_credencial = (self.version_credencial or 0) + 1
 
     def verificar_contrasena(self, contrasena):
         return check_password_hash(self.contrasena_hash, contrasena)
+
+    @property
+    def hash_vigente(self):
+        """True si el hash usa la politica actual (`METODO_HASH`)."""
+        return self.contrasena_hash.startswith(METODO_HASH + "$")
+
+    @property
+    def algoritmo_hash(self):
+        return self.contrasena_hash.split("$", 1)[0]
+
+    def get_id(self):
+        # Flask-Login guarda este valor en la cookie de sesion y en la de
+        # "mantener sesion iniciada". Con la version de la credencial, una
+        # sesion abierta antes de restablecer la contrasena deja de valer.
+        return f"{self.id}:{self.version_credencial or 0}"
 
     # --- Autorizacion -----------------------------------------------------
     @property
@@ -94,6 +132,11 @@ class Usuario(UserMixin, db.Model):
         return self.rol in Rol.INTERNOS
 
     @property
+    def contrasena_administrable(self):
+        """True si el administrador puede asignar o restablecer esta contrasena."""
+        return self.rol in Rol.CONTRASENA_ADMINISTRADA
+
+    @property
     def rol_etiqueta(self):
         return Rol.ETIQUETAS.get(self.rol, self.rol)
 
@@ -102,16 +145,23 @@ class Usuario(UserMixin, db.Model):
 
 
 @login_manager.user_loader
-def cargar_usuario(usuario_id):
+def cargar_usuario(identificador):
     """Recarga el usuario de la sesion en cada peticion (RNF5).
 
     Devolver None cuando la cuenta esta inactiva hace que Flask-Login trate la
     sesion como anonima: sin esto, una cuenta desactivada mientras el usuario
     la tiene abierta en el navegador conservaba el acceso hasta que volviera a
     iniciar sesion, porque el login ya la rechaza pero nada revisaba una
-    sesion ya autenticada.
+    sesion ya autenticada. Lo mismo con una sesion abierta antes de que se
+    cambiara la contrasena: su version de credencial ya no coincide.
     """
-    usuario = db.session.get(Usuario, int(usuario_id))
+    id_texto, _, version = identificador.partition(":")
+    try:
+        usuario = db.session.get(Usuario, int(id_texto))
+    except ValueError:
+        return None
     if usuario is None or not usuario.activo:
+        return None
+    if version != str(usuario.version_credencial or 0):
         return None
     return usuario
