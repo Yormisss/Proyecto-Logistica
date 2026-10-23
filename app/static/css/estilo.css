@@ -1,41 +1,57 @@
-/* SGDS - Hoja de estilos base
+/* Rutalytics - Hoja de estilos base
    RNF1: enfoque mobile-first; los ajustes para escritorio se aplican en media queries. */
 
 :root {
-  --azul-900: #0f2540;
-  --azul-700: #14406e;
-  --azul-500: #1f6feb;
-  --azul-100: #e8f0fb;
-  --naranja: #e07b39;
+  /* Marca: ciruela, vino, dorado y crema. */
+  --ciruela-900: #2a1f26;
+  --ciruela-700: #46262f;
+  --vino-700: #5a2333;
+  --vino-500: #7a2e42;
+  --vino-100: #f6eaed;
+  --dorado: #c8a46b;
+  --dorado-oscuro: #8b6a2e;   /* dorado legible sobre blanco (contraste 5:1) */
+  /* Estados: conservan su color para no confundir "asignado" (vino) con "fallido" (rojo). */
+  --azul: #1f5fb4;
+  --azul-claro: #e8f0fb;
   --verde: #1f9d55;
   --verde-claro: #e6f6ec;
   --rojo: #d64545;
   --rojo-claro: #fdecec;
   --ambar: #c9931a;
   --ambar-claro: #fdf5e2;
-  --gris-900: #1c2430;
-  --gris-600: #5b6675;
-  --gris-400: #98a2b3;
-  --gris-200: #e3e8ef;
-  --gris-100: #f2f5f9;
+  /* Neutros calidos, sobre el fondo crema. */
+  --gris-900: #2b2327;
+  --gris-600: #6e6266;
+  --gris-400: #a0959a;
+  --gris-200: #e8e0d7;
+  --gris-100: #f6f1ea;
   --blanco: #ffffff;
   --radio: 10px;
   --sombra: 0 1px 3px rgba(16, 24, 40, .08), 0 1px 2px rgba(16, 24, 40, .06);
+  /* Tipografia (ver fuentes.css): Libre Franklin para el nombre y los textos;
+     Courier Prime, de maquina de escribir, para cifras, etiquetas y codigos,
+     como en una guia de despacho. */
+  --fuente-texto: "Libre Franklin", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --fuente-datos: "Courier Prime", "Courier New", ui-monospace, monospace;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--fuente-texto);
   font-size: 15px;
   line-height: 1.5;
   color: var(--gris-900);
   background: var(--gris-100);
 }
 
+/* Enlaces sin clase propia: el vino de la marca y no el azul del navegador.
+   Selector de elemento a proposito: cualquier clase (botones, menu) lo pisa. */
+a { color: var(--vino-500); }
+
 /* ---------- Barra superior ---------- */
-.barra-superior { background: var(--azul-900); color: var(--blanco); }
+.barra-superior { background: var(--ciruela-900); color: var(--blanco); }
 .barra-contenido {
   max-width: 1200px; margin: 0 auto; padding: .7rem 1rem;
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
@@ -43,18 +59,19 @@ body {
 .marca { display: flex; align-items: center; gap: .5rem; color: var(--blanco); text-decoration: none; font-weight: 700; }
 .marca-icono {
   display: grid; place-items: center; width: 32px; height: 32px;
-  background: var(--naranja); border-radius: 8px; font-size: .8rem; letter-spacing: .5px;
+  background: var(--dorado); color: var(--ciruela-900); border-radius: 8px;
+  font-weight: 800; font-size: 1rem;
 }
-.marca-icono.grande { width: 52px; height: 52px; font-size: 1.1rem; margin: 0 auto .8rem; }
-.marca-texto { letter-spacing: 1px; }
+.marca-icono.grande { width: 56px; height: 56px; font-size: 1.6rem; margin: 0 auto .9rem; }
+.marca-texto { font-weight: 800; font-size: 1.1rem; letter-spacing: -.3px; }
 
 .navegacion { display: flex; gap: .3rem; margin-left: auto; }
 .navegacion a {
-  color: #c6d4e4; text-decoration: none; padding: .4rem .8rem;
+  color: #d9cbbf; text-decoration: none; padding: .4rem .8rem;
   border-radius: 6px; font-size: .9rem;
 }
 .navegacion a:hover { background: rgba(255,255,255,.1); color: var(--blanco); }
-.navegacion a.activo { background: var(--azul-700); color: var(--blanco); }
+.navegacion a.activo { background: var(--vino-700); color: var(--blanco); }
 .navegacion a:focus-visible, .menu-desplegable summary:focus-visible {
   outline: 2px solid var(--blanco); outline-offset: 2px;
 }
@@ -62,7 +79,7 @@ body {
 /* Desplegable "Administración" del admin (details/summary) */
 .menu-desplegable { position: relative; }
 .menu-desplegable summary {
-  list-style: none; cursor: pointer; color: #c6d4e4; padding: .4rem .8rem;
+  list-style: none; cursor: pointer; color: #d9cbbf; padding: .4rem .8rem;
   border-radius: 6px; font-size: .9rem; display: flex; align-items: center; gap: .35rem;
 }
 .menu-desplegable summary::-webkit-details-marker { display: none; }
@@ -72,11 +89,11 @@ body {
 }
 .menu-desplegable[open] summary::after { margin-top: .2rem; transform: rotate(-135deg); }
 .menu-desplegable summary:hover { background: rgba(255,255,255,.1); color: var(--blanco); }
-.menu-desplegable summary.activo { background: var(--azul-700); color: var(--blanco); }
+.menu-desplegable summary.activo { background: var(--vino-700); color: var(--blanco); }
 .menu-desplegable-lista {
   position: absolute; right: 0; top: calc(100% + .35rem); z-index: 50; min-width: 11rem;
   display: flex; flex-direction: column; gap: .15rem; padding: .35rem;
-  background: var(--azul-900); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  background: var(--ciruela-900); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
 }
 
 .usuario-caja { display: flex; align-items: center; gap: .8rem; }
@@ -84,7 +101,7 @@ body {
 .usuario-nombre { font-size: .85rem; font-weight: 600; }
 .usuario-rol { font-size: .72rem; color: var(--gris-400); }
 .boton-salir {
-  color: #c6d4e4; text-decoration: none; font-size: .82rem;
+  color: #d9cbbf; text-decoration: none; font-size: .82rem;
   border: 1px solid rgba(255,255,255,.25); padding: .3rem .7rem; border-radius: 6px;
 }
 .boton-salir:hover { background: rgba(255,255,255,.12); color: var(--blanco); }
@@ -102,7 +119,7 @@ body {
 .alerta-exito { background: var(--verde-claro); border-color: #bfe3cd; color: #15603a; }
 .alerta-error { background: var(--rojo-claro); border-color: #f5c6c6; color: #932c2c; }
 .alerta-advertencia { background: var(--ambar-claro); border-color: #f0dfb0; color: #8a6410; }
-.alerta-message { background: var(--azul-100); border-color: #c9dcf7; color: var(--azul-700); }
+.alerta-message { background: var(--vino-100); border-color: #ebd3da; color: var(--vino-700); }
 
 /* ---------- Tarjetas ---------- */
 .tarjeta {
@@ -114,14 +131,14 @@ body {
 /* ---------- KPIs (RF6) ---------- */
 .rejilla-kpis { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1.2rem; }
 .kpi {
-  background: var(--blanco); border: 1px solid var(--gris-200); border-left: 4px solid var(--azul-500);
+  background: var(--blanco); border: 1px solid var(--gris-200); border-left: 4px solid var(--vino-500);
   border-radius: var(--radio); padding: 1rem 1.1rem; box-shadow: var(--sombra);
   display: flex; flex-direction: column; gap: .15rem;
 }
 .kpi-alerta { border-left-color: var(--ambar); }
 .kpi-exito { border-left-color: var(--verde); }
-.kpi-etiqueta { font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; color: var(--gris-600); }
-.kpi-valor { font-size: 2.1rem; font-weight: 700; line-height: 1.1; }
+.kpi-etiqueta { font-family: var(--fuente-datos); font-weight: 700; font-size: .78rem; text-transform: uppercase; color: var(--gris-600); }
+.kpi-valor { font-family: var(--fuente-datos); font-size: 2.1rem; font-weight: 700; line-height: 1.1; }
 .kpi-detalle { font-size: .82rem; color: var(--gris-600); }
 
 .rejilla-dos { display: grid; grid-template-columns: 1fr; gap: 1rem; }
@@ -130,11 +147,12 @@ body {
 .tabla { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .tabla th {
   text-align: left; padding: .5rem .6rem; color: var(--gris-600);
-  font-size: .75rem; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid var(--gris-200);
+  font-family: var(--fuente-datos); font-weight: 700;
+  font-size: .75rem; text-transform: uppercase; border-bottom: 1px solid var(--gris-200);
 }
 .tabla td { padding: .6rem; border-bottom: 1px solid var(--gris-100); vertical-align: middle; }
 .tabla tbody tr:hover { background: var(--gris-100); }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+.mono { font-family: var(--fuente-datos); font-size: .86rem; }
 
 /* ---------- Etiquetas de estado ---------- */
 .etiqueta {
@@ -142,7 +160,7 @@ body {
   font-size: .72rem; font-weight: 600; white-space: nowrap;
 }
 .etiqueta-pendiente, .etiqueta-planificada { background: var(--gris-200); color: var(--gris-900); }
-.etiqueta-asignado { background: var(--azul-100); color: var(--azul-700); }
+.etiqueta-asignado { background: var(--azul-claro); color: var(--azul); }
 .etiqueta-en_ruta, .etiqueta-en_curso { background: var(--ambar-claro); color: var(--ambar); }
 .etiqueta-entregado, .etiqueta-finalizada { background: var(--verde-claro); color: var(--verde); }
 .etiqueta-fallido, .etiqueta-cancelada, .etiqueta-cancelado { background: var(--rojo-claro); color: var(--rojo); }
@@ -181,7 +199,7 @@ body {
   border-radius: 8px; font-size: 1rem; font-family: inherit; background: var(--blanco);
 }
 .campo input:focus, .campo select:focus, .campo textarea:focus {
-  outline: none; border-color: var(--azul-500); box-shadow: 0 0 0 3px rgba(31, 111, 235, .15);
+  outline: none; border-color: var(--vino-500); box-shadow: 0 0 0 3px rgba(122, 46, 66, .18);
 }
 .campo-error { color: var(--rojo); font-size: .8rem; }
 .campo-inline { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
@@ -194,16 +212,23 @@ body {
   display: inline-block; padding: .65rem 1.1rem; border: none; border-radius: 8px;
   font-size: .95rem; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center;
 }
-.boton-primario { background: var(--azul-500); color: var(--blanco); }
-.boton-primario:hover { background: var(--azul-700); }
+.boton-primario { background: var(--vino-500); color: var(--blanco); }
+.boton-primario:hover { background: var(--vino-700); }
 .boton-bloque { width: 100%; }
 
 /* ---------- Pantalla de acceso ---------- */
-.pagina-acceso { background: linear-gradient(160deg, var(--azul-900), var(--azul-700)); min-height: 100vh; }
+.pagina-acceso { background: linear-gradient(160deg, var(--ciruela-900), var(--ciruela-700)); min-height: 100vh; }
 .pagina-acceso .contenedor { max-width: 420px; padding-top: 3rem; }
-.acceso-panel { background: var(--blanco); border-radius: 14px; padding: 1.8rem 1.5rem; box-shadow: 0 12px 30px rgba(8, 20, 38, .25); }
+.acceso-panel { background: var(--blanco); border-radius: 14px; padding: 1.8rem 1.5rem; box-shadow: 0 12px 30px rgba(20, 8, 14, .35); }
 .acceso-encabezado { text-align: center; margin-bottom: 1.4rem; }
-.acceso-encabezado h1 { font-size: 1.15rem; margin: 0 0 .3rem; }
+.acceso-encabezado h1 {
+  font-weight: 800; letter-spacing: -.5px;
+  font-size: 2rem; line-height: 1.1; color: var(--ciruela-900); margin: 0;
+}
+.acceso-encabezado .acceso-sistema {
+  font-family: var(--fuente-datos); font-size: .8rem; font-weight: 700; text-transform: uppercase;
+  color: var(--dorado-oscuro); margin: .45rem 0 .7rem;
+}
 .acceso-encabezado p { font-size: .84rem; color: var(--gris-600); margin: 0; }
 .acceso-pie { text-align: center; font-size: .75rem; color: var(--gris-400); margin: 1.2rem 0 0; }
 
@@ -223,10 +248,10 @@ body {
 .parada-entregado { border-left-color: var(--verde); }
 .parada-fallido, .parada-cancelado { border-left-color: var(--rojo); }
 .parada-en_ruta { border-left-color: var(--ambar); }
-.parada-asignado { border-left-color: var(--azul-500); }
+.parada-asignado { border-left-color: var(--azul); }
 .parada-orden {
   flex: 0 0 34px; height: 34px; display: grid; place-items: center;
-  background: var(--azul-900); color: var(--blanco); border-radius: 50%; font-weight: 700; font-size: .9rem;
+  background: var(--ciruela-900); color: var(--blanco); border-radius: 50%; font-weight: 700; font-size: .9rem;
 }
 .parada-datos { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .parada-direccion { font-size: .85rem; color: var(--gris-600); }
@@ -252,10 +277,10 @@ body {
   padding: .45rem .6rem; border: 1px solid var(--gris-400); border-radius: 6px; width: 14rem;
 }
 
-.boton-secundario { background: var(--blanco); color: var(--azul-700); border: 1px solid var(--azul-500); }
-.boton-secundario:hover { background: var(--azul-100); }
+.boton-secundario { background: var(--blanco); color: var(--vino-700); border: 1px solid var(--vino-500); }
+.boton-secundario:hover { background: var(--vino-100); }
 .boton-plano { background: var(--gris-200); color: var(--gris-900); }
-.boton-plano:hover { background: #d5dbe5; }
+.boton-plano:hover { background: #ddd2c7; }
 .boton-peligro { background: var(--rojo-claro); color: var(--rojo); border: 1px solid #f0b8b8; }
 .boton-peligro:hover { background: #f9d9d9; }
 
@@ -277,7 +302,7 @@ body {
 .tabla .derecha { text-align: right; }
 .fila-clicable { cursor: pointer; }
 .celda-direccion { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.enlace-tabla { color: var(--azul-500); text-decoration: none; font-size: .85rem; font-weight: 600; }
+.enlace-tabla { color: var(--vino-500); text-decoration: none; font-size: .85rem; font-weight: 600; }
 .enlace-tabla:hover { text-decoration: underline; }
 .texto-alerta { color: var(--rojo); font-weight: 700; }
 
@@ -292,7 +317,7 @@ body {
 }
 
 .paginacion { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-top: 1rem; font-size: .88rem; }
-.paginacion a { color: var(--azul-500); text-decoration: none; font-weight: 600; }
+.paginacion a { color: var(--vino-500); text-decoration: none; font-weight: 600; }
 
 /* Formularios extensos */
 .rejilla-campos { display: grid; grid-template-columns: 1fr; gap: .9rem; }
@@ -317,15 +342,15 @@ body {
   width: 100%; background: var(--gris-100); font-size: .9rem;
 }
 .ayuda-formato { margin-top: 1rem; border-top: 1px solid var(--gris-200); padding-top: .8rem; }
-.ayuda-formato summary { cursor: pointer; font-weight: 600; font-size: .9rem; color: var(--azul-700); }
+.ayuda-formato summary { cursor: pointer; font-weight: 600; font-size: .9rem; color: var(--vino-700); }
 .ayuda-formato p { font-size: .86rem; color: var(--gris-600); }
 .ayuda-formato code { background: var(--gris-100); padding: .1rem .3rem; border-radius: 4px; font-size: .82rem; }
 .tarjeta-error { border-left: 4px solid var(--rojo); }
 .nota-superior { font-size: .86rem; color: var(--gris-600); margin: 0 0 .8rem; }
 .chip {
-  display: inline-block; background: var(--azul-100); color: var(--azul-700);
+  display: inline-block; background: var(--vino-100); color: var(--vino-700);
   padding: .1rem .45rem; border-radius: 4px; font-size: .75rem;
-  margin: .1rem .15rem .1rem 0; font-family: ui-monospace, Menlo, monospace;
+  margin: .1rem .15rem .1rem 0; font-family: var(--fuente-datos);
 }
 .aviso-inline { color: var(--ambar); font-size: .85rem; }
 
@@ -344,7 +369,7 @@ body {
 .etiqueta-mov-entrada { background: var(--verde-claro); color: var(--verde); }
 .etiqueta-mov-salida { background: var(--rojo-claro); color: var(--rojo); }
 .etiqueta-mov-ajuste { background: var(--ambar-claro); color: var(--ambar); }
-.etiqueta-mov-reversion { background: var(--azul-100); color: var(--azul-700); }
+.etiqueta-mov-reversion { background: var(--vino-100); color: var(--vino-700); }
 
 @media (min-width: 720px) {
   .rejilla-campos { grid-template-columns: repeat(2, 1fr); }
@@ -366,14 +391,14 @@ body {
   border-radius: 50%; color: var(--blanco); font-weight: 700; font-size: .78rem;
   border: 2px solid var(--blanco); box-shadow: 0 1px 4px rgba(0,0,0,.35);
 }
-.pin-cd { background: var(--naranja); font-size: .7rem; }
+.pin-cd { background: var(--dorado); color: var(--ciruela-900); font-size: .7rem; }
 .pin-pendiente { background: var(--gris-600); }
-.pin-asignado { background: var(--azul-500); }
+.pin-asignado { background: var(--azul); }
 .pin-en_ruta { background: var(--ambar); }
 .pin-entregado { background: var(--verde); }
 .pin-fallido, .pin-cancelado { background: var(--rojo); }
 
-.kpi-unidad { font-size: .95rem; font-weight: 600; color: var(--gris-600); margin-left: .2rem; }
+.kpi-unidad { font-family: var(--fuente-texto); font-size: .95rem; font-weight: 600; color: var(--gris-600); margin-left: .2rem; }
 
 .etiqueta-filtro { font-size: .85rem; font-weight: 600; color: var(--gris-600); }
 
@@ -381,11 +406,11 @@ body {
 
 /* Secuencia de paradas en la vista de administracion */
 .lista-paradas-admin .parada { align-items: flex-start; }
-.parada-origen { border-left-color: var(--naranja); background: var(--gris-100); }
-.parada-orden.origen { background: var(--naranja); font-size: .72rem; }
+.parada-origen { border-left-color: var(--dorado); background: var(--gris-100); }
+.parada-orden.origen { background: var(--dorado); color: var(--ciruela-900); font-size: .72rem; }
 .parada-acciones { display: flex; align-items: center; gap: .5rem; }
 .parada-acciones form { margin: 0; }
-.parada-meta a { color: var(--azul-500); text-decoration: none; }
+.parada-meta a { color: var(--vino-500); text-decoration: none; }
 .parada-meta a:hover { text-decoration: underline; }
 
 /* Leaflet dentro de tarjetas */
@@ -402,7 +427,7 @@ body {
 }
 
 .enlace-volver {
-  display: inline-block; color: var(--azul-500); text-decoration: none;
+  display: inline-block; color: var(--vino-500); text-decoration: none;
   font-size: .88rem; font-weight: 600; margin-bottom: .4rem;
 }
 .enlace-volver:hover { text-decoration: underline; }
@@ -430,7 +455,7 @@ body {
 }
 .cantidad-item {
   flex: 0 0 auto; min-width: 34px; height: 34px; display: grid; place-items: center;
-  background: var(--azul-900); color: var(--blanco); border-radius: 8px;
+  background: var(--ciruela-900); color: var(--blanco); border-radius: 8px;
   font-weight: 700; font-size: .9rem; padding: 0 .4rem;
 }
 .nombre-item { flex: 1; font-size: .9rem; }
@@ -454,18 +479,20 @@ body {
 }
 
 /* ==========================================================================
-   Paso 5 â€” Analitica y rendimiento
-   Paleta de datos validada con el verificador de la guia de visualizacion
-   (superficie #ffffff): CVD deltaE 24.7 protan, normal 33.6, contraste >= 3:1.
-   No se usa verde/rojo para distinguir series: ese par falla la separacion
-   para daltonismo (deltaE 4.1). El estado se lee por leyenda y etiqueta, no por color.
+   Paso 5 - Analitica y rendimiento
+   Paleta de datos de la marca (vino y ocre), validada con el verificador de la
+   guia de visualizacion (superficie #ffffff): CVD deltaE 18.6 deutan, normal
+   21.7, contraste 6.96:1 y 3.42:1. No se usa verde/rojo para distinguir series:
+   ese par falla la separacion para daltonismo (deltaE 4.1). El estado se lee por
+   leyenda y etiqueta, no por color. El umbral va en ciruela, no en rojo, para no
+   confundirse con el vino de la serie 1.
    ========================================================================== */
 
 :root {
-  --serie-1: #2a78d6;   /* Entregadas / magnitud */
-  --serie-2: #eb6834;   /* Fallidas */
-  --grilla: #e3e8ef;
-  --umbral: #d03b3b;
+  --serie-1: #9b3550;   /* Entregadas / magnitud */
+  --serie-2: #b8801a;   /* Fallidas */
+  --grilla: #e8e0d7;
+  --umbral: var(--ciruela-900);
 }
 
 /* Selector de rango temporal */
@@ -474,7 +501,7 @@ body {
   padding: .35rem .7rem; border-radius: 6px; text-decoration: none;
   color: var(--gris-600); font-size: .82rem; font-weight: 600;
 }
-.selector-rango a.activo { background: var(--blanco); color: var(--azul-700); box-shadow: var(--sombra); }
+.selector-rango a.activo { background: var(--blanco); color: var(--vino-700); box-shadow: var(--sombra); }
 
 .grafica-encabezado {
   display: flex; justify-content: space-between; align-items: center;
@@ -510,12 +537,12 @@ body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 .columna-dia:hover .segmento, .columna-dia:focus .segmento { filter: brightness(1.08); }
-.columna-dia:focus { outline: 2px solid var(--azul-500); outline-offset: 2px; border-radius: 4px; }
+.columna-dia:focus { outline: 2px solid var(--vino-500); outline-offset: 2px; border-radius: 4px; }
 
 /* --- Barras horizontales (rankings, una sola serie) --- */
 .grafica-barras { display: grid; gap: .55rem; }
 .fila-barra { display: grid; grid-template-columns: 130px 1fr 52px; align-items: center; gap: .6rem; }
-.fila-barra:focus { outline: 2px solid var(--azul-500); outline-offset: 3px; border-radius: 6px; }
+.fila-barra:focus { outline: 2px solid var(--vino-500); outline-offset: 3px; border-radius: 6px; }
 .etiqueta-barra {
   font-size: .82rem; color: var(--gris-900);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -533,7 +560,7 @@ body {
 
 /* Tabla alterna: la vista accesible de los mismos datos */
 .tabla-alterna { margin-top: 1rem; border-top: 1px solid var(--gris-200); padding-top: .7rem; }
-.tabla-alterna summary { cursor: pointer; font-size: .84rem; font-weight: 600; color: var(--azul-700); }
+.tabla-alterna summary { cursor: pointer; font-size: .84rem; font-weight: 600; color: var(--vino-700); }
 .tabla-alterna table { margin-top: .7rem; }
 
 .kpi-sin-dato { color: var(--gris-400); }
@@ -559,16 +586,20 @@ body {
   background: var(--gris-100); color: var(--gris-600);
 }
 .filtros-estado .chip:hover { background: var(--gris-200); }
-.filtros-estado .chip-activo { background: var(--azul-100); color: var(--azul-700); }
+.filtros-estado .chip-activo { background: var(--vino-100); color: var(--vino-700); }
 .chip-nuevo { background: var(--ambar-claro); color: var(--ambar); }
 
 /* Administracion de cuentas y directorio de clientes */
 .fila-inactiva { opacity: .55; }
 .acciones-fila { display: flex; gap: .7rem; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .acciones-fila form { display: inline; }
+/* En una celda, flex la saca del diseno de tabla y sus bordes no coinciden con
+   los de la fila: ahi se alinea a la derecha con elementos en linea. */
+td.acciones-fila { display: table-cell; text-align: right; }
+td.acciones-fila > * + * { margin-left: .7rem; }
 .boton-enlace {
   background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--azul-500); font-size: inherit; font-family: inherit; font-weight: 600;
+  color: var(--vino-500); font-size: inherit; font-family: inherit; font-weight: 600;
 }
 .boton-enlace:hover { text-decoration: underline; }
 
@@ -586,14 +617,14 @@ body {
 .asistente-boton {
   width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer;
   display: grid; place-items: center; flex-shrink: 0;
-  background: var(--azul-500); color: var(--blanco);
-  box-shadow: 0 4px 14px rgba(15, 37, 64, .3);
+  background: var(--vino-500); color: var(--blanco);
+  box-shadow: 0 4px 14px rgba(42, 31, 38, .3);
   transition: background .15s, transform .15s;
   -webkit-tap-highlight-color: transparent;
 }
-.asistente-boton:hover { background: var(--azul-700); }
+.asistente-boton:hover { background: var(--vino-700); }
 .asistente-boton:active { transform: scale(.95); }
-.asistente-boton:focus-visible { outline: 3px solid var(--naranja); outline-offset: 3px; }
+.asistente-boton:focus-visible { outline: 3px solid var(--dorado); outline-offset: 3px; }
 .asistente-boton:disabled { cursor: wait; }
 
 .asistente-icono {
@@ -664,7 +695,7 @@ body {
   vector-effect: non-scaling-stroke;
 }
 .banda { fill: transparent; }
-.banda:hover, .banda:focus { fill: rgba(15, 37, 64, .07); outline: none; }
+.banda:hover, .banda:focus { fill: rgba(42, 31, 38, .07); outline: none; }
 .grafica-lineas .eje-x { grid-column: 2; display: flex; margin-top: .4rem; }
 .grafica-lineas .eje-x span {
   flex: 1; min-width: 0; display: flex; justify-content: center;
@@ -676,16 +707,17 @@ body {
 .mapa-calor th { font-weight: 600; color: var(--gris-600); font-size: .75rem; padding: .3rem .2rem; }
 .mapa-calor th[scope=row] { text-align: left; width: 5.5rem; }
 .celda-calor {
-  background: rgba(42, 120, 214, var(--i)); color: var(--gris-900);
+  background: rgba(155, 53, 80, var(--i)); color: var(--gris-900);
   text-align: center; font-weight: 600; height: 40px; border-radius: 4px;
 }
+/* Desde intensidad 0.72 (ver _bigdata.html) el texto blanco contrasta mas que el oscuro sobre el vino. */
 .celda-calor.oscura { color: var(--blanco); }
-.celda-calor:hover, .celda-calor:focus { outline: 2px solid var(--azul-900); outline-offset: -2px; }
+.celda-calor:hover, .celda-calor:focus { outline: 2px solid var(--ciruela-900); outline-offset: -2px; }
 .celda-total, .celda-vacia { text-align: center; color: var(--gris-600); font-weight: 600; }
 .escala-calor { display: flex; align-items: center; gap: .4rem; font-size: .75rem; color: var(--gris-600); }
 .escala-rampa {
   width: 70px; height: 8px; border-radius: 4px;
-  background: linear-gradient(90deg, rgba(42, 120, 214, .1), rgba(42, 120, 214, 1));
+  background: linear-gradient(90deg, rgba(155, 53, 80, .1), rgba(155, 53, 80, 1));
 }
 .matriz .celda-calor { height: 68px; }
 .matriz .celda-calor strong { display: block; font-size: 1.1rem; line-height: 1.2; }
@@ -708,9 +740,9 @@ body {
 /* --- Clasificacion ABC: tres clases ordenadas, un solo tono --- */
 .segmentos-abc { display: flex; gap: 2px; height: 14px; margin: 1.1rem 0 .6rem; }
 .segmento-abc { flex-basis: 0; border-radius: 3px; }
-.abc-a { background: rgba(42, 120, 214, 1); }
-.abc-b { background: rgba(42, 120, 214, .55); }
-.abc-c { background: rgba(42, 120, 214, .25); }
+.abc-a { background: rgba(155, 53, 80, 1); }
+.abc-b { background: rgba(155, 53, 80, .55); }
+.abc-c { background: rgba(155, 53, 80, .25); }
 
 .metricas-modelo { grid-template-columns: repeat(2, 1fr); gap: .8rem; }
 

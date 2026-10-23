@@ -5,6 +5,11 @@
   <!-- RNF1 - Interfaz responsiva mobile-first -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block titulo %}{{ nombre_sistema }}{% endblock %}</title>
+  <!-- Fuentes servidas por la propia aplicacion (sin depender de Google Fonts):
+       se precargan las dos que usa toda pagina para evitar el cambio de letra. -->
+  <link rel="preload" href="{{ url_for('static', filename='fonts/libre-franklin-variable-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='fonts/courier-prime-700-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   <script src="{{ url_for('static', filename='js/menu.js') }}" defer></script>
   {% block cabecera %}{% endblock %}
@@ -15,8 +20,8 @@
 <header class="barra-superior">
   <div class="barra-contenido">
     <a class="marca" href="{{ url_for('principal.inicio') }}">
-      <span class="marca-icono">SG</span>
-      <span class="marca-texto">SGDS</span>
+      <span class="marca-icono">R</span>
+      <span class="marca-texto">Rutalytics</span>
     </a>
 
     <nav class="navegacion">
