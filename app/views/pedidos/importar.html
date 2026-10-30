@@ -14,7 +14,9 @@
     {{ formulario.hidden_tag() }}
     <div class="campo">
       <label for="archivo">Archivo CSV (máximo 2 MB)</label>
-      <input type="file" name="archivo" id="archivo" accept=".csv" required>
+      <input type="file" name="archivo" id="archivo" accept=".csv,text/csv" required>
+      <small class="ayuda-campo">Se revisa el contenido, no solo la extensión: un programa, un PDF o
+        cualquier archivo que no sea texto se rechaza aunque se llame .csv.</small>
     </div>
     <div class="acciones-formulario">
       <a class="boton boton-plano" href="{{ url_for('pedidos.plantilla') }}">Descargar plantilla</a>

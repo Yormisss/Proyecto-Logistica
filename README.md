@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2117 verificaciones automatizadas en 23 suites (MySQL)
+├── pruebas/               2145 verificaciones automatizadas en 24 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -466,6 +466,32 @@ Descargue la plantilla desde **Pedidos → Importar CSV → Descargar plantilla*
 Se aceptan separadores por coma, punto y coma o tabulación, y codificación UTF-8 o Latin-1.
 El sistema muestra una vista previa antes de confirmar y reporta las filas inválidas
 línea por línea, sin bloquear la carga de las filas correctas.
+
+### Archivos que no son CSV
+
+**Manda el contenido, no la extensión.** El nombre y el tipo MIME los escribe quien sube
+el archivo: renombrar un ejecutable a `.pdf` o a `.csv` no lo convierte en eso. Antes de
+guardar o procesar nada, `app/services/archivos.py` revisa la **firma** del archivo (los
+primeros bytes de cada formato) y rechaza todo lo que no sea texto:
+
+| Contenido detectado | Mensaje |
+|---|---|
+| Programa de Windows (`MZ`), Linux (ELF), macOS (Mach-O) o un script (`#!/`) | *Archivo rechazado por seguridad: «factura.pdf» no es un CSV, es un programa ejecutable de Windows (.exe o .dll). No se guardó ni se procesó.* |
+| PDF, ZIP o Excel/Word (`.xlsx`, `.docx`, `.xls`, `.doc`), RAR, 7z, gzip, PNG, JPEG, GIF | *Archivo rechazado: … es un documento PDF …* |
+| Texto en UTF-16 | Pide guardarlo como CSV UTF-8 |
+| Cualquier otro archivo con bytes nulos | *… es un archivo binario, no de texto …* |
+
+- El archivo rechazado **no se guarda** en el servidor ni llega al lector de CSV. Antes, un
+  binario se decodificaba como Latin-1 (que acepta cualquier byte) y fallaba después,
+  por las columnas.
+- Cada rechazo queda en la **Bitácora** como *Rechazar archivo*, con resultado *Error*,
+  el nombre del archivo, su tamaño, lo que se detectó y quién lo subió.
+- Sin falsos positivos con un CSV real: UTF-8 (con o sin BOM de Excel), Latin-1, o un
+  texto que empiece por `MZ` siguen entrando.
+- La revisión va **antes** de la extensión: un `.exe` renombrado a `.pdf` se rechaza por ser
+  un ejecutable, no solo por no terminar en `.csv`.
+- **Tamaño:** el CSV admite 2 MB, y toda petición está limitada a 5 MB
+  (`MAX_CONTENT_LENGTH`). Un envío mayor se corta antes de leerlo, con una página 413.
 
 ## Generación de rutas (RF3)
 
@@ -1345,7 +1371,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2117 verificaciones en 23 suites contra MySQL 8.0, todas pasando, en unos dos
+**2145 verificaciones en 24 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1387,6 +1413,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_21_sesiones_errores.py` | RNF5 · bloqueo al quinto intento, política de contraseñas (la secuencia del 1 al 15 se rechaza), sesión única en dos navegadores (también la cookie de mantener sesión), cerrar sesión en una pestaña y navegar en otra, tiempo de inactividad configurable (reducir y aumentar, también con mantener sesión), cambio de correo desde el perfil, registro de errores (página 500 con referencia, pantalla, archivo, modo desarrollo), migración `m010` | 81 |
 | `prueba_22_recuperacion.py` | RF1/RNF5 · *Olvidé mi contraseña*: la misma respuesta exista o no la cuenta, envío por su webhook con `URL_PUBLICA` (un `Host` falso no cambia el enlace), un enlace cada 5 minutos, política de contraseñas, cierre de sesiones y del bloqueo, enlace de un solo uso, alterado, caducado por otro cambio y vencido, cuentas inactivas, consola en desarrollo y pantalla sin canal | 44 |
 | `prueba_23_cifrado.py` | RNF5 · datos personales: en la base la contraseña como hash y el documento y el teléfono cifrados (IV aleatorio), lectura en claro, índice ciego (unicidad en el formulario y en la base, búsqueda exacta), columnas cifradas que rechazan comparaciones SQL, auditoría enmascarada en pantalla y por voz, otra clave, migración `m011` sobre datos en claro | 46 |
+| `prueba_24_archivos.py` | RNF5 · archivos subidos por su contenido: un ejecutable renombrado a `.pdf` y a `.csv` (Windows, Linux, macOS, script), PDF, comprimidos, imágenes, UTF-16 y binarios rechazados sin guardarse, cada rechazo en la bitácora, sin falsos positivos con CSV reales, límite de 2 MB y de 5 MB por petición (413) | 28 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus

@@ -22,6 +22,9 @@ class ConfiguracionBase:
     # cifrados los datos: con otra clave ya no se pueden leer.
     CLAVE_CIFRADO = os.getenv("CLAVE_CIFRADO", "")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # RNF5 - Tamano maximo de una peticion. El CSV de pedidos admite 2 MB; esto
+    # corta un archivo mucho mayor antes de leerlo en memoria (pagina 413).
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024
 
     # RNF5 - Tras este numero de contrasenas equivocadas seguidas, el login de
     # ese correo se rechaza durante LOGIN_BLOQUEO_SEGUNDOS (ver services/acceso.py).

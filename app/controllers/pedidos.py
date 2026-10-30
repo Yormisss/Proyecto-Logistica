@@ -26,7 +26,10 @@ from app.extensions import db
 from app.models import (
     Cliente, EstadoPedido, Pedido, Producto, Rol,
 )
-from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
+from app.services.archivos import ArchivoRechazado, exigir_texto
+from app.services.auditoria import (
+    RESULTADO_ERROR, auditar_pantalla, cambios_legibles, campos_cambiados, registrar_auditoria,
+)
 from app.services.clientes import resolver_destino
 from app.services.pedidos import (
     AVISO_RECALCULAR, campos_editables, crear_pedido, editar_pedido, validar_pedido,
@@ -380,13 +383,32 @@ def importar():
             flash("Seleccione un archivo CSV.", "error")
             return render_template("pedidos/importar.html", **contexto)
 
-        if not archivo.filename.lower().endswith(".csv"):
-            flash("El archivo debe tener extension .csv", "error")
-            return render_template("pedidos/importar.html", **contexto)
-
         contenido = archivo.read()
         if len(contenido) > 2 * 1024 * 1024:
             flash("El archivo supera el limite de 2 MB.", "error")
+            return render_template("pedidos/importar.html", **contexto)
+
+        # RNF5: manda el contenido, no la extension, que la escribe quien sube
+        # el archivo. Un ejecutable renombrado a .csv o .pdf no se guarda ni se
+        # procesa, y el intento queda en la bitacora.
+        try:
+            exigir_texto(contenido)
+        except ArchivoRechazado as rechazo:
+            nombre = archivo.filename[:120]
+            registrar_auditoria(
+                "Rechazar archivo", "pedido",
+                f"Rechazó «{nombre}» en Importar pedidos: es {rechazo.contenido}.",
+                {"archivo": nombre, "bytes": len(contenido), "contenido": rechazo.contenido},
+                resultado=RESULTADO_ERROR, avisar=False,
+            )
+            db.session.commit()
+            flash(("Archivo rechazado por seguridad: " if rechazo.es_programa else "Archivo rechazado: ")
+                  + f"«{nombre}» no es un CSV, es {rechazo.contenido}. No se guardó ni se procesó.",
+                  "error")
+            return render_template("pedidos/importar.html", **contexto)
+
+        if not archivo.filename.lower().endswith(".csv"):
+            flash("El archivo debe tener extension .csv", "error")
             return render_template("pedidos/importar.html", **contexto)
 
         try:

@@ -214,6 +214,10 @@ def _registrar_errores(app):
     def no_encontrado(error):
         return render_template("errores/404.html"), 404
 
+    @app.errorhandler(413)
+    def demasiado_grande(error):
+        return render_template("errores/413.html"), 413
+
     @app.errorhandler(500)
     def error_interno(error):
         db.session.rollback()
