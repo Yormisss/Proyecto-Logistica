@@ -20,6 +20,7 @@ from app.controllers.asistente_api.comun import (
     diferencias, dichos, entero, enumerar, fecha_iso, frase_datos_invalidos, leer_cambios, me_falta,
     resolver, texto, valor_leido,
 )
+from app.cifrado import CAMPOS_PERSONALES
 from app.extensions import db
 from app.models import Auditoria, Rol, Usuario, normalizar_texto
 from app.services.busqueda_voz import buscar_clientes, buscar_motivos, buscar_usuarios
@@ -240,6 +241,11 @@ def editar_usuario_voz():
     if not cambios:
         return responder(f"La cuenta de {usuario.nombre} ya tiene esos datos; no hay nada que cambiar.")
     leidos = dict(cambios)
+    # Cifrados en la base: el resumen (que queda en la auditoria) no los lee completos.
+    for campo in CAMPOS_PERSONALES:
+        if campo in leidos:
+            leidos[campo] = tuple(f"uno terminado en {valor[-4:]}" if valor else None
+                                  for valor in leidos[campo])
     if "rol" in leidos:
         antes, despues = leidos["rol"]
         leidos["rol"] = (etiqueta_rol(antes).lower(), etiqueta_rol(despues).lower())

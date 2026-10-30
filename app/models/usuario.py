@@ -7,8 +7,10 @@ consultan el estado de sus propias ordenes.
 """
 
 from flask_login import UserMixin
+from sqlalchemy.orm import validates
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from app.cifrado import TextoCifrado, indice_ciego
 from app.extensions import db, login_manager
 from app.tiempo import ahora
 
@@ -55,8 +57,12 @@ class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(120), nullable=False)
     correo = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    documento = db.Column(db.String(30), unique=True)
-    telefono = db.Column(db.String(30))
+    # RNF5 - Datos personales cifrados (ver app/cifrado.py). Hasta 30 caracteres
+    # en claro; el texto cifrado ocupa hasta 250. La unicidad del documento la
+    # garantiza su indice ciego, que `_indexar_documento` mantiene al dia.
+    documento = db.Column(TextoCifrado(300))
+    documento_indice = db.Column(db.String(64), unique=True, index=True)
+    telefono = db.Column(TextoCifrado(300))
     # RNF5 - Seguridad de Acceso: nunca se almacena la contrasena en texto plano.
     contrasena_hash = db.Column(db.String(255), nullable=False)
     rol = db.Column(db.String(20), nullable=False, default=Rol.CONDUCTOR, index=True)
@@ -84,6 +90,11 @@ class Usuario(UserMixin, db.Model):
     cliente = db.relationship("Cliente", back_populates="usuario", uselist=False)
 
     # --- Seguridad (RNF5) -------------------------------------------------
+    @validates("documento")
+    def _indexar_documento(self, _campo, valor):
+        self.documento_indice = indice_ciego(valor)
+        return valor
+
     def establecer_contrasena(self, contrasena, temporal=False):
         """Guarda el hash de `contrasena` y cierra las sesiones abiertas.
 

@@ -17,6 +17,10 @@ load_dotenv(BASE_DIR / ".env")
 
 class ConfiguracionBase:
     SECRET_KEY = os.getenv("SECRET_KEY", "clave-de-desarrollo-cambiar-en-produccion")
+    # RNF5 - Clave del cifrado del documento y el telefono de las cuentas (ver
+    # app/cifrado.py). Vacia = se deriva de SECRET_KEY. No se cambia una vez
+    # cifrados los datos: con otra clave ya no se pueden leer.
+    CLAVE_CIFRADO = os.getenv("CLAVE_CIFRADO", "")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # RNF5 - Tras este numero de contrasenas equivocadas seguidas, el login de

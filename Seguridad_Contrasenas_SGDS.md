@@ -170,6 +170,39 @@ HAVING COUNT(*) > 1;
 - **Consulta 3:** `sin_proteger = 0` en los 4 roles (ADMIN, DESPACHADOR, CONDUCTOR, CLIENTE).
 - **Consulta 4:** no devuelve filas, porque ningún hash se repite.
 
+### 4.1 Documento y teléfono cifrados
+
+El documento y el teléfono de cada cuenta se guardan **cifrados** con Fernet (AES-128 con
+HMAC-SHA256). A diferencia del hash de la contraseña, el cifrado sí se puede revertir, pero
+solo con la clave de la aplicación (`CLAVE_CIFRADO`, o `SECRET_KEY` si no se definió), que
+no está en la base. La aplicación los muestra en claro; la base, no.
+
+```sql
+USE logistica;
+
+-- 5. Documento y teléfono de cada usuario, tal como están en la base
+SELECT correo, rol, documento, telefono, documento_indice
+FROM usuarios
+ORDER BY rol, correo;
+
+-- 6. Cuentas con algún dato personal sin cifrar
+SELECT COUNT(*) AS en_claro
+FROM usuarios
+WHERE (documento IS NOT NULL AND documento NOT LIKE 'gAAAAA%')
+   OR (telefono  IS NOT NULL AND telefono  NOT LIKE 'gAAAAA%');
+```
+
+**Resultado esperado:**
+
+- **Consulta 5:** `documento` y `telefono` son textos largos que empiezan por `gAAAAA`, no
+  el número real. Cifrar dos veces el mismo dato da textos distintos. `documento_indice`
+  es un código de 64 caracteres (HMAC-SHA256) con el que la aplicación comprueba que el
+  documento no se repita, sin guardarlo en claro.
+- **Consulta 6:** `en_claro = 0`.
+
+En una base anterior a este cambio, `flask --app run migrar-seguridad` cifra los datos que
+estén en claro.
+
 ---
 
 ## 5. ¿Qué es un hash y para qué sirve?

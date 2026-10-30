@@ -23,6 +23,7 @@ from sqlalchemy import case, func, or_
 from wtforms import BooleanField, PasswordField, SelectField, StringField
 from wtforms.validators import DataRequired, EqualTo, Optional
 
+from app.cifrado import indice_ciego
 from app.controllers.auth import cambiar_contrasena_propia
 from app.controllers.seguridad import (
     campo_correo, es_redireccion_segura, politica_contrasena, requiere_rol,
@@ -163,7 +164,9 @@ def _filtrar_rol_y_texto(consulta):
             or_(
                 Usuario.nombre.ilike(patron),
                 Usuario.correo.ilike(patron),
-                Usuario.documento.ilike(patron),
+                # El documento esta cifrado: solo se encuentra completo, por su
+                # indice ciego (ver app/cifrado.py).
+                Usuario.documento_indice == indice_ciego(busqueda),
             )
         )
     return consulta, rol, busqueda

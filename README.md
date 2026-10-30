@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2071 verificaciones automatizadas en 22 suites (MySQL)
+├── pruebas/               2117 verificaciones automatizadas en 23 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -65,7 +65,7 @@ cp .env.example .env
 .venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
 .venv/bin/flask --app run migrar-pruebas-entrega # Pruebas de entrega de solo agregar (m007, MySQL)
 .venv/bin/flask --app run migrar-contrasenas  # Columnas de gestión de contraseñas y tabla de intentos de acceso
-.venv/bin/flask --app run migrar-seguridad    # Sesión única, cierre por inactividad y registro de errores (m010)
+.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, registro de errores (m010) y cifrado de datos personales (m011)
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -361,6 +361,33 @@ dominio. Sin ese webhook y `URL_PUBLICA`:
 | Desarrollo | El enlace se escribe en la **consola del servidor** (`Desarrollo, sin MAKE_WEBHOOK_RESTABLECIMIENTO_URL: enlace para restablecer...`) |
 | Producción | El login no ofrece la opción y `/auth/recuperar` pide acudir al administrador |
 
+### Datos personales cifrados
+
+En `usuarios`, la **contraseña** se guarda como hash PBKDF2-SHA256 (no se puede revertir), y
+el **documento** y el **teléfono** se guardan **cifrados** con Fernet (AES-128 con
+HMAC-SHA256, de la librería `cryptography`). El ORM cifra al guardar y descifra al leer
+(`TextoCifrado` en `app/cifrado.py`), así que la aplicación los muestra en claro y la base
+no. La guía `docs/seguridad/Seguridad_Contrasenas_SGDS.md` trae las consultas SQL para
+comprobarlo.
+
+- Cada valor lleva un IV aleatorio: el mismo dato cifrado dos veces da textos distintos, y
+  la base no revela ni siquiera que dos cuentas comparten un dato.
+- **Índice ciego del documento.** El texto cifrado no se puede comparar en SQL, así que
+  `documento_indice` guarda un HMAC-SHA256 del documento con otra clave. Con él se exige
+  que no se repita (también con un índice único en la base) y se busca por igualdad: en
+  *Usuarios* el documento se encuentra **completo**, no por un fragmento.
+- Una columna cifrada **rechaza toda comparación en SQL** salvo `IS NULL`: una consulta que
+  la compare por error falla con un mensaje claro, en vez de no encontrar nada en silencio.
+- **La bitácora no guarda estos datos completos**: en las acciones sobre cuentas, en
+  pantalla y por voz, quedan enmascarados (`******4567`), y el resumen que lee la voz dice
+  *"uno terminado en 4567"*. Los datos de los clientes son de empresas (NIT, teléfono de
+  contacto) y siguen visibles en su auditoría.
+- **Clave.** Las claves de cifrado y del índice se derivan con HKDF de `CLAVE_CIFRADO` o,
+  si no se define, de `SECRET_KEY`. **No la cambie una vez cifrados los datos**: con otra
+  clave no se pueden leer, y la aplicación lo dice en el error. En Render, `render.yaml`
+  la genera una sola vez.
+- El correo **no se cifra**: es el usuario con el que se inicia sesión, y el login, la
+  unicidad y la búsqueda dependen de él.
 
 ### Las cuentas no se eliminan
 
@@ -1318,7 +1345,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2071 verificaciones en 22 suites contra MySQL 8.0, todas pasando, en unos dos
+**2117 verificaciones en 23 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1359,6 +1386,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_20_bloqueo_acceso.py` | RNF5 · bloqueo tras 5 intentos fallidos en los cuatro roles: contador visible, un minuto de espera aun con la contraseña correcta, reinicio del contador, mismos mensajes para correos inexistentes, contraseña actual del perfil, columna en el apartado del admin, configuración, migración `m009` | 67 |
 | `prueba_21_sesiones_errores.py` | RNF5 · bloqueo al quinto intento, política de contraseñas (la secuencia del 1 al 15 se rechaza), sesión única en dos navegadores (también la cookie de mantener sesión), cerrar sesión en una pestaña y navegar en otra, tiempo de inactividad configurable (reducir y aumentar, también con mantener sesión), cambio de correo desde el perfil, registro de errores (página 500 con referencia, pantalla, archivo, modo desarrollo), migración `m010` | 81 |
 | `prueba_22_recuperacion.py` | RF1/RNF5 · *Olvidé mi contraseña*: la misma respuesta exista o no la cuenta, envío por su webhook con `URL_PUBLICA` (un `Host` falso no cambia el enlace), un enlace cada 5 minutos, política de contraseñas, cierre de sesiones y del bloqueo, enlace de un solo uso, alterado, caducado por otro cambio y vencido, cuentas inactivas, consola en desarrollo y pantalla sin canal | 44 |
+| `prueba_23_cifrado.py` | RNF5 · datos personales: en la base la contraseña como hash y el documento y el teléfono cifrados (IV aleatorio), lectura en claro, índice ciego (unicidad en el formulario y en la base, búsqueda exacta), columnas cifradas que rechazan comparaciones SQL, auditoría enmascarada en pantalla y por voz, otra clave, migración `m011` sobre datos en claro | 46 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
@@ -1481,7 +1509,10 @@ sesión una vez más.
 
 `migrar-seguridad` agrega a `usuarios` las columnas `token_sesion` y `sesion_actividad_en`,
 a `configuracion_negocio` la columna `minutos_inactividad` (30 en las filas existentes) y
-crea la tabla `errores_sistema`. Es idempotente. **Ejecútela antes de levantar esta
+crea la tabla `errores_sistema` (m010). Después **cifra el documento y el teléfono** que
+estén en claro (m011): amplía las columnas a `VARCHAR(300)`, agrega `documento_indice` con
+su índice único y quita el índice único viejo sobre `documento`. Corra la migración con la
+misma `CLAVE_CIFRADO` (o `SECRET_KEY`) que usará la aplicación. Es idempotente. **Ejecútela antes de levantar esta
 versión sobre una base existente**: sin las columnas nuevas, ninguna página carga.
 
 ### Conectar MySQL Workbench

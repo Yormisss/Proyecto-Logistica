@@ -29,6 +29,7 @@ import string
 
 from sqlalchemy import func, or_
 
+from app.cifrado import indice_ciego
 from app.extensions import db
 from app.models import Cliente, EstadoRuta, Rol, Ruta, Usuario
 from app.services.validacion import DatosInvalidos, Validador
@@ -155,7 +156,8 @@ def validar_usuario(datos, usuario=None, actor=None):
         if choque.first():
             v.invalido("correo", "Ya existe una cuenta con este correo.")
     if documento:
-        choque = db.session.query(Usuario).filter(Usuario.documento == documento)
+        # El documento esta cifrado: se compara su indice ciego.
+        choque = db.session.query(Usuario).filter(Usuario.documento_indice == indice_ciego(documento))
         if propio:
             choque = choque.filter(Usuario.id != propio)
         if choque.first():

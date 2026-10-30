@@ -49,6 +49,7 @@ SUITES = [
     ("prueba_20_bloqueo_acceso.py", "RNF5 · Bloqueo por intentos fallidos"),
     ("prueba_21_sesiones_errores.py", "RNF5 · Sesion unica, inactividad, correo propio y errores"),
     ("prueba_22_recuperacion.py", "RF1/RNF5 · Olvide mi contrasena"),
+    ("prueba_23_cifrado.py", "RNF5 · Cifrado de datos personales"),
 ]
 
 
