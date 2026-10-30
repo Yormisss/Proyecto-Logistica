@@ -231,6 +231,7 @@ a { color: var(--vino-500); }
 }
 .acceso-encabezado p { font-size: .84rem; color: var(--gris-600); margin: 0; }
 .acceso-pie { text-align: center; font-size: .75rem; color: var(--gris-400); margin: 1.2rem 0 0; }
+.acceso-enlace { text-align: center; font-size: .85rem; margin: 1rem 0 0; }
 
 /* ---------- Vista movil del conductor (RNF1) ---------- */
 .resumen-ruta .resumen-fila { display: flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }

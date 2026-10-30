@@ -37,6 +37,10 @@ COBERTURA = {
     # --- Fuera del alcance por voz (aprobado) ---
     "auth.login": Cobertura(excluida="Iniciar sesión: la llamada de voz parte de una sesión ya iniciada."),
     "auth.perfil": Cobertura(excluida="Cambiar la propia contraseña: las contraseñas nunca se dicen por voz."),
+    "auth.recuperar": Cobertura(excluida="Olvidé mi contraseña: es para quien no puede iniciar sesión, "
+                                         "y la llamada de voz parte de una sesión ya iniciada."),
+    "auth.restablecer": Cobertura(excluida="Definir la contraseña con el enlace del correo: las "
+                                           "contraseñas nunca se dicen por voz."),
     # Aprobadas al agregar sesion unica, inactividad y registro de errores (30/10/2026).
     "auth.cambiar_correo": Cobertura(excluida="Cambiar el propio correo pide la contraseña actual, "
                                               "y las contraseñas nunca se dicen por voz."),

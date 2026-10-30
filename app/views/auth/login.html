@@ -33,6 +33,10 @@
     <button type="submit" class="boton boton-primario boton-bloque">Ingresar</button>
   </form>
 
+  {% if recuperacion_disponible %}
+  <p class="acceso-enlace"><a href="{{ url_for('auth.recuperar') }}">¿Olvidó su contraseña?</a></p>
+  {% endif %}
+
   <p class="acceso-pie">Universidad de San Buenaventura &middot; Ingeniería de Sistemas</p>
 </div>
 {% endblock %}

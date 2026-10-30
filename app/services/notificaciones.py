@@ -19,6 +19,10 @@ que va solo a MAKE_WEBHOOK_CREDENCIALES_URL):
   por el que viaja esa contrasena: nunca se guarda en la auditoria ni en otro
   evento. Sale por su propio webhook, MAKE_WEBHOOK_CREDENCIALES_URL, para que
   no quede en el historial del escenario general; sin el, no se envia.
+* `restablecimiento_contrasena`: el enlace de "Olvide mi contrasena", al
+  correo de inicio de sesion de quien lo pidio. Quien tiene el enlace cambia
+  la contrasena, asi que tambien va por su propio webhook,
+  MAKE_WEBHOOK_RESTABLECIMIENTO_URL (ver app/services/recuperacion.py).
 
 Todo evento lleva `hora` ("2026-10-13 14:05") y `fecha_hora` en ISO 8601 con
 segundos y el desplazamiento de Bogota ("2026-10-13T14:05:09-05:00").
@@ -56,6 +60,7 @@ TIPO_STOCK_BAJO = "stock_bajo"
 TIPO_SOLICITUD_CONTACTO = "solicitud_contacto"
 TIPO_ACCION_ASISTENTE = "accion_asistente"
 TIPO_CREDENCIAL_USUARIO = "credencial_usuario"
+TIPO_RESTABLECIMIENTO_CONTRASENA = "restablecimiento_contrasena"
 
 ORIGEN_PANTALLA = "pantalla"
 ORIGEN_VOZ = "voz"
@@ -276,6 +281,27 @@ def aviso_credencial_usuario(usuario, contrasena, accion, creado_por):
         **_marca(),
         "correo_destino": usuario.correo,
     }, datos_actor(creado_por), clave_url="MAKE_WEBHOOK_CREDENCIALES_URL")
+
+
+def restablecimiento_configurado():
+    """Si hay webhook para enviar el enlace de "Olvide mi contrasena"."""
+    return bool((current_app.config.get("MAKE_WEBHOOK_RESTABLECIMIENTO_URL") or "").strip())
+
+
+def aviso_restablecimiento(usuario, enlace, minutos):
+    """Envia al usuario el enlace para restablecer su contrasena.
+
+    Como `credencial_usuario`, el enlace viaja solo aqui: no se guarda en la
+    auditoria ni en otro evento. Lo pidio la propia persona, que es el actor.
+    """
+    encolar_evento(TIPO_RESTABLECIMIENTO_CONTRASENA, {
+        "nombre": usuario.nombre,
+        "correo": usuario.correo,
+        "enlace": enlace,
+        "vence_en_minutos": minutos,
+        **_marca(),
+        "correo_destino": usuario.correo,
+    }, datos_actor(usuario), clave_url="MAKE_WEBHOOK_RESTABLECIMIENTO_URL")
 
 
 def _enviar(url, cabeceras, datos):

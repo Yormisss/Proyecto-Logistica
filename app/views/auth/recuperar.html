@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block titulo %}Olvidé mi contraseña | {{ nombre_sistema }}{% endblock %}
+{% block clase_body %}pagina-acceso{% endblock %}
+
+{% block contenido %}
+<div class="acceso-panel">
+  <div class="acceso-encabezado">
+    <span class="marca-icono grande">R</span>
+    <h1>Olvidé mi contraseña</h1>
+    {% if formulario %}
+    <p>Escriba el correo con el que inicia sesión y le enviaremos un enlace para definir una contraseña nueva.</p>
+    {% endif %}
+  </div>
+
+  {% if formulario %}
+  <form method="post" class="formulario" novalidate>
+    {{ formulario.hidden_tag() }}
+    <div class="campo">
+      {{ formulario.correo.label }}
+      {{ formulario.correo(placeholder="usuario@empresa.com", autocomplete="username", autofocus=true) }}
+      {% for error in formulario.correo.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
+    </div>
+    <button type="submit" class="boton boton-primario boton-bloque">Enviar enlace</button>
+  </form>
+  {% else %}
+  <div class="alerta alerta-advertencia">
+    La recuperación por correo no está habilitada. Pida al administrador que restablezca su contraseña.
+  </div>
+  {% endif %}
+
+  <p class="acceso-enlace"><a href="{{ url_for('auth.login') }}">Volver a iniciar sesión</a></p>
+</div>
+{% endblock %}

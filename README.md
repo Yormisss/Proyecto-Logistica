@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2023 verificaciones automatizadas en 21 suites (MySQL)
+├── pruebas/               2071 verificaciones automatizadas en 22 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -330,6 +330,37 @@ pasa por la misma lista blanca del login, no puede ser el de otra cuenta y exige
 contraseña actual. La sesión sigue abierta, y el cambio queda en la bitácora como
 *Cambiar correo propio*. Una cuenta con contraseña temporal primero debe definir la suya.
 
+### Olvidé mi contraseña
+
+El login ofrece **¿Olvidó su contraseña?** (`/auth/recuperar`). La persona escribe su
+correo y recibe un enlace para definir una contraseña nueva, con la misma política de
+siempre. La lógica está en `app/services/recuperacion.py`.
+
+- **Pedir el enlace no cambia nada.** Solo quien abre el correo cambia la contraseña: nadie
+  deja a otro sin acceso con solo escribir su correo.
+- **No revela qué cuentas existen.** La pantalla responde lo mismo para un correo real, uno
+  inexistente o una cuenta inactiva, y solo la cuenta activa recibe el enlace.
+- **El enlace vence a los 30 minutos y es de un solo uso.** Es un token firmado con
+  `SECRET_KEY` que lleva la `version_credencial` de la cuenta: al restablecer la contraseña
+  la versión aumenta y el mismo enlace deja de servir. También caduca si la contraseña
+  cambió por otra vía después de pedirlo. No se guarda en ninguna tabla.
+- Se envía como máximo **un enlace por cuenta cada 5 minutos**.
+- Al restablecerla se **cierran las sesiones abiertas** de la cuenta y se **levanta el
+  bloqueo** por intentos fallidos: quien abrió el correo demostró ser el dueño.
+- La solicitud y el cambio quedan en la bitácora (*Solicitar restablecimiento de
+  contraseña*, *Restablecer contraseña por correo*), nunca con el enlace.
+
+**Entrega del enlace.** Va al correo de la cuenta por su propio webhook de Make,
+`MAKE_WEBHOOK_RESTABLECIMIENTO_URL` (ver el [escenario de restablecimiento](#escenario-de-restablecimiento-de-contraseña)),
+y se arma con `URL_PUBLICA`, **nunca con el `Host` de la petición**: ese lo escribe el
+cliente, y un atacante podría hacer llegar a la víctima un enlace válido hacia su propio
+dominio. Sin ese webhook y `URL_PUBLICA`:
+
+| Entorno | Comportamiento |
+|---|---|
+| Desarrollo | El enlace se escribe en la **consola del servidor** (`Desarrollo, sin MAKE_WEBHOOK_RESTABLECIMIENTO_URL: enlace para restablecer...`) |
+| Producción | El login no ofrece la opción y `/auth/recuperar` pide acudir al administrador |
+
 
 ### Las cuentas no se eliminan
 
@@ -590,6 +621,7 @@ sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_rete
 |---|---|---|
 | Todos | Iniciar y cerrar sesión, cambiar la propia contraseña, el botón que abre la llamada | La llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
 | Todos | Cambiar el propio correo desde *Mi perfil* | Pide la contraseña actual, que nunca se dice por voz |
+| Todos | *Olvidé mi contraseña* y el enlace para restablecerla | Son para quien no puede iniciar sesión, y la llamada parte de una sesión iniciada |
 | Gestor y admin | Importar pedidos desde CSV | Exige subir un archivo; no tiene equivalente hablado |
 | Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
 | Admin | *Provocar un error* en la pantalla de errores | Es una prueba del registro de errores, solo de pantalla |
@@ -819,6 +851,7 @@ correspondientes, la aplicación funciona igual y no sale nada.
 | `MAKE_WEBHOOK_URL` | URL del *Custom webhook* que recibe los avisos | No se envía ningún aviso |
 | `MAKE_WEBHOOK_KEY` | API key de los webhooks; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
 | `MAKE_WEBHOOK_CREDENCIALES_URL` | URL del webhook **aparte** que recibe solo `credencial_usuario` | No se envían contraseñas, y crear o restablecer cuentas **por voz** se rechaza en el resumen (en pantalla funciona igual) |
+| `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` | URL del webhook **aparte** que recibe solo `restablecimiento_contrasena` (requiere `URL_PUBLICA`) | En producción no se ofrece *Olvidé mi contraseña*; en desarrollo el enlace sale en la consola del servidor |
 | `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
 | `URL_PUBLICA` | Dirección de acceso que lleva `credencial_usuario` (`url_acceso`) | `url_acceso` va vacía |
 | `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario y la auditoría | Ambos endpoints responden **404** |
@@ -1006,6 +1039,19 @@ acceso restringido y sin historial del contenido:
 
 Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, Gaby no ofrece crear ni restablecer cuentas por voz:
 responde, ya en el resumen, que se hace en pantalla.
+
+### Escenario de restablecimiento de contraseña
+
+`restablecimiento_contrasena` lleva el enlace de *Olvidé mi contraseña*, y quien lo tiene
+cambia la contraseña. Va por su propio webhook, aparte del de credenciales, para no
+alterar ese escenario:
+
+1. Cree un escenario **separado** con **Webhooks → Custom webhook** y copie su URL en
+   `MAKE_WEBHOOK_RESTABLECIMIENTO_URL`. Defina también `URL_PUBLICA`: sin ella no se envía.
+2. Active **"Data is confidential"**, como en el de credenciales.
+3. Un único módulo de correo para `{{correo_destino}}` con `{{nombre}}`, el enlace
+   `{{enlace}}` y su vigencia, `{{vence_en_minutos}}` minutos. Un texto como *"Si no lo
+   pidió, ignore este correo: su contraseña no cambia"*.
 
 ### Escenario 2: resumen diario programado
 
@@ -1272,7 +1318,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2023 verificaciones en 21 suites contra MySQL 8.0, todas pasando, en unos dos
+**2071 verificaciones en 22 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1306,12 +1352,13 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 91 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 306 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 310 |
 | `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración (incluido el tiempo de inactividad) y bitácora (admin); resúmenes, rechazos y auditoría | 102 |
 | `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba, con la observación dictada | 82 |
 | `prueba_19_contrasenas.py` | RF1/RNF5 · apartado de contraseñas: acceso solo del admin, sin hash ni contraseña en la página, asignar, generar temporal, exigir cambio (uno y en bloque), cambio obligatorio en el perfil, cierre de sesiones abiertas, hash fuera de política, reglas por rol (cliente y otros administradores fuera de su alcance, la propia con la actual), migración `m008` | 153 |
 | `prueba_20_bloqueo_acceso.py` | RNF5 · bloqueo tras 5 intentos fallidos en los cuatro roles: contador visible, un minuto de espera aun con la contraseña correcta, reinicio del contador, mismos mensajes para correos inexistentes, contraseña actual del perfil, columna en el apartado del admin, configuración, migración `m009` | 67 |
 | `prueba_21_sesiones_errores.py` | RNF5 · bloqueo al quinto intento, política de contraseñas (la secuencia del 1 al 15 se rechaza), sesión única en dos navegadores (también la cookie de mantener sesión), cerrar sesión en una pestaña y navegar en otra, tiempo de inactividad configurable (reducir y aumentar, también con mantener sesión), cambio de correo desde el perfil, registro de errores (página 500 con referencia, pantalla, archivo, modo desarrollo), migración `m010` | 81 |
+| `prueba_22_recuperacion.py` | RF1/RNF5 · *Olvidé mi contraseña*: la misma respuesta exista o no la cuenta, envío por su webhook con `URL_PUBLICA` (un `Host` falso no cambia el enlace), un enlace cada 5 minutos, política de contraseñas, cierre de sesiones y del bloqueo, enlace de un solo uso, alterado, caducado por otro cambio y vencido, cuentas inactivas, consola en desarrollo y pantalla sin canal | 44 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus

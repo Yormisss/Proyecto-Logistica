@@ -1,24 +1,34 @@
 """Controlador de autenticacion - RF1 Gestion de Usuarios y Roles."""
 
-from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
+from flask import (
+    Blueprint, flash, g, make_response, redirect, render_template, request, session, url_for,
+)
 from flask_login import current_user, login_required, login_user, logout_user
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, PasswordField
-from wtforms.validators import DataRequired
+from wtforms.validators import DataRequired, EqualTo
 
 from app.controllers.seguridad import (
     campo_correo, destino_por_rol, es_redireccion_segura, politica_contrasena,
 )
 from app.extensions import db
 from app.models import Usuario
-from app.services import acceso, sesiones
+from app.services import acceso, recuperacion, sesiones
 from app.services.auditoria import registrar_auditoria
 from app.services.configuracion import minutos_inactividad, texto_minutos
 
 auth_bp = Blueprint("auth", __name__)
 
 # Lo unico que puede hacer una sesion con contrasena temporal: cambiarla o salir.
-PERMITIDAS_CON_TEMPORAL = {"auth.perfil", "auth.logout", "auth.estado_sesion", "static"}
+PERMITIDAS_CON_TEMPORAL = {"auth.perfil", "auth.logout", "auth.estado_sesion", "auth.restablecer",
+                           "static"}
+
+# La misma respuesta exista o no la cuenta (ver app/services/recuperacion.py).
+MENSAJE_RECUPERACION = (
+    f"Si el correo pertenece a una cuenta activa, le enviamos un enlace para restablecer la "
+    f"contraseña. Vence en {recuperacion.VIGENCIA_MINUTOS} minutos. Si no le llega, revise el "
+    f"correo no deseado o vuelva a pedirlo en {recuperacion.ESPERA_MINUTOS} minutos."
+)
 
 # Peticiones que no cuentan como actividad: el aviso de inactividad pregunta
 # cuanto le queda a la sesion sin alargarla.
@@ -37,6 +47,22 @@ class FormularioCambioContrasena(FlaskForm):
     contrasena_actual = PasswordField("Contraseña actual", validators=[DataRequired()])
     contrasena_nueva = PasswordField(
         "Nueva contrasena", validators=[DataRequired(), politica_contrasena],
+    )
+
+
+class FormularioRecuperar(FlaskForm):
+    correo = campo_correo(obligatorio="Ingrese su correo.")
+
+
+class FormularioRestablecer(FlaskForm):
+    contrasena = PasswordField(
+        "Nueva contraseña",
+        validators=[DataRequired("Indique la contrasena."), politica_contrasena],
+    )
+    confirmacion = PasswordField(
+        "Confirmar contraseña",
+        validators=[DataRequired("Repita la contrasena."),
+                    EqualTo("contrasena", message="Las contrasenas no coinciden.")],
     )
 
 
@@ -115,6 +141,11 @@ def cambiar_correo_propio(usuario, actual, nuevo):
     return None
 
 
+def _pantalla_login(formulario):
+    return render_template("auth/login.html", formulario=formulario,
+                           recuperacion_disponible=recuperacion.disponible())
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -129,7 +160,7 @@ def login():
         espera = acceso.segundos_bloqueo(correo)
         if espera:
             flash(acceso.mensaje_bloqueo(espera), "error")
-            return render_template("auth/login.html", formulario=formulario)
+            return _pantalla_login(formulario)
 
         usuario = db.session.query(Usuario).filter_by(correo=correo).first()
 
@@ -142,13 +173,13 @@ def login():
             else:
                 flash(acceso.mensaje_intento(
                     "Credenciales invalidas. Verifique sus datos.", fallidos), "error")
-            return render_template("auth/login.html", formulario=formulario)
+            return _pantalla_login(formulario)
 
         acceso.registrar_exito(correo)
 
         if not usuario.activo:
             flash("Su cuenta se encuentra inactiva. Contacte al administrador.", "error")
-            return render_template("auth/login.html", formulario=formulario)
+            return _pantalla_login(formulario)
 
         # RNF5 - Sesion unica: el token nuevo cierra la sesion de otro navegador.
         sesiones.iniciar(usuario)
@@ -165,7 +196,7 @@ def login():
             return redirect(siguiente)
         return redirect(destino_por_rol(usuario))
 
-    return render_template("auth/login.html", formulario=formulario)
+    return _pantalla_login(formulario)
 
 
 @auth_bp.before_app_request
@@ -232,6 +263,42 @@ def logout():
     logout_user()
     flash("Sesion cerrada correctamente.", "exito")
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/recuperar", methods=["GET", "POST"])
+def recuperar():
+    """Olvide mi contrasena: pide el correo y envia el enlace para restablecerla."""
+    if current_user.is_authenticated:
+        return redirect(url_for("auth.perfil"))
+    if not recuperacion.disponible():
+        return render_template("auth/recuperar.html", formulario=None)
+
+    formulario = FormularioRecuperar()
+    if formulario.validate_on_submit():
+        recuperacion.solicitar(formulario.correo.data.strip().lower())
+        flash(MENSAJE_RECUPERACION, "exito")
+        return redirect(url_for("auth.login"))
+    return render_template("auth/recuperar.html", formulario=formulario)
+
+
+@auth_bp.route("/restablecer/<token>", methods=["GET", "POST"])
+def restablecer(token):
+    """Define la contrasena nueva con el enlace del correo."""
+    usuario = recuperacion.usuario_del_token(token)
+    formulario = FormularioRestablecer() if usuario is not None else None
+    if formulario is not None and formulario.validate_on_submit():
+        error = recuperacion.restablecer(usuario, formulario.contrasena.data)
+        if error:
+            flash(error, "error")
+        else:
+            flash("Contrasena actualizada. Inicie sesion con la nueva.", "exito")
+            return redirect(url_for("auth.login"))
+
+    respuesta = make_response(render_template("auth/restablecer.html", formulario=formulario),
+                              200 if usuario is not None else 400)
+    # El token va en la URL: que no salga en el Referer hacia ningun otro sitio.
+    respuesta.headers["Referrer-Policy"] = "no-referrer"
+    return respuesta
 
 
 @auth_bp.route("/perfil", methods=["GET", "POST"])
