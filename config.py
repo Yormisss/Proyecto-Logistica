@@ -21,7 +21,7 @@ class ConfiguracionBase:
 
     # RNF5 - Tras este numero de contrasenas equivocadas seguidas, el login de
     # ese correo se rechaza durante LOGIN_BLOQUEO_SEGUNDOS (ver services/acceso.py).
-    LOGIN_MAX_INTENTOS = 6
+    LOGIN_MAX_INTENTOS = 5
     LOGIN_BLOQUEO_SEGUNDOS = 60
 
     # RF3 - Generacion de rutas: proveedor de geolocalizacion y su clave.

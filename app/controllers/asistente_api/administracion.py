@@ -24,8 +24,9 @@ from app.extensions import db
 from app.models import Auditoria, Rol, Usuario, normalizar_texto
 from app.services.busqueda_voz import buscar_clientes, buscar_motivos, buscar_usuarios
 from app.services.configuracion import (
-    agregar_motivo, cambiar_estado_motivo, catalogo, centro_distribucion, editar_centro, renombrar_motivo,
-    validar_agregar_motivo, validar_cambio_estado_motivo, validar_centro, validar_renombrar_motivo,
+    agregar_motivo, cambiar_estado_motivo, catalogo, centro_distribucion, editar_centro,
+    editar_inactividad, minutos_inactividad, renombrar_motivo, texto_minutos, validar_agregar_motivo,
+    validar_cambio_estado_motivo, validar_centro, validar_inactividad, validar_renombrar_motivo,
 )
 from app.services.notificaciones import (
     ACCION_CREACION, ACCION_RESTABLECIMIENTO, aviso_credencial_usuario, credenciales_configuradas,
@@ -331,8 +332,9 @@ def restablecer_contrasena_voz():
 
 configuracion = funcion_agrupada(
     ESPACIO, "configuracion", roles=ROLES, entidad="configuracion",
-    descripcion="Configuracion del negocio: el centro de distribucion (origen de las rutas) y el "
-                "catalogo de motivos de entrega fallida. 'Otro' no se renombra ni se desactiva.",
+    descripcion="Configuracion del negocio: el centro de distribucion (origen de las rutas), el "
+                "catalogo de motivos de entrega fallida y los minutos sin actividad tras los que se "
+                "cierra una sesion. 'Otro' no se renombra ni se desactiva.",
     parametros={
         "nombre_centro": {"type": "string", "description": "editar-centro: nombre del centro."},
         "latitud": {"type": "number", "description": "editar-centro: latitud del centro."},
@@ -341,6 +343,8 @@ configuracion = funcion_agrupada(
                    "description": "agregar-motivo: el motivo nuevo. renombrar, activar y desactivar: el "
                                   "motivo existente."},
         "nuevo_nombre": {"type": "string", "description": "renombrar-motivo: el nombre nuevo."},
+        "minutos": {"type": "integer",
+                    "description": "editar-inactividad: minutos sin actividad, de 1 a 480."},
     },
 )
 
@@ -354,7 +358,8 @@ def _motivo():
 
 
 @configuracion("consultar", "Consultar configuración",
-               "el centro de distribucion y los motivos de fallo activos y desactivados", modifica=False)
+               "el centro de distribucion, los motivos de fallo activos y desactivados y el tiempo "
+               "de inactividad de las sesiones", modifica=False)
 def consultar_configuracion():
     centro = centro_distribucion()
     motivos = catalogo(incluir_inactivos=True)
@@ -364,6 +369,7 @@ def consultar_configuracion():
         f"El centro de distribución es {centro['nombre']}, en latitud {valor_leido(centro['latitud'])} y "
         f"longitud {valor_leido(centro['longitud'])}. Motivos de fallo activos: {enumerar(activos)}."
         + (f" Desactivados: {enumerar(inactivos)}." if inactivos else "")
+        + f" Las sesiones se cierran tras {texto_minutos(minutos_inactividad())} sin actividad."
     )
 
 
@@ -397,6 +403,30 @@ def editar_centro_voz():
         return _no_se_pudo(error)
     db.session.commit()
     return responder("Listo, actualicé el centro de distribución.")
+
+
+@configuracion("editar-inactividad", "Editar tiempo de inactividad",
+               "cambia los minutos sin actividad tras los que se cierra una sesion; requiere minutos")
+def editar_inactividad_voz():
+    if not dichos("minutos"):
+        return responder(me_falta(["los minutos sin actividad"]))
+    actual = minutos_inactividad()
+    try:
+        minutos = validar_inactividad(g.argumentos["minutos"])
+    except DatosInvalidos as error:
+        return responder(frase_datos_invalidos(error))
+    pendiente = exigir_confirmacion(
+        f"Voy a cambiar el cierre de sesión por inactividad de {texto_minutos(actual)} a "
+        f"{texto_minutos(minutos)}. Aplica desde la siguiente acción de cada sesión abierta."
+    )
+    if pendiente:
+        return pendiente
+    try:
+        editar_inactividad(minutos, g.usuario.id)
+    except DatosInvalidos as error:
+        return _no_se_pudo(error)
+    db.session.commit()
+    return responder(f"Listo, las sesiones se cerrarán tras {texto_minutos(minutos)} sin actividad.")
 
 
 @configuracion("agregar-motivo", "Agregar motivo de fallo", "agrega un motivo al catalogo; requiere motivo")

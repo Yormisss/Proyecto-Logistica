@@ -112,7 +112,7 @@
         {% for e in formulario.contrasena.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
         <small class="ayuda-campo">
           Si la deja vacía, el sistema genera una contraseña temporal y la muestra una
-          sola vez para que la entregue por un canal aparte. Mínimo {{ longitud_minima }} caracteres.
+          sola vez para que la entregue por un canal aparte. {{ politica_contrasena }}
         </small>
       </div>
       <div class="campo campo-ancho">

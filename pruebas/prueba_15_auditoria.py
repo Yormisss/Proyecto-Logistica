@@ -251,7 +251,7 @@ check(total_registros() == antes, "confirmar algo distinto de lo resumido no eje
 
 print("\n== 4. Usuarios en pantalla ==")
 admin_web = sesion("admin@sgds.com", "Admin123*")
-CLAVE_NUEVA = "ClaveSecreta2026"
+CLAVE_NUEVA = "ClaveSecreta2026*"
 inicio = len(envios_make)
 r = admin_web.post("/admin/usuarios/nuevo", data={
     "csrf_token": token(admin_web, "/admin/usuarios/nuevo"), "nombre": "Lucia Herrera",
@@ -272,7 +272,7 @@ if r:
 r = admin_web.post(f"/admin/usuarios/{lucia_id}/editar", data={
     "csrf_token": token(admin_web, f"/admin/usuarios/{lucia_id}/editar"), "nombre": "Lucia Herrera Gil",
     "correo": "lucia.herrera@sgds.com", "rol": Rol.CONDUCTOR, "cliente_id": "0",
-    "contrasena": "OtraClave2026", "activo": "y"})
+    "contrasena": "OtraClave2026*", "activo": "y"})
 r = registros(accion="Editar usuario")
 check(len(r) == 1 and r[0].detalle_dict.get("nombre") == ["Lucia Herrera", "Lucia Herrera Gil"]
       and "contrasena" not in r[0].detalle_dict,
@@ -283,10 +283,10 @@ with app.app_context():
 
 r = admin_web.post(f"/admin/usuarios/{lucia_id}/contrasena", data={
     "csrf_token": token(admin_web, f"/admin/usuarios/{lucia_id}/contrasena"),
-    "contrasena": "OtraClave2026", "confirmacion": "OtraClave2026", "exigir_cambio": "y"})
+    "contrasena": "OtraClave2026*", "confirmacion": "OtraClave2026*", "exigir_cambio": "y"})
 r = registros(accion="Asignar contraseña")
 check(len(r) == 1 and r[0].detalle_dict == {"correo": "lucia.herrera@sgds.com", "temporal": True}
-      and "OtraClave2026" not in (r[0].detalle or "") + r[0].resumen,
+      and "OtraClave2026*" not in (r[0].detalle or "") + r[0].resumen,
       f"asignarla en el apartado de contrasenas queda en la auditoria, sin ella {r[0].detalle_dict if r else None}")
 
 html = admin_web.get("/admin/usuarios/").data.decode()
@@ -305,7 +305,7 @@ check(len(r) == 1 and r[0].detalle_dict.get("activo") == [True, False], "desacti
 todo = json.dumps(envios_make[inicio:], ensure_ascii=False)
 notificaciones.esperar_envios()
 todo = json.dumps(envios_make[inicio:], ensure_ascii=False)
-check(CLAVE_NUEVA not in todo and "OtraClave2026" not in todo
+check(CLAVE_NUEVA not in todo and "OtraClave2026*" not in todo
       and (temporal is None or temporal.group(1) not in todo),
       "ninguna contrasena de pantalla viaja en un evento")
 check(not eventos("credencial_usuario", inicio),

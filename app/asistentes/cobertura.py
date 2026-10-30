@@ -37,6 +37,11 @@ COBERTURA = {
     # --- Fuera del alcance por voz (aprobado) ---
     "auth.login": Cobertura(excluida="Iniciar sesión: la llamada de voz parte de una sesión ya iniciada."),
     "auth.perfil": Cobertura(excluida="Cambiar la propia contraseña: las contraseñas nunca se dicen por voz."),
+    # Aprobadas al agregar sesion unica, inactividad y registro de errores (30/10/2026).
+    "auth.cambiar_correo": Cobertura(excluida="Cambiar el propio correo pide la contraseña actual, "
+                                              "y las contraseñas nunca se dicen por voz."),
+    "errores.probar": Cobertura(excluida="Provocar un error a propósito es una prueba del registro "
+                                         "de errores, solo de pantalla."),
     "asistente.llamada": Cobertura(excluida="Es el botón que inicia la propia llamada de voz."),
     "pedidos.importar": Cobertura(excluida=IMPORTAR_CSV),
     "pedidos.confirmar_importacion": Cobertura(excluida=IMPORTAR_CSV),
@@ -94,6 +99,7 @@ COBERTURA = {
 
     # --- Configuracion del negocio (administrador) ---
     "configuracion.centro": Cobertura(voz=("admin/configuracion:editar-centro",)),
+    "configuracion.sesion": Cobertura(voz=("admin/configuracion:editar-inactividad",)),
     "configuracion.agregar_motivo": Cobertura(voz=("admin/configuracion:agregar-motivo",)),
     "configuracion.renombrar_motivo": Cobertura(voz=("admin/configuracion:renombrar-motivo",)),
     "configuracion.alternar_motivo": Cobertura(voz=("admin/configuracion:activar-motivo",

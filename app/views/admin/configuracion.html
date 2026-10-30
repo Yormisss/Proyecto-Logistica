@@ -34,6 +34,25 @@
 </section>
 
 <section class="tarjeta">
+  <h2 class="tarjeta-titulo">Sesión</h2>
+  <p class="nota-pie">
+    Una sesión sin actividad durante este tiempo se cierra y pide iniciar sesión de nuevo, aunque
+    se haya marcado «Mantener sesión iniciada». El cambio aplica desde la siguiente petición de cada
+    sesión abierta.
+  </p>
+  <form method="post" action="{{ url_for('configuracion.sesion') }}" class="formulario">
+    {{ formulario_sesion.hidden_tag() }}
+    <div class="campo">
+      {{ formulario_sesion.minutos_inactividad.label }}
+      {{ formulario_sesion.minutos_inactividad(type="number", min=1, max=minutos_maximo, step=1,
+                                               inputmode="numeric", required=True) }}
+      <small>Entre 1 y {{ minutos_maximo }} minutos.</small>
+    </div>
+    <button type="submit" class="boton boton-primario">Guardar tiempo</button>
+  </form>
+</section>
+
+<section class="tarjeta">
   <h2 class="tarjeta-titulo">Motivos de entrega fallida</h2>
   <p class="nota-pie">
     El conductor elige uno de los motivos activos. «Otro» siempre existe y obliga a escribir el

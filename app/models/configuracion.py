@@ -13,6 +13,9 @@ from app.tiempo import ahora
 # elegirlo hay que escribir el motivo real.
 NOMBRE_OTRO = "Otro"
 
+# Tiempo de inactividad de una base nueva o anterior a la columna (m010).
+MINUTOS_INACTIVIDAD_INICIAL = 30
+
 
 class MotivoFallo(db.Model):
     """Motivo de entrega fallida del catalogo.
@@ -40,10 +43,10 @@ class MotivoFallo(db.Model):
 
 
 class ConfiguracionNegocio(db.Model):
-    """Fila unica con el centro de distribucion.
+    """Fila unica con el centro de distribucion y el tiempo de inactividad.
 
-    La primera vez se toma de CD_NOMBRE, CD_LAT y CD_LNG del .env; desde que
-    existe la fila, manda la tabla.
+    La primera vez el centro se toma de CD_NOMBRE, CD_LAT y CD_LNG del .env;
+    desde que existe la fila, manda la tabla.
     """
 
     __tablename__ = "configuracion_negocio"
@@ -54,6 +57,11 @@ class ConfiguracionNegocio(db.Model):
     # coordenadas a unos 7 digitos (4.6482837 se guardaria como 4.64828).
     cd_latitud = db.Column(db.Double, nullable=False)
     cd_longitud = db.Column(db.Double, nullable=False)
+    # RNF5 - Minutos sin peticiones tras los que se cierra una sesion (ver
+    # app/services/sesiones.py).
+    minutos_inactividad = db.Column(
+        db.Integer, nullable=False, default=MINUTOS_INACTIVIDAD_INICIAL
+    )
     actualizado_en = db.Column(db.DateTime, nullable=False, default=ahora)
     actualizado_por_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"))
 

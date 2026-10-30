@@ -6,8 +6,9 @@ si mismo, y siempre queda al menos un administrador activo. El correo de
 inicio de sesion y la contrasena solo los maneja el admin en pantalla; por voz
 nunca se dicen ni se aceptan (el asistente no los envia a estas funciones).
 
-Contrasenas (RNF5, iguales en pantalla y por voz): la que asigna o genera el
-administrador es temporal y se debe reemplazar al iniciar sesion. Solo
+Contrasenas (RNF5, iguales en pantalla y por voz): toda contrasena escrita
+cumple `error_politica` (largo y clases de caracteres), y la que asigna o
+genera el administrador es temporal y se debe reemplazar al iniciar sesion. Solo
 administra las de gestores y conductores (`rechazo_contrasena`); el cliente y
 cada administrador cambian la suya, con la actual. Editar una cuenta no toca
 la contrasena: tiene su propio apartado (Usuarios > Contrasenas).
@@ -35,14 +36,41 @@ from app.services.validacion import DatosInvalidos, Validador
 LONGITUD_MINIMA = 8
 CAMPOS_USUARIO = ("nombre", "correo", "documento", "telefono", "rol", "activo")
 
+# Politica de contrasenas: ademas del largo, al menos un caracter de cada
+# clase. Asi no pasan secuencias como "123456789101112131415" o "abcdefgh".
+CLASES_CONTRASENA = (
+    (str.isupper, "una mayúscula"),
+    (str.islower, "una minúscula"),
+    (str.isdigit, "un número"),
+    (lambda c: not c.isalnum(), "un símbolo"),
+)
+POLITICA_CONTRASENA = (f"Mínimo {LONGITUD_MINIMA} caracteres, con al menos una mayúscula, "
+                       "una minúscula, un número y un símbolo.")
+
+
+def error_politica(contrasena):
+    """Lo que le falta a `contrasena` para cumplir la politica, o None si cumple."""
+    contrasena = contrasena or ""
+    faltan = [nombre for cumple, nombre in CLASES_CONTRASENA
+              if not any(cumple(c) for c in contrasena)]
+    partes = []
+    if len(contrasena) < LONGITUD_MINIMA:
+        partes.append(f"mínimo {LONGITUD_MINIMA} caracteres")
+    if faltan:
+        partes.append("al menos " + (", ".join(faltan[:-1]) + " y " + faltan[-1]
+                                     if len(faltan) > 1 else faltan[0]))
+    if not partes:
+        return None
+    return "La contraseña debe tener " + " y ".join(partes) + "."
+
 
 def generar_contrasena(longitud=12):
     """Contrasena aleatoria para una cuenta: `secrets`, porque es una credencial."""
     alfabeto = string.ascii_letters + string.digits + "!*-_"
     while True:
         contrasena = "".join(secrets.choice(alfabeto) for _ in range(longitud))
-        # Con letras y numeros, para que tambien sirva como contrasena fija.
-        if any(c.isalpha() for c in contrasena) and any(c.isdigit() for c in contrasena):
+        # Que cumpla la politica, para que tambien sirva como contrasena fija.
+        if error_politica(contrasena) is None:
             return contrasena
 
 
@@ -116,8 +144,8 @@ def validar_usuario(datos, usuario=None, actor=None):
         v.invalido("rol", "El rol seleccionado no es valido.")
     activo = _booleano(datos.get("activo"))
     contrasena = datos.get("contrasena") or None
-    if contrasena is not None and len(contrasena) < LONGITUD_MINIMA:
-        v.invalido("contrasena", f"Minimo {LONGITUD_MINIMA} caracteres.")
+    if contrasena is not None and (error := error_politica(contrasena)):
+        v.invalido("contrasena", error)
 
     propio = usuario.id if usuario is not None else None
     if correo:

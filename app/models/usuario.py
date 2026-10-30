@@ -71,6 +71,11 @@ class Usuario(UserMixin, db.Model):
     # Forma parte del identificador de sesion (`get_id`): cada cambio de
     # contrasena la incrementa y las sesiones abiertas con la anterior caducan.
     version_credencial = db.Column(db.Integer, nullable=False, default=0)
+    # Sesion unica e inactividad (ver app/services/sesiones.py). El token
+    # tambien va en `get_id`: cada inicio de sesion lo renueva y la sesion de
+    # otro navegador caduca. NULL = sin sesion abierta.
+    token_sesion = db.Column(db.String(64))
+    sesion_actividad_en = db.Column(db.DateTime)
 
     rutas = db.relationship("Ruta", back_populates="conductor", lazy="dynamic")
     vehiculo = db.relationship("Vehiculo", back_populates="conductor", uselist=False)
@@ -106,8 +111,9 @@ class Usuario(UserMixin, db.Model):
     def get_id(self):
         # Flask-Login guarda este valor en la cookie de sesion y en la de
         # "mantener sesion iniciada". Con la version de la credencial, una
-        # sesion abierta antes de restablecer la contrasena deja de valer.
-        return f"{self.id}:{self.version_credencial or 0}"
+        # sesion abierta antes de restablecer la contrasena deja de valer; con
+        # el token, la de otro navegador tras un nuevo inicio de sesion.
+        return f"{self.id}:{self.version_credencial or 0}:{self.token_sesion or ''}"
 
     # --- Autorizacion -----------------------------------------------------
     @property
@@ -153,15 +159,31 @@ def cargar_usuario(identificador):
     la tiene abierta en el navegador conservaba el acceso hasta que volviera a
     iniciar sesion, porque el login ya la rechaza pero nada revisaba una
     sesion ya autenticada. Lo mismo con una sesion abierta antes de que se
-    cambiara la contrasena: su version de credencial ya no coincide.
+    cambiara la contrasena (su version de credencial ya no coincide) o antes
+    de que la cuenta entrara en otro navegador (su token ya no coincide).
     """
-    id_texto, _, version = identificador.partition(":")
-    try:
-        usuario = db.session.get(Usuario, int(id_texto))
-    except ValueError:
+    usuario_id, version, token = partes_identificador(identificador)
+    if usuario_id is None:
         return None
+    usuario = db.session.get(Usuario, usuario_id)
     if usuario is None or not usuario.activo:
         return None
     if version != str(usuario.version_credencial or 0):
         return None
+    if token != (usuario.token_sesion or ""):
+        return None
     return usuario
+
+
+def partes_identificador(identificador):
+    """(id, version, token) del identificador de `get_id`; id None si no sirve.
+
+    Una sesion abierta antes de la sesion unica trae solo "id:version": su
+    token vacio coincide con el de una cuenta que aun no ha vuelto a entrar.
+    """
+    id_texto, _, resto = (identificador or "").partition(":")
+    version, _, token = resto.partition(":")
+    try:
+        return int(id_texto), version, token
+    except ValueError:
+        return None, version, token

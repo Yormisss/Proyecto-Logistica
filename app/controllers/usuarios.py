@@ -21,18 +21,20 @@ from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
 from sqlalchemy import case, func, or_
 from wtforms import BooleanField, PasswordField, SelectField, StringField
-from wtforms.validators import DataRequired, EqualTo, Length, Optional
+from wtforms.validators import DataRequired, EqualTo, Optional
 
 from app.controllers.auth import cambiar_contrasena_propia
-from app.controllers.seguridad import campo_correo, es_redireccion_segura, requiere_rol
+from app.controllers.seguridad import (
+    campo_correo, es_redireccion_segura, politica_contrasena, requiere_rol,
+)
 from app.extensions import db
 from app.models import Cliente, Rol, Usuario
 from app.models.usuario import METODO_HASH
 from app.services import acceso
 from app.services.auditoria import cambios_legibles, registrar_auditoria
 from app.services.usuarios import (
-    LONGITUD_MINIMA, cambiar_estado_usuario, clientes_disponibles, crear_usuario,
-    editar_usuario, rechazo_contrasena, restablecer_contrasena, rutas_abiertas,
+    cambiar_estado_usuario, clientes_disponibles, crear_usuario, editar_usuario,
+    rechazo_contrasena, restablecer_contrasena, rutas_abiertas,
 )
 from app.services.validacion import DatosInvalidos
 from app.tiempo import ahora
@@ -96,9 +98,7 @@ class FormularioAccion(FlaskForm):
 class FormularioAsignarContrasena(FlaskForm):
     contrasena = PasswordField(
         "Nueva contrasena",
-        validators=[DataRequired("Indique la contrasena."),
-                    Length(min=LONGITUD_MINIMA,
-                           message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
+        validators=[DataRequired("Indique la contrasena."), politica_contrasena],
     )
     confirmacion = PasswordField(
         "Confirmar contrasena",
@@ -114,9 +114,7 @@ class FormularioContrasenaPropia(FlaskForm):
     )
     contrasena = PasswordField(
         "Nueva contrasena",
-        validators=[DataRequired("Indique la contrasena."),
-                    Length(min=LONGITUD_MINIMA,
-                           message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
+        validators=[DataRequired("Indique la contrasena."), politica_contrasena],
     )
     confirmacion = PasswordField(
         "Confirmar contrasena",
@@ -270,7 +268,6 @@ def nuevo():
 
     return render_template(
         "admin/usuarios/formulario.html", formulario=formulario, usuario=None,
-        longitud_minima=LONGITUD_MINIMA,
     )
 
 
@@ -312,7 +309,6 @@ def editar(usuario_id):
     return render_template(
         "admin/usuarios/formulario.html", formulario=formulario, usuario=usuario,
         es_propia=es_propia, rutas_abiertas=rutas_abiertas(usuario),
-        longitud_minima=LONGITUD_MINIMA,
     )
 
 
@@ -477,8 +473,7 @@ def contrasena(usuario_id):
 
     return render_template(
         "admin/usuarios/contrasena.html", usuario=usuario, formulario=formulario,
-        accion=FormularioAccion(), longitud_minima=LONGITUD_MINIMA, hoy=ahora(),
-        propia=False,
+        accion=FormularioAccion(), hoy=ahora(), propia=False,
     )
 
 
@@ -497,7 +492,7 @@ def _contrasena_propia(usuario):
 
     return render_template(
         "admin/usuarios/contrasena.html", usuario=usuario, formulario=formulario,
-        longitud_minima=LONGITUD_MINIMA, hoy=ahora(), propia=True,
+        hoy=ahora(), propia=True,
     )
 
 

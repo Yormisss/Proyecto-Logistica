@@ -8,6 +8,7 @@ Uso:
     flask --app run migrar-configuracion  Crea la configuracion del negocio (motivos, centro)
     flask --app run migrar-auditoria      Crea la tabla de auditoria
     flask --app run migrar-contrasenas    Columnas de gestion de contrasenas y tabla de intentos de acceso
+    flask --app run migrar-seguridad      Sesion unica, cierre por inactividad y registro de errores
     flask --app run sincronizar-asistentes  Crea o actualiza los agentes en Retell
     flask --app run documentar-asistentes   Regenera docs/configuracion_retell.md
     python run.py                    Levanta el servidor de desarrollo
@@ -119,6 +120,14 @@ def migrar_contrasenas():
 
     m008_gestion_contrasenas.aplicar()
     m009_intentos_acceso.aplicar()
+
+
+@app.cli.command("migrar-seguridad")
+def migrar_seguridad():
+    """Columnas de la sesion unica y la inactividad, y tabla del registro de errores."""
+    from migraciones.m010_sesiones_y_errores import aplicar
+
+    aplicar()
 
 
 @app.cli.command("sincronizar-asistentes")

@@ -9,9 +9,12 @@ from urllib.parse import urlsplit
 from flask import abort, url_for
 from flask_login import current_user
 from wtforms import StringField
-from wtforms.validators import DataRequired, Email, Length, Optional, StopValidation
+from wtforms.validators import (
+    DataRequired, Email, Length, Optional, StopValidation, ValidationError,
+)
 
 from app.models import Rol
+from app.services.usuarios import error_politica
 from app.services.validacion import MENSAJE_CORREO, PATRON_CORREO, correo_en_lista_blanca
 
 # Pagina de inicio de cada rol. Es la unica fuente de verdad del aterrizaje tras
@@ -131,3 +134,14 @@ def campo_correo(etiqueta="Correo electrónico", obligatorio=None, validar=True)
             "data-correo": True,
         },
     )
+
+
+# --------------------------------------------------------------------------
+# Contrasena: politica de complejidad (RNF5)
+# --------------------------------------------------------------------------
+
+def politica_contrasena(formulario, campo):
+    """Validador de WTForms con la politica de `app.services.usuarios`, la misma
+    que aplica el alta de cuentas."""
+    if campo.data and (error := error_politica(campo.data)):
+        raise ValidationError(error)

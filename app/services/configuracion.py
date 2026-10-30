@@ -1,4 +1,4 @@
-"""Configuracion del negocio: catalogo de motivos de fallo y centro de distribucion.
+"""Configuracion del negocio: motivos de fallo, centro de distribucion e inactividad.
 
 Punto unico de las reglas que comparten la pantalla "Configuracion" del admin,
 la pantalla del conductor, la analitica y el asistente de voz. Ninguna funcion
@@ -10,12 +10,20 @@ from difflib import SequenceMatcher
 from flask import current_app
 
 from app.extensions import db
-from app.models import NOMBRE_OTRO, ConfiguracionNegocio, MotivoFallo, normalizar_texto
-from app.services.validacion import DatosInvalidos
+from app.models import (
+    MINUTOS_INACTIVIDAD_INICIAL,
+    NOMBRE_OTRO,
+    ConfiguracionNegocio,
+    MotivoFallo,
+    normalizar_texto,
+)
+from app.services.validacion import DatosInvalidos, Validador
 from app.tiempo import ahora
 
 LARGO_MAXIMO_MOTIVO = 160
 LARGO_MAXIMO_CENTRO = 120
+# Una jornada: mas alla, el cierre por inactividad ya no protege nada.
+MINUTOS_INACTIVIDAD_MAXIMO = 480
 
 # Los que estaban fijos en el codigo antes del catalogo; "Otro" se agrega al final.
 MOTIVOS_INICIALES = (
@@ -300,3 +308,46 @@ def editar_centro(nombre, latitud, longitud, usuario_id):
     fila.actualizado_en = ahora()
     fila.actualizado_por_id = usuario_id
     return anterior, centro_distribucion()
+
+
+# --------------------------------------------------------------------------
+# Inactividad de la sesion (RNF5)
+# --------------------------------------------------------------------------
+
+def minutos_inactividad():
+    """Minutos sin peticiones tras los que se cierra una sesion (ver services/sesiones.py)."""
+    fila = _fila_configuracion()
+    if fila is not None and fila.minutos_inactividad:
+        return fila.minutos_inactividad
+    return MINUTOS_INACTIVIDAD_INICIAL
+
+
+def validar_inactividad(minutos):
+    v = Validador()
+    valor = v.entero({"minutos_inactividad": minutos}, "minutos_inactividad",
+                     "el tiempo de inactividad", minimo=1, maximo=MINUTOS_INACTIVIDAD_MAXIMO,
+                     requerido=True)
+    if v.hay_errores:
+        raise ConfiguracionInvalida(v.invalidos, v.faltantes)
+    if valor == minutos_inactividad():
+        raise ConfiguracionInvalida(
+            [("minutos_inactividad", f"El tiempo de inactividad ya es de {texto_minutos(valor)}.")]
+        )
+    return valor
+
+
+def texto_minutos(minutos):
+    return f"{minutos} minuto" + ("s" if minutos != 1 else "")
+
+
+def editar_inactividad(minutos, usuario_id):
+    """Cambia el tiempo de inactividad. Aplica desde la siguiente peticion de
+    cada sesion abierta. Devuelve (anterior, nuevo) para la auditoria."""
+    nuevo = validar_inactividad(minutos)
+    anterior = minutos_inactividad()
+    asegurar_configuracion()
+    fila = _fila_configuracion()
+    fila.minutos_inactividad = nuevo
+    fila.actualizado_en = ahora()
+    fila.actualizado_por_id = usuario_id
+    return anterior, nuevo

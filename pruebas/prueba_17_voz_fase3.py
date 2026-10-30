@@ -26,7 +26,7 @@ from app.models import (Auditoria, Cliente, DireccionCliente, EstadoPedido, Esta
                         TipoMovimiento, Usuario, Vehiculo, VIGENCIA_SESION)
 from app.services import notificaciones
 from app.services import ruteo
-from app.services.configuracion import centro_distribucion
+from app.services.configuracion import centro_distribucion, minutos_inactividad
 from app.tiempo import ahora, hoy
 
 fallos = []
@@ -446,6 +446,19 @@ check("conservan el texto anterior" in r and una(MotivoFallo, nombre="Vía cerra
       "renombrar un motivo")
 r, final = confirma("admin/configuracion", A, {"operacion": "desactivar-motivo", "motivo": "obras"})
 check(una(MotivoFallo, nombre="Vía cerrada por obras").activo is False, "desactivar un motivo")
+r = dice("admin/configuracion", A, {"operacion": "editar-inactividad"})
+check("minutos sin actividad" in r, f"sin minutos los pide: {r}")
+r = dice("admin/configuracion", A, {"operacion": "editar-inactividad", "minutos": 0})
+check("entre 1 y 480" in r, f"minutos fuera de rango se rechazan: {r}")
+check("ya es de 30 minutos" in dice("admin/configuracion", A, {"operacion": "editar-inactividad",
+                                                               "minutos": 30}),
+      "el mismo tiempo no pide confirmacion")
+r, final = confirma("admin/configuracion", A, {"operacion": "editar-inactividad", "minutos": 15})
+with app.app_context():
+    check("de 30 minutos a 15 minutos" in r and "15 minutos sin actividad" in (final or "")
+          and minutos_inactividad() == 15, f"cambiar el tiempo de inactividad: {r}")
+check("tras 15 minutos sin actividad" in dice("admin/configuracion", A, {"operacion": "consultar"}),
+      "consultar lee el tiempo de inactividad")
 
 
 print("\n== 9. Bitacora (solo admin) ==")

@@ -43,6 +43,14 @@ def destino(respuesta):
     return respuesta.headers.get("Location", "")
 
 
+def copia_de(cliente):
+    """Otro navegador con la misma cookie de sesion. Con la sesion unica, un
+    segundo inicio de sesion cerraria el primero (ver prueba_21)."""
+    otro = app.test_client()
+    otro.set_cookie("session", cliente.get_cookie("session").value, domain="localhost")
+    return otro
+
+
 def temporal_de(html, correo):
     m = re.search(r"Contrasena temporal de " + re.escape(correo) + r": (\S+)", html)
     return m.group(1) if m else None
@@ -111,7 +119,7 @@ ruta_asignar = f"/admin/usuarios/{id_conductor2}/contrasena"
 check(admin.get(ruta_asignar).status_code == 200, "el formulario de asignacion carga")
 r = admin.post(ruta_asignar, data={"contrasena": "corta", "confirmacion": "corta",
                                    "exigir_cambio": "y"})
-check(b"Minimo 8 caracteres" in r.data, "exige la longitud minima")
+check("mínimo 8 caracteres" in r.data.decode(), "exige la longitud minima")
 r = admin.post(ruta_asignar, data={"contrasena": "Asignada123*", "confirmacion": "Otra12345*",
                                    "exigir_cambio": "y"})
 check(b"no coinciden" in r.data, "exige que la confirmacion coincida")
@@ -300,10 +308,10 @@ r = admin.post(ruta_propia, data={"contrasena_actual": "Admin123*",
 check(b"no coinciden" in r.data, "exige que la confirmacion coincida")
 r = admin.post(ruta_propia, data={"contrasena_actual": "Admin123*", "contrasena": "corta",
                                   "confirmacion": "corta"})
-check(b"Minimo 8 caracteres" in r.data, "exige la longitud minima")
+check("mínimo 8 caracteres" in r.data.decode(), "exige la longitud minima")
 check(usuario("admin@sgds.com").contrasena_hash == hash_admin, "los intentos invalidos no la tocan")
 
-otra_admin = sesion("admin@sgds.com", "Admin123*")
+otra_admin = copia_de(admin)
 check(opera(otra_admin, "/admin/usuarios/contrasenas"), "tiene otra sesion abierta")
 r = admin.post(ruta_propia, data={"contrasena_actual": "Admin123*",
                                   "contrasena": "AdminNueva2026*",
@@ -408,8 +416,8 @@ check(e.nombre == "Cuenta Editada", "la edicion guarda los datos")
 check(e.contrasena_hash == hash_libre, "un POST de edicion con contrasena no la cambia")
 
 print("\n== 11. Cambiar la propia contrasena cierra las demas sesiones ==")
-otra = sesion("conductor2@sgds.com", "Acordada123*")
 esta = sesion("conductor2@sgds.com", "Acordada123*")
+otra = copia_de(esta)
 check(opera(otra, "/conductor/") and opera(esta, "/conductor/"), "dos sesiones abiertas")
 r = esta.post("/auth/perfil", data={"contrasena_actual": "Acordada123*",
                                     "contrasena_nueva": "OtraMas2026*"}, follow_redirects=True)

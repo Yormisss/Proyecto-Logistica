@@ -7,7 +7,13 @@ from app.models.acceso import IntentoAcceso
 from app.models.auditoria import RESULTADO_ERROR, RESULTADO_EXITO, Auditoria
 from app.models.asistente import VIGENCIA_CONFIRMACION, VIGENCIA_SESION, SesionAsistente
 from app.models.cliente import Cliente, DireccionCliente, normalizar_texto
-from app.models.configuracion import NOMBRE_OTRO, ConfiguracionNegocio, MotivoFallo
+from app.models.configuracion import (
+    MINUTOS_INACTIVIDAD_INICIAL,
+    NOMBRE_OTRO,
+    ConfiguracionNegocio,
+    MotivoFallo,
+)
+from app.models.error import ErrorSistema
 from app.models.inventario import MovimientoInventario, Producto, TipoMovimiento
 from app.models.metrica import (
     ENDPOINTS_CRITICOS,
@@ -31,6 +37,8 @@ __all__ = [
     "RESULTADO_ERROR",
     "RESULTADO_EXITO",
     "ConfiguracionNegocio",
+    "ErrorSistema",
+    "MINUTOS_INACTIVIDAD_INICIAL",
     "MotivoFallo",
     "NOMBRE_OTRO",
     "IntentoAcceso",
