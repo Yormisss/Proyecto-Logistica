@@ -88,6 +88,12 @@ class Usuario(UserMixin, db.Model):
     # Relacion 1 a 0..1 con la entidad comercial. El dueno de la clave ajena es
     # `Cliente`, para que un cliente pueda existir sin cuenta de acceso.
     cliente = db.relationship("Cliente", back_populates="usuario", uselist=False)
+    # Permisos configurables (ver app/models/permiso.py): roles ademas del
+    # principal (`rol`) y ajustes propios, permiso por permiso.
+    roles_adicionales = db.relationship("RolAcceso", secondary="usuario_roles",
+                                        back_populates="usuarios", order_by="RolAcceso.nombre")
+    ajustes_permisos = db.relationship("PermisoUsuario", cascade="all, delete-orphan",
+                                       order_by="PermisoUsuario.permiso")
 
     # --- Seguridad (RNF5) -------------------------------------------------
     @validates("documento")
@@ -127,6 +133,12 @@ class Usuario(UserMixin, db.Model):
         return f"{self.id}:{self.version_credencial or 0}:{self.token_sesion or ''}"
 
     # --- Autorizacion -----------------------------------------------------
+    def puede(self, permiso):
+        """True si la cuenta tiene `permiso` (ver app/services/permisos.py)."""
+        from app.services.permisos import permisos_efectivos
+
+        return permiso in permisos_efectivos(self)
+
     @property
     def es_admin(self):
         return self.rol == Rol.ADMIN

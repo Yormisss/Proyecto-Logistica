@@ -147,6 +147,7 @@ def _registrar_controladores(app):
     from app.controllers.vehiculos import vehiculos_bp
     from app.controllers.bitacora import bitacora_bp
     from app.controllers.errores import errores_bp
+    from app.controllers.roles import roles_bp
     from app.controllers.asistente_api import asistente_api_bp
     from app.controllers.automatizacion_api import automatizacion_api_bp
     from app.controllers.auth import auth_bp
@@ -177,6 +178,7 @@ def _registrar_controladores(app):
     app.register_blueprint(configuracion_bp, url_prefix="/admin/configuracion")
     app.register_blueprint(bitacora_bp, url_prefix="/admin/bitacora")
     app.register_blueprint(errores_bp, url_prefix="/admin/errores")
+    app.register_blueprint(roles_bp, url_prefix="/admin/roles")
     app.register_blueprint(vehiculos_bp, url_prefix="/admin/vehiculos")
 
     # Las custom functions las invoca Retell desde sus servidores, sin cookie

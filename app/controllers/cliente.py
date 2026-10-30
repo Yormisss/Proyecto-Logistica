@@ -12,9 +12,9 @@ from flask import Blueprint, abort, render_template, request
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
-from app.models import DireccionCliente, EstadoPedido, Pedido, Rol
+from app.models import DireccionCliente, EstadoPedido, Pedido
 from app.services.seguimiento import SEGUIMIENTO_PUBLICO, hitos_publicos
 
 cliente_bp = Blueprint("cliente", __name__)
@@ -75,7 +75,7 @@ def _resumen(cliente):
 
 @cliente_bp.route("/")
 @login_required
-@requiere_rol(Rol.CLIENTE)
+@requiere_permiso("portal.cliente")
 def mis_pedidos():
     cliente = _cliente_actual()
 
@@ -107,7 +107,7 @@ def mis_pedidos():
 
 @cliente_bp.route("/pedido/<int:pedido_id>")
 @login_required
-@requiere_rol(Rol.CLIENTE)
+@requiere_permiso("portal.cliente")
 def seguimiento(pedido_id):
     pedido = _pedido_del_cliente(pedido_id)
 
@@ -125,7 +125,7 @@ def seguimiento(pedido_id):
 
 @cliente_bp.route("/direcciones")
 @login_required
-@requiere_rol(Rol.CLIENTE)
+@requiere_permiso("portal.cliente")
 def direcciones():
     """Sedes registradas del cliente, con su ventana horaria habitual."""
     cliente = _cliente_actual()

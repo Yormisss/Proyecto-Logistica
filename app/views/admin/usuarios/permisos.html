@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block titulo %}Permisos de {{ usuario.nombre }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('usuarios.lista') }}">&lsaquo; Volver a usuarios</a>
+  <h1 class="titulo-pagina">Permisos de {{ usuario.nombre }}</h1>
+  <p class="subtitulo-pagina">
+    Rol principal: <strong>{{ usuario.rol_etiqueta }}</strong> (el tipo de cuenta; se cambia en
+    <a href="{{ url_for('usuarios.editar', usuario_id=usuario.id) }}">Editar</a>).
+    {{ filas|selectattr('tiene')|list|length }} de {{ filas|length }} permisos.
+  </p>
+</div>
+
+{% if rechazo %}
+<div class="alerta alerta-advertencia">{{ rechazo }}</div>
+{% endif %}
+
+<form method="post">
+  {{ formulario.hidden_tag() }}
+
+  {% if not rechazo %}
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Roles adicionales</h2>
+    <p class="nota-pie">Suman sus permisos a los del rol principal. Los roles se crean en
+      <a href="{{ url_for('roles.lista') }}">Roles</a>.</p>
+    {% if roles_disponibles %}
+    <div class="lista-permisos">
+      {% for rol in roles_disponibles %}
+      <label class="campo-inline">
+        <input type="checkbox" name="roles" value="{{ rol.id }}" {{ 'checked' if rol in usuario.roles_adicionales }}>
+        <span>{{ rol.nombre }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="vacio">No hay roles para sumar. <a href="{{ url_for('roles.nuevo') }}">Crear un rol</a>.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">Permisos</h2>
+    {% if not rechazo %}
+    <p class="nota-pie">
+      «Según sus roles» deja lo que den sus roles. «Conceder» lo da aunque ningún rol lo dé, y
+      «Denegar» lo quita aunque un rol lo dé: así se ajusta cada permiso de esta cuenta.
+    </p>
+    {% endif %}
+    <div class="tabla-scroll">
+      <table class="tabla tabla-permisos">
+        <thead>
+          <tr><th>Permiso</th><th>Lo dan</th><th>Ajuste</th><th>Tiene</th></tr>
+        </thead>
+        <tbody>
+        {% for grupo, filas_grupo in grupos %}
+          <tr><th colspan="4">{{ grupo }}</th></tr>
+          {% for fila in filas_grupo %}
+          <tr>
+            <td>{{ fila.nombre }}</td>
+            <td>{% for rol in fila.por_roles %}<span class="chip">{{ rol }}</span> {% endfor %}{% if not fila.por_roles %}—{% endif %}</td>
+            <td>
+              {% if fila.asignable and not rechazo %}
+              <select name="ajuste-{{ fila.clave }}" aria-label="Ajuste de {{ fila.nombre }}">
+                <option value="" {{ 'selected' if not fila.ajuste }}>Según sus roles</option>
+                <option value="conceder" {{ 'selected' if fila.ajuste == 'conceder' }}>Conceder</option>
+                <option value="denegar" {{ 'selected' if fila.ajuste == 'denegar' }}>Denegar</option>
+              </select>
+              {% elif not fila.asignable %}
+              <small>{{ 'Solo administradores' if fila.grupo.startswith('Accesos') else 'Por el tipo de cuenta' }}</small>
+              {% endif %}
+            </td>
+            <td class="{{ 'permiso-tiene' if fila.tiene else 'permiso-no-tiene' }}">{{ 'Sí' if fila.tiene else 'No' }}</td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if not rechazo %}
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('usuarios.lista') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">Guardar permisos</button>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}

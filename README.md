@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS y JS
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2145 verificaciones automatizadas en 24 suites (MySQL)
+├── pruebas/               2212 verificaciones automatizadas en 25 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -65,7 +65,7 @@ cp .env.example .env
 .venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
 .venv/bin/flask --app run migrar-pruebas-entrega # Pruebas de entrega de solo agregar (m007, MySQL)
 .venv/bin/flask --app run migrar-contrasenas  # Columnas de gestión de contraseñas y tabla de intentos de acceso
-.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, registro de errores (m010) y cifrado de datos personales (m011)
+.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011) y roles con permisos (m012)
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -165,6 +165,46 @@ base de datos a mano.
 |---|---|---|
 | `/admin/usuarios` | Administrador | Crear, editar, activar/desactivar cuentas y restablecer contraseñas |
 | `/admin/clientes` | Administrador y gestor logístico | Directorio de clientes, sedes, y quién tiene portal |
+
+### Roles y permisos
+
+Cada pantalla exige un **permiso** (`requiere_permiso` en `app/controllers/seguridad.py`), y
+cada cuenta tiene los suyos según sus roles. El catálogo está en `app/permisos.py`: una
+sección con dos niveles, *ver* y *gestionar* (por ejemplo *Ver pedidos* y *Gestionar
+pedidos*). Una pantalla que muestra y guarda en la misma ruta, como el detalle de un
+producto con su formulario de movimiento, exige *ver* para abrirla y *gestionar* para
+guardar.
+
+Los permisos de una cuenta (`app/services/permisos.py`) se calculan así:
+
+1. Los de su **rol principal**, que es el tipo de cuenta y se elige en *Editar*.
+2. Más los de sus **roles adicionales**.
+3. Con sus **ajustes propios**, permiso por permiso: *según sus roles*, *conceder* (lo da
+   aunque ningún rol lo dé) o *denegar* (lo quita aunque un rol lo dé).
+
+| Pantalla | Qué se hace |
+|---|---|
+| **Administración > Roles** | Crear roles con sus permisos, editar el reparto de *Gestor logístico* y *Conductor*, eliminar los creados. *Administrador* (todos los permisos) y *Cliente* (solo su portal) no se editan |
+| **Usuarios > Permisos** (en cada cuenta) | Sumar roles adicionales y ajustar cada permiso. Muestra de qué roles viene cada uno y si la cuenta lo tiene |
+
+- **Una base nueva tiene el reparto de siempre.** Los cuatro roles del sistema quedan con
+  los permisos que tenían cuando eran fijos: nadie gana ni pierde acceso al migrar.
+- **El menú y los botones siguen a los permisos.** Quien solo puede *ver* pedidos no ve
+  *Nuevo pedido* ni *Importar CSV*. Si la cuenta no puede abrir la página de su rol (por
+  ejemplo, se le negó el tablero), entra a la primera que sí pueda.
+- **La voz también los respeta.** Cada función del asistente exige el permiso de su
+  pantalla (`PERMISOS_VOZ`): quitarle *Gestionar inventario* al gestor también se lo quita
+  por voz. Los permisos ganados con roles adicionales no amplían el asistente, que sigue
+  siendo uno por tipo de cuenta.
+- **Contra la escalada de privilegios.** Gestionar usuarios, contraseñas y roles es **solo
+  de los administradores**: ningún rol ni ajuste lo da. Quien pudiera hacerlo podría darse
+  a sí mismo cualquier otro permiso o el rol de administrador. Tampoco se reparten la ruta
+  del conductor ni el portal del cliente, que dependen del tipo de cuenta. Una cuenta de
+  cliente no lleva roles adicionales ni ajustes, y al administrador no se le quita nada.
+  Las reglas se validan en el servidor, también ante un POST fabricado.
+- Los cambios aplican desde la siguiente acción de cada cuenta, sin cerrar su sesión, y
+  quedan en la bitácora (*Crear rol*, *Editar rol*, *Eliminar rol*, *Editar permisos de
+  usuario*).
 
 ### Habilitar el portal de un cliente
 
@@ -675,6 +715,7 @@ sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_rete
 | Todos | Iniciar y cerrar sesión, cambiar la propia contraseña, el botón que abre la llamada | La llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
 | Todos | Cambiar el propio correo desde *Mi perfil* | Pide la contraseña actual, que nunca se dice por voz |
 | Todos | *Olvidé mi contraseña* y el enlace para restablecerla | Son para quien no puede iniciar sesión, y la llamada parte de una sesión iniciada |
+| Admin | Crear, editar y eliminar roles; los roles adicionales y ajustes de una cuenta | Se reparten en pantalla, viendo la matriz completa de cada rol y cada cuenta |
 | Gestor y admin | Importar pedidos desde CSV | Exige subir un archivo; no tiene equivalente hablado |
 | Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
 | Admin | *Provocar un error* en la pantalla de errores | Es una prueba del registro de errores, solo de pantalla |
@@ -1371,7 +1412,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2145 verificaciones en 24 suites contra MySQL 8.0, todas pasando, en unos dos
+**2212 verificaciones en 25 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1405,7 +1446,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 91 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 310 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 318 |
 | `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración (incluido el tiempo de inactividad) y bitácora (admin); resúmenes, rechazos y auditoría | 102 |
 | `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba, con la observación dictada | 82 |
 | `prueba_19_contrasenas.py` | RF1/RNF5 · apartado de contraseñas: acceso solo del admin, sin hash ni contraseña en la página, asignar, generar temporal, exigir cambio (uno y en bloque), cambio obligatorio en el perfil, cierre de sesiones abiertas, hash fuera de política, reglas por rol (cliente y otros administradores fuera de su alcance, la propia con la actual), migración `m008` | 153 |
@@ -1414,6 +1455,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_22_recuperacion.py` | RF1/RNF5 · *Olvidé mi contraseña*: la misma respuesta exista o no la cuenta, envío por su webhook con `URL_PUBLICA` (un `Host` falso no cambia el enlace), un enlace cada 5 minutos, política de contraseñas, cierre de sesiones y del bloqueo, enlace de un solo uso, alterado, caducado por otro cambio y vencido, cuentas inactivas, consola en desarrollo y pantalla sin canal | 44 |
 | `prueba_23_cifrado.py` | RNF5 · datos personales: en la base la contraseña como hash y el documento y el teléfono cifrados (IV aleatorio), lectura en claro, índice ciego (unicidad en el formulario y en la base, búsqueda exacta), columnas cifradas que rechazan comparaciones SQL, auditoría enmascarada en pantalla y por voz, otra clave, migración `m011` sobre datos en claro | 46 |
 | `prueba_24_archivos.py` | RNF5 · archivos subidos por su contenido: un ejecutable renombrado a `.pdf` y a `.csv` (Windows, Linux, macOS, script), PDF, comprimidos, imágenes, UTF-16 y binarios rechazados sin guardarse, cada rechazo en la bitácora, sin falsos positivos con CSV reales, límite de 2 MB y de 5 MB por petición (413) | 28 |
+| `prueba_25_roles_permisos.py` | RF1/RNF5 · roles y permisos: reparto por defecto igual a los roles fijos, un rol nuevo asignado a dos cuentas con dos permisos propios distintos cada una, dos roles en una cuenta con la totalidad de sus permisos invertida, menú y botones según permisos, editar un rol del sistema (también por voz), reglas contra la escalada de privilegios, eliminar un rol, auditoría, migración `m012` | 59 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
@@ -1539,7 +1581,9 @@ a `configuracion_negocio` la columna `minutos_inactividad` (30 en las filas exis
 crea la tabla `errores_sistema` (m010). Después **cifra el documento y el teléfono** que
 estén en claro (m011): amplía las columnas a `VARCHAR(300)`, agrega `documento_indice` con
 su índice único y quita el índice único viejo sobre `documento`. Corra la migración con la
-misma `CLAVE_CIFRADO` (o `SECRET_KEY`) que usará la aplicación. Es idempotente. **Ejecútela antes de levantar esta
+misma `CLAVE_CIFRADO` (o `SECRET_KEY`) que usará la aplicación. Por último crea las tablas
+de roles y permisos con los cuatro roles del sistema y su reparto de siempre (m012). Es
+idempotente. **Ejecútela antes de levantar esta
 versión sobre una base existente**: sin las columnas nuevas, ninguna página carga.
 
 ### Conectar MySQL Workbench

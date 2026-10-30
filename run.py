@@ -8,7 +8,7 @@ Uso:
     flask --app run migrar-configuracion  Crea la configuracion del negocio (motivos, centro)
     flask --app run migrar-auditoria      Crea la tabla de auditoria
     flask --app run migrar-contrasenas    Columnas de gestion de contrasenas y tabla de intentos de acceso
-    flask --app run migrar-seguridad      Sesion unica, inactividad, registro de errores y cifrado de datos personales
+    flask --app run migrar-seguridad      Sesion unica, inactividad, errores, cifrado y roles con permisos
     flask --app run sincronizar-asistentes  Crea o actualiza los agentes en Retell
     flask --app run documentar-asistentes   Regenera docs/configuracion_retell.md
     python run.py                    Levanta el servidor de desarrollo
@@ -32,11 +32,13 @@ def contexto_shell():
 
 
 def _configuracion_inicial():
-    """Catalogo de motivos y centro de distribucion iniciales (idempotente)."""
+    """Motivos, centro de distribucion y roles del sistema iniciales (idempotente)."""
     from app.services.configuracion import asegurar_catalogo, asegurar_configuracion
+    from app.services.permisos import asegurar_roles
 
     asegurar_catalogo()
     asegurar_configuracion()
+    asegurar_roles()
     db.session.commit()
 
 
@@ -124,11 +126,14 @@ def migrar_contrasenas():
 
 @app.cli.command("migrar-seguridad")
 def migrar_seguridad():
-    """Sesion unica, inactividad y registro de errores (m010); cifra documento y telefono (m011)."""
-    from migraciones import m010_sesiones_y_errores, m011_cifrado_datos_personales
+    """Sesion unica, inactividad y errores (m010); cifrado (m011); roles y permisos (m012)."""
+    from migraciones import (
+        m010_sesiones_y_errores, m011_cifrado_datos_personales, m012_roles_y_permisos,
+    )
 
     m010_sesiones_y_errores.aplicar()
     m011_cifrado_datos_personales.aplicar()
+    m012_roles_y_permisos.aplicar()
 
 
 @app.cli.command("sincronizar-asistentes")

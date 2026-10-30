@@ -44,7 +44,9 @@ EXCLUSIONES_APROBADAS = {"auth.login", "auth.perfil", "asistente.llamada",
                          # al integrarlos (30/10/2026).
                          "auth.cambiar_correo", "errores.probar",
                          # Olvide mi contrasena: paginas sin sesion, como el login.
-                         "auth.recuperar", "auth.restablecer"}
+                         "auth.recuperar", "auth.restablecer",
+                         # Roles y permisos: solo en pantalla, con la matriz completa.
+                         "roles.nuevo", "roles.editar", "roles.eliminar", "usuarios.permisos"}
 
 
 print("\n== 1. Mapa de cobertura ==")
@@ -63,7 +65,7 @@ for endpoint, entrada in sorted(cobertura.COBERTURA.items()):
 
 excluidas = {e for e, c in cobertura.COBERTURA.items() if c.excluida}
 check(excluidas == EXCLUSIONES_APROBADAS,
-      f"solo se excluye lo aprobado (login, perfil, correo propio, olvide mi contrasena, iniciar la llamada, importar CSV, contrasenas, prueba de errores) {sorted(excluidas)}")
+      f"solo se excluye lo aprobado (login, perfil, correo propio, olvide mi contrasena, iniciar la llamada, importar CSV, contrasenas, roles y permisos, prueba de errores) {sorted(excluidas)}")
 check(all(len(cobertura.COBERTURA[e].excluida) >= 20 for e in excluidas), "cada exclusion dice por que")
 
 

@@ -13,9 +13,9 @@ from sqlalchemy import func
 from wtforms import StringField
 from wtforms.validators import Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
-from app.models import MotivoFallo, PruebaEntrega, Rol
+from app.models import MotivoFallo, PruebaEntrega
 from app.services import configuracion as servicio
 from app.services.auditoria import registrar_auditoria
 
@@ -54,7 +54,7 @@ def _motivo(motivo_id):
 
 @configuracion_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def inicio():
     centro = servicio.centro_distribucion()
     formulario_centro = FormularioCentro(
@@ -81,7 +81,7 @@ def inicio():
 
 @configuracion_bp.route("/sesion", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def sesion():
     formulario = FormularioSesion()
     if not formulario.validate_on_submit():
@@ -108,7 +108,7 @@ def sesion():
 
 @configuracion_bp.route("/centro", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def centro():
     formulario = FormularioCentro()
     if not formulario.validate_on_submit():
@@ -135,7 +135,7 @@ def centro():
 
 @configuracion_bp.route("/motivos", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def agregar_motivo():
     formulario = FormularioMotivo()
     if not formulario.validate_on_submit():
@@ -157,7 +157,7 @@ def agregar_motivo():
 
 @configuracion_bp.route("/motivos/<int:motivo_id>/renombrar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def renombrar_motivo(motivo_id):
     motivo = _motivo(motivo_id)
     formulario = FormularioMotivo()
@@ -180,7 +180,7 @@ def renombrar_motivo(motivo_id):
 
 @configuracion_bp.route("/motivos/<int:motivo_id>/estado", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def alternar_motivo(motivo_id):
     motivo = _motivo(motivo_id)
     if not FormularioAccion().validate_on_submit():

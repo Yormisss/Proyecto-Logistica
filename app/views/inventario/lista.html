@@ -8,7 +8,9 @@
     <p class="subtitulo-pagina">{{ productos|length }} producto(s) en catálogo</p>
   </div>
   <div class="acciones-encabezado">
+    {% if current_user.puede('inventario.gestionar') %}
     <a class="boton boton-primario" href="{{ url_for('inventario.nuevo') }}">Nuevo producto</a>
+    {% endif %}
   </div>
 </div>
 
@@ -47,8 +49,10 @@
             {% endif %}
           </td>
           <td class="derecha">
+            {% if current_user.puede('inventario.gestionar') %}
             <a class="enlace-tabla" href="{{ url_for('inventario.editar', producto_id=producto.id) }}"
                onclick="event.stopPropagation()">Editar</a>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}

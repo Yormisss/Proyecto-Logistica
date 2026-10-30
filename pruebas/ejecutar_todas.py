@@ -51,6 +51,7 @@ SUITES = [
     ("prueba_22_recuperacion.py", "RF1/RNF5 · Olvide mi contrasena"),
     ("prueba_23_cifrado.py", "RNF5 · Cifrado de datos personales"),
     ("prueba_24_archivos.py", "RNF5 · Contenido real de los archivos subidos"),
+    ("prueba_25_roles_permisos.py", "RF1/RNF5 · Roles y permisos configurables"),
 ]
 
 

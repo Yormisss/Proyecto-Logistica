@@ -8,7 +8,9 @@
     <p class="subtitulo-pagina">{{ vehiculos|length }} vehículo(s) &middot; la placa queda fija al crearse</p>
   </div>
   <div class="acciones-encabezado">
+    {% if current_user.puede('vehiculos.gestionar') %}
     <a class="boton boton-primario" href="{{ url_for('vehiculos.nuevo') }}">Nuevo vehículo</a>
+    {% endif %}
   </div>
 </div>
 
@@ -31,11 +33,13 @@
           {% if abiertas[vehiculo.id] %}<small>en {{ abiertas[vehiculo.id] }} ruta(s) abierta(s)</small>{% endif %}
         </td>
         <td class="acciones-fila">
+          {% if current_user.puede('vehiculos.gestionar') %}
           <a class="enlace-tabla" href="{{ url_for('vehiculos.editar', vehiculo_id=vehiculo.id) }}">Editar</a>
           <form method="post" action="{{ url_for('vehiculos.alternar', vehiculo_id=vehiculo.id) }}">
             {{ formulario.hidden_tag() }}
             <button type="submit" class="boton-enlace">{{ 'Desactivar' if vehiculo.activo else 'Activar' }}</button>
           </form>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}

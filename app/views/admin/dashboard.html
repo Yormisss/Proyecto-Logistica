@@ -47,7 +47,9 @@
   <section class="tarjeta">
     <h2 class="tarjeta-titulo fila-encabezado">
       <span>Rutas del día</span>
+      {% if current_user.puede('rutas.gestionar') %}
       <a class="enlace-tabla" href="{{ url_for('rutas.nueva') }}">Planificar ruta</a>
+      {% endif %}
     </h2>
     {% if rutas_hoy %}
       <table class="tabla">

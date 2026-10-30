@@ -10,7 +10,9 @@
     </p>
   </div>
   <div class="acciones-encabezado">
+    {% if current_user.puede('clientes.gestionar') %}
     <a class="boton boton-primario" href="{{ url_for('clientes_admin.nuevo') }}">Nuevo cliente</a>
+    {% endif %}
   </div>
 </div>
 
@@ -57,10 +59,12 @@
             {% endif %}
           </td>
           <td class="derecha acciones-fila">
-            {% if not cliente.usuario and current_user.es_admin %}
+            {% if not cliente.usuario and current_user.puede('usuarios.gestionar') %}
               <a href="{{ url_for('usuarios.nuevo', cliente_id=cliente.id) }}">Crear cuenta</a>
             {% endif %}
+            {% if current_user.puede('clientes.gestionar') %}
             <a href="{{ url_for('clientes_admin.editar', cliente_id=cliente.id) }}">Editar</a>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}

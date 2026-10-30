@@ -9,7 +9,7 @@ from flask_wtf import FlaskForm
 from wtforms import BooleanField, SelectField, StringField
 from wtforms.validators import Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
 from app.models import Rol, Usuario, Vehiculo
 from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
@@ -81,7 +81,7 @@ def _vehiculo(vehiculo_id):
 
 @vehiculos_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("vehiculos.ver")
 def lista():
     vehiculos = db.session.query(Vehiculo).order_by(Vehiculo.activo.desc(), Vehiculo.placa).all()
     return render_template("vehiculos/lista.html", vehiculos=vehiculos, formulario=FormularioAccion(),
@@ -90,7 +90,7 @@ def lista():
 
 @vehiculos_bp.route("/nuevo", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("vehiculos.gestionar")
 def nuevo():
     formulario = FormularioVehiculo()
     if formulario.validate_on_submit():
@@ -115,7 +115,7 @@ def nuevo():
 
 @vehiculos_bp.route("/<int:vehiculo_id>/editar", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("vehiculos.gestionar")
 def editar(vehiculo_id):
     vehiculo = _vehiculo(vehiculo_id)
     formulario = FormularioVehiculo(obj=vehiculo)
@@ -140,7 +140,7 @@ def editar(vehiculo_id):
 
 @vehiculos_bp.route("/<int:vehiculo_id>/estado", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("vehiculos.gestionar")
 def alternar(vehiculo_id):
     vehiculo = _vehiculo(vehiculo_id)
     if not FormularioAccion().validate_on_submit():

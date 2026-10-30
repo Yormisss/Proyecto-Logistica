@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timedelta
 from flask import Blueprint, render_template, request
 from flask_login import login_required
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
 from app.models import Auditoria, Rol, Usuario
 from app.services.notificaciones import ORIGEN_AUTOMATICO, ORIGEN_PANTALLA, ORIGEN_VOZ
@@ -29,7 +29,7 @@ def _fecha(texto):
 
 @bitacora_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("bitacora.ver")
 def lista():
     consulta = db.session.query(Auditoria)
 

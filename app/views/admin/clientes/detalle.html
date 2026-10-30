@@ -12,8 +12,10 @@
     </p>
   </div>
   <div class="acciones-encabezado">
+    {% if current_user.puede('clientes.gestionar') %}
     <a class="boton boton-plano" href="{{ url_for('clientes_admin.editar', cliente_id=cliente.id) }}">Editar</a>
-    {% if not cliente.usuario and current_user.es_admin %}
+    {% endif %}
+    {% if not cliente.usuario and current_user.puede('usuarios.gestionar') %}
       <a class="boton boton-primario" href="{{ url_for('usuarios.nuevo', cliente_id=cliente.id) }}">
         Habilitar portal</a>
     {% endif %}
@@ -35,7 +37,7 @@
             </span>
           </dd>
         </dl>
-        {% if current_user.es_admin %}
+        {% if current_user.puede('usuarios.gestionar') %}
         <p class="nota-pie">
           <a href="{{ url_for('usuarios.editar', usuario_id=cliente.usuario.id) }}">
             Administrar esta cuenta</a>
@@ -44,7 +46,7 @@
       {% else %}
         <p class="vacio">
           Este cliente no tiene acceso al portal de seguimiento.
-          {% if current_user.es_admin %}
+          {% if current_user.puede('usuarios.gestionar') %}
             <a href="{{ url_for('usuarios.nuevo', cliente_id=cliente.id) }}">Crear su cuenta</a>.
           {% else %}
             Solicítelo a un administrador.
@@ -78,11 +80,13 @@
                 {{ 'Activa' if sede.activa else 'Desactivada' }}</span>
             </td>
             <td class="acciones-fila">
+              {% if current_user.puede('clientes.gestionar') %}
               <a class="enlace-tabla" href="{{ url_for('clientes_admin.editar_sede_vista', cliente_id=cliente.id, sede_id=sede.id) }}">Editar</a>
               <form method="post" action="{{ url_for('clientes_admin.alternar_sede', cliente_id=cliente.id, sede_id=sede.id) }}">
                 {{ formulario_accion.hidden_tag() }}
                 <button type="submit" class="boton-enlace">{{ 'Desactivar' if sede.activa else 'Activar' }}</button>
               </form>
+              {% endif %}
             </td>
           </tr>
         {% endfor %}
@@ -91,6 +95,7 @@
       {% else %}
         <p class="vacio">Sin sedes registradas.</p>
       {% endif %}
+      {% if current_user.puede('clientes.gestionar') %}
 
       <details class="ayuda-formato">
         <summary>Agregar una sede</summary>
@@ -137,6 +142,7 @@
           automático.
         </p>
       </details>
+      {% endif %}
     </section>
   </div>
 

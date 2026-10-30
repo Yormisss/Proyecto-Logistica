@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block titulo %}{{ rol.nombre if rol else 'Nuevo rol' }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('roles.lista') }}">&lsaquo; Volver a roles</a>
+  <h1 class="titulo-pagina">{{ rol.nombre if rol else 'Nuevo rol' }}</h1>
+  {% if rol %}
+  <p class="subtitulo-pagina">
+    {{ 'Rol del sistema' if rol.es_sistema else 'Rol creado por el administrador' }}
+    &middot; lo tienen {{ usuarios|length }} cuenta(s){% if usuarios %}: {{ usuarios|map(attribute='nombre')|join(', ') }}{% endif %}.
+  </p>
+  {% endif %}
+</div>
+
+{% if not editable %}
+<section class="tarjeta">
+  <p>
+    {% if rol.clave_sistema == 'ADMIN' %}
+      El rol de administrador tiene todos los permisos y no se edita: así siempre hay quien
+      administre las cuentas y los roles.
+    {% else %}
+      El rol de cliente solo da acceso al portal de su empresa y no se edita.
+    {% endif %}
+  </p>
+  <ul>
+    {% for permiso in permisos|sort %}<li>{{ nombre_permiso(permiso) }}</li>{% endfor %}
+  </ul>
+</section>
+{% else %}
+<form method="post" novalidate>
+  {{ formulario.hidden_tag() }}
+  <section class="tarjeta">
+    <div class="rejilla-campos">
+      <div class="campo">
+        {{ formulario.nombre.label }}
+        {% if rol and rol.es_sistema %}
+          {{ formulario.nombre(readonly=true) }}
+          <small class="ayuda-campo">Los roles del sistema no se renombran.</small>
+        {% else %}
+          {{ formulario.nombre(maxlength=60, placeholder="Supervisor de bodega", autofocus=true) }}
+        {% endif %}
+      </div>
+      <div class="campo campo-ancho">
+        {{ formulario.descripcion.label }}
+        {{ formulario.descripcion(maxlength=200, placeholder="Qué hace quien tiene este rol") }}
+      </div>
+    </div>
+  </section>
+
+  {% for grupo, permisos in grupos %}
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">{{ grupo }}</h2>
+    <div class="lista-permisos">
+      {% for clave, texto, elegido in permisos %}
+      <label class="campo-inline">
+        <input type="checkbox" name="permisos" value="{{ clave }}" {{ 'checked' if elegido }}>
+        <span>{{ texto }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  {% if rol and rol.clave_sistema == 'CONDUCTOR' %}
+  <p class="nota-pie">Además, «Mi ruta y entregas», que tiene todo conductor por su tipo de cuenta.</p>
+  {% endif %}
+
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('roles.lista') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">{{ 'Guardar rol' if rol else 'Crear rol' }}</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

@@ -21,10 +21,10 @@ from wtforms import (
 )
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
 from app.models import (
-    Cliente, EstadoPedido, Pedido, Producto, Rol,
+    Cliente, EstadoPedido, Pedido, Producto,
 )
 from app.services.archivos import ArchivoRechazado, exigir_texto
 from app.services.auditoria import (
@@ -129,7 +129,7 @@ def _carpeta_temporal():
 
 @pedidos_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.ver")
 def lista():
     consulta = db.session.query(Pedido).options(joinedload(Pedido.ruta))
 
@@ -179,7 +179,7 @@ def lista():
 
 @pedidos_bp.route("/<int:pedido_id>")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.ver")
 def detalle(pedido_id):
     pedido = db.session.get(Pedido, pedido_id)
     if pedido is None:
@@ -190,7 +190,7 @@ def detalle(pedido_id):
 
 @pedidos_bp.route("/<int:pedido_id>/editar", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.gestionar")
 def editar(pedido_id):
     """Edicion de un pedido: PENDIENTE casi todo; ASIGNADO solo ventana, prioridad
     y observaciones; los demas estados no se editan. Reglas en app.services.pedidos."""
@@ -258,7 +258,7 @@ def editar(pedido_id):
 
 @pedidos_bp.route("/nuevo", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.gestionar")
 def nuevo():
     formulario = FormularioPedido()
     if not formulario.fecha_despacho.data:
@@ -340,7 +340,7 @@ def nuevo():
 
 @pedidos_bp.route("/<int:pedido_id>/anular", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.gestionar")
 def anular(pedido_id):
     pedido = db.session.get(Pedido, pedido_id)
     if pedido is None:
@@ -372,7 +372,7 @@ def anular(pedido_id):
 
 @pedidos_bp.route("/importar", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.gestionar")
 def importar():
     formulario = FormularioImportacion()
     contexto = {"formulario": formulario, "pedidos": None, "errores": None, "token": None}
@@ -429,7 +429,7 @@ def importar():
 
 @pedidos_bp.route("/importar/confirmar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.gestionar")
 def confirmar_importacion():
     token = request.form.get("token", "")
     if not token.isalnum() or len(token) != 32:
@@ -470,7 +470,7 @@ def confirmar_importacion():
 
 @pedidos_bp.route("/plantilla.csv")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("pedidos.ver")
 def plantilla():
     return Response(
         generar_plantilla_csv(),

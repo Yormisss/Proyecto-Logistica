@@ -9,9 +9,9 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
-from app.models import ErrorSistema, Rol
+from app.models import ErrorSistema
 
 errores_bp = Blueprint("errores", __name__)
 
@@ -28,7 +28,7 @@ class FormularioAccion(FlaskForm):
 
 @errores_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("errores.ver")
 def lista():
     total = db.session.query(ErrorSistema).count()
     paginas = max((total + POR_PAGINA - 1) // POR_PAGINA, 1)
@@ -48,7 +48,7 @@ def lista():
 
 @errores_bp.route("/probar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("errores.ver")
 def probar():
     """Provoca un error no controlado: la peticion termina en la pagina 500 y
     el registro debe mostrarlo en esta pantalla, con el mismo numero."""

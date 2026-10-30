@@ -28,6 +28,7 @@ from app.models.pedido import (
     PedidoItem,
     PruebaEntrega,
 )
+from app.models.permiso import PermisoUsuario, RolAcceso, RolPermiso, usuario_roles
 from app.models.ruta import EstadoRuta, Ruta, Vehiculo
 from app.models.solicitud import SolicitudContacto
 from app.models.usuario import Rol, Usuario
@@ -61,6 +62,10 @@ __all__ = [
     "Pedido",
     "PedidoItem",
     "PruebaEntrega",
+    "PermisoUsuario",
+    "RolAcceso",
+    "RolPermiso",
+    "usuario_roles",
     "EstadoRuta",
     "Ruta",
     "Vehiculo",
