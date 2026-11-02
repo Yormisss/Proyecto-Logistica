@@ -339,8 +339,8 @@ def restablecer_contrasena_voz():
 configuracion = funcion_agrupada(
     ESPACIO, "configuracion", roles=ROLES, entidad="configuracion",
     descripcion="Configuracion del negocio: el centro de distribucion (origen de las rutas), el "
-                "catalogo de motivos de entrega fallida y los minutos sin actividad tras los que se "
-                "cierra una sesion. 'Otro' no se renombra ni se desactiva.",
+                "catalogo de motivos de entrega fallida y la inactividad de las sesiones. 'Otro' no "
+                "se renombra ni se desactiva.",
     parametros={
         "nombre_centro": {"type": "string", "description": "editar-centro: nombre del centro."},
         "latitud": {"type": "number", "description": "editar-centro: latitud del centro."},
@@ -364,8 +364,8 @@ def _motivo():
 
 
 @configuracion("consultar", "Consultar configuración",
-               "el centro de distribucion, los motivos de fallo activos y desactivados y el tiempo "
-               "de inactividad de las sesiones", modifica=False)
+               "el centro, los motivos de fallo activos y desactivados y la inactividad de las "
+               "sesiones", modifica=False)
 def consultar_configuracion():
     centro = centro_distribucion()
     motivos = catalogo(incluir_inactivos=True)
@@ -412,7 +412,7 @@ def editar_centro_voz():
 
 
 @configuracion("editar-inactividad", "Editar tiempo de inactividad",
-               "cambia los minutos sin actividad tras los que se cierra una sesion; requiere minutos")
+               "minutos sin actividad para cerrar una sesion; requiere minutos")
 def editar_inactividad_voz():
     if not dichos("minutos"):
         return responder(me_falta(["los minutos sin actividad"]))

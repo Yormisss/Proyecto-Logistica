@@ -5,6 +5,11 @@
   <!-- RNF1 - Interfaz responsiva mobile-first -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block titulo %}{{ nombre_sistema }}{% endblock %}</title>
+  <!-- Favicon: el SVG para los navegadores que lo admiten (se adapta al modo oscuro),
+       el .ico para el resto y el PNG para la pantalla de inicio de iOS. -->
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="32x32">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
   <!-- Fuentes servidas por la propia aplicacion (sin depender de Google Fonts):
        se precargan las dos que usa toda pagina para evitar el cambio de letra. -->
   <link rel="preload" href="{{ url_for('static', filename='fonts/libre-franklin-variable-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
@@ -12,6 +17,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   <script src="{{ url_for('static', filename='js/menu.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/contrasena.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/actualizar.js') }}" defer></script>
   {% if current_user.is_authenticated and segundos_inactividad %}
   <script src="{{ url_for('static', filename='js/sesion.js') }}" defer
           data-estado="{{ url_for('auth.estado_sesion') }}"
@@ -26,8 +33,7 @@
 <header class="barra-superior">
   <div class="barra-contenido">
     <a class="marca" href="{{ url_for('principal.inicio') }}">
-      <span class="marca-icono">R</span>
-      <span class="marca-texto">Rutalytics</span>
+      <img src="{{ url_for('static', filename='img/logo-negativo.svg') }}" alt="Rutalytics" width="188" height="18">
     </a>
 
     <nav class="navegacion">
@@ -119,7 +125,8 @@
 {% if asistente_disponible %}
 {# Asistente de voz (Retell AI). Solo se muestra si el rol tiene agente configurado. #}
 <div class="asistente" id="asistente"
-     data-url="{{ url_for('asistente.llamada') }}" data-csrf="{{ csrf_token() }}">
+     data-url="{{ url_for('asistente.llamada') }}" data-csrf="{{ csrf_token() }}"
+     data-login="{{ url_for('auth.login') }}">
   <p class="asistente-estado" id="asistente-estado" role="status" aria-live="polite" hidden></p>
   <button type="button" class="asistente-boton" id="asistente-boton"
           aria-label="Hablar con el asistente de voz" aria-pressed="false">

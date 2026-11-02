@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_actualizar.html" import boton_actualizar %}
 {% block titulo %}Inventario | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
@@ -8,6 +9,7 @@
     <p class="subtitulo-pagina">{{ productos|length }} producto(s) en catálogo</p>
   </div>
   <div class="acciones-encabezado">
+    {{ boton_actualizar() }}
     {% if current_user.puede('inventario.gestionar') %}
     <a class="boton boton-primario" href="{{ url_for('inventario.nuevo') }}">Nuevo producto</a>
     {% endif %}

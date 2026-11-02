@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block titulo %}Iniciar sesión | {{ nombre_sistema }}{% endblock %}
-{% block clase_body %}pagina-acceso{% endblock %}
+{% block clase_body %}pagina-acceso pagina-login{% endblock %}
 
 {% block contenido %}
 <div class="acceso-panel">
   <div class="acceso-encabezado">
-    <span class="marca-icono grande">R</span>
-    <h1>Rutalytics</h1>
+    <h1 class="acceso-logo">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Rutalytics" width="280" height="27">
+    </h1>
     <p class="acceso-sistema">Sistema de Despachos</p>
-    <p>Optimización de transporte, almacenamiento y distribución de última milla</p>
   </div>
 
   <form method="post" class="formulario" novalidate>
@@ -22,7 +22,7 @@
 
     <div class="campo">
       {{ formulario.contrasena.label }}
-      {{ formulario.contrasena(placeholder="********", autocomplete="current-password") }}
+      {{ formulario.contrasena(placeholder="Ingresa tu contraseña", autocomplete="current-password") }}
       {% for error in formulario.contrasena.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
     </div>
 

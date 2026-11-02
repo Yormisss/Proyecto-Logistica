@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_actualizar.html" import boton_actualizar %}
 {% block titulo %}Tablero de control | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
@@ -20,7 +21,12 @@
 </section>
 {% endif %}
 
-<h2 class="titulo-seccion" id="operacion-hoy">Operacion de hoy</h2>
+{# El boton va aqui y no en el encabezado: lo que cambia por voz es esta seccion,
+   que queda debajo del Big Data. #}
+<div class="fila-seccion">
+  <h2 class="titulo-seccion" id="operacion-hoy">Operacion de hoy</h2>
+  {{ boton_actualizar() }}
+</div>
 
 <!-- RF6 - Tres KPIs fundamentales del prototipo -->
 <section class="rejilla-kpis">

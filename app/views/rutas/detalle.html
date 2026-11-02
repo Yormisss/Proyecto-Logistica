@@ -178,9 +178,9 @@
 
   // Trazado real devuelto por el proveedor; si no hay, se unen los puntos en linea recta
   if (datos.geometria && datos.geometria.length) {
-    L.polyline(datos.geometria, { color: "#7a2e42", weight: 4, opacity: 0.8 }).addTo(mapa);
+    L.polyline(datos.geometria, { color: "#2b2f38", weight: 4, opacity: 0.8 }).addTo(mapa);
   } else if (limites.length > 1) {
-    L.polyline(limites, { color: "#98a2b3", weight: 3, dashArray: "6 6" }).addTo(mapa);
+    L.polyline(limites, { color: "#6b6f78", weight: 3, dashArray: "6 6" }).addTo(mapa);
   }
 
   if (limites.length > 1) {

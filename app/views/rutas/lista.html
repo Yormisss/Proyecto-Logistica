@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_actualizar.html" import boton_actualizar %}
 {% block titulo %}Rutas | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
@@ -8,6 +9,7 @@
     <p class="subtitulo-pagina">{{ rutas|length }} ruta(s) registradas</p>
   </div>
   <div class="acciones-encabezado">
+    {{ boton_actualizar() }}
     {% if current_user.puede('rutas.gestionar') %}
     <a class="boton boton-primario" href="{{ url_for('rutas.nueva') }}">Planificar ruta</a>
     {% endif %}

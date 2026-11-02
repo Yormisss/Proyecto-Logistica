@@ -5,7 +5,7 @@
 {% block contenido %}
 <div class="acceso-panel">
   <div class="acceso-encabezado">
-    <span class="marca-icono grande">R</span>
+    <img class="acceso-icono" src="{{ url_for('static', filename='img/icono.svg') }}" alt="" width="56" height="56">
     <h1>Olvidé mi contraseña</h1>
     {% if formulario %}
     <p>Escriba el correo con el que inicia sesión y le enviaremos un enlace para definir una contraseña nueva.</p>

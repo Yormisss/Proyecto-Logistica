@@ -30,10 +30,10 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── services/          Lógica de negocio — despacho, pedidos, inventario, planificación, ruteo, analítica, importador, seguimiento, solicitudes, búsqueda para voz, asistente, avisos
 │   ├── asistentes/        Prompts de los agentes de Retell y su sincronización
 │   ├── views/             VISTA    — plantillas Jinja2
-│   └── static/            CSS y JS
+│   └── static/            CSS, JS, fuentes e imágenes (logo y favicon en img/)
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2212 verificaciones automatizadas en 25 suites (MySQL)
+├── pruebas/               2230 verificaciones automatizadas en 25 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -230,6 +230,12 @@ tener **mínimo 8 caracteres, con al menos una mayúscula, una minúscula, un n�
 símbolo**. Así no pasan secuencias como `123456789101112131415` ni palabras sueltas, y el
 mensaje dice qué le falta. La regla es una sola (`error_politica` en
 `app/services/usuarios.py`), y las contraseñas generadas también la cumplen.
+
+Todo campo de contraseña lleva un botón con un ojo: **la contraseña se ve solo mientras se
+mantiene presionado** (ratón, dedo, o Espacio o Enter con el teclado). Vuelve a ocultarse al
+soltarlo, al sacar el puntero del botón, al cambiar de ventana y al enviar el formulario.
+Aun visible, el campo no deja copiar ni cortar su contenido. El ojo propio de Edge, que la
+deja a la vista con un clic, queda oculto. Ver `app/static/js/contrasena.js`.
 
 El apartado **Contraseñas** (menú del administrador, `/admin/usuarios/contrasenas`) muestra
 el estado de la contraseña de todas las cuentas. Como solo se guarda el hash (RNF5),
@@ -889,8 +895,20 @@ El fin de `/v2/create-web-call` (18 de octubre de 2026) no afecta: `retell-sdk` 
 llama a `/v3/create-web-call`, y el SDK web acepta su token si se le indica el
 transporte `gateway` con el `call_id`.
 
-Cambiar de página corta la llamada; el asistente está pensado para usarse desde una
-misma pantalla sin navegar.
+La llamada vive en la página donde se inició, así que el navegador la cortaría al cambiar
+de página. Para seguir hablando mientras se navega, con una llamada en curso los enlaces
+y formularios de la aplicación se abren en un marco que cubre la ventana: la página de la
+llamada queda debajo con solo el botón, y la barra de direcciones y el título siguen al
+marco. Recargar o cerrar la pestaña corta la llamada, y si el marco llega al login (*Salir*
+o inactividad), la ventana entera va al login y la llamada termina.
+
+Para ver lo que el asistente acaba de cambiar sin salir del apartado, **Pedidos, Rutas,
+Inventario, Clientes y Analítica** llevan un botón **Actualizar** (el icono de la flecha
+circular) junto al título; en el **Tablero** va junto a *Operación de hoy*, que es lo que
+cambia por voz. El botón vuelve a pedir la página y reemplaza solo el contenido, sin
+recargarla: la llamada sigue, se conservan los filtros y el desplazamiento, y no se suman
+entradas al historial. Si la sesión venció lleva al login; si falla la conexión, deja lo
+que se ve y lo avisa. Ver `app/static/js/actualizar.js`.
 
 ## Auditoría y bitácora
 
@@ -1412,7 +1430,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2212 verificaciones en 25 suites contra MySQL 8.0, todas pasando, en unos dos
+**2230 verificaciones en 25 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1431,7 +1449,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 
 | Suite | Cubre | Pruebas |
 |---|---|---|
-| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción, inventario sembrado, lista blanca del correo en el login | 90 |
+| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción, inventario sembrado, lista blanca del correo en el login, contraseña visible solo mientras se presiona, botón Actualizar de las vistas de consulta | 107 |
 | `prueba_02_pedidos_csv.py` | RF2 · alta manual, importación CSV, inventario, anulación | 64 |
 | `prueba_03_ruteo.py` | RF3 · ordenamientos, respaldo offline (OSRM en vivo con `--externas`: 32) | 22 |
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
@@ -1442,7 +1460,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 100 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 79 |
 | `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 215 |
-| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 94 |
+| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 95 |
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 91 |
@@ -1500,11 +1518,13 @@ para "facilitar la toma de decisiones estratégicas":
 
 ### Nota sobre los colores de las gráficas
 
-La paleta se validó con un verificador de accesibilidad cromática contra la superficie
-real de las tarjetas. **El par verde/rojo fue rechazado**: su separación bajo
-deuteranopía es ΔE 4.1, muy por debajo del mínimo de 6 — un lector con daltonismo rojo-verde
-(cerca del 8 % de los hombres) no distinguiría las series. Se usa azul `#2a78d6` y
-naranja `#eb6834`, que miden ΔE 24.7 bajo simulación de protanopía. El estado además se
+Las gráficas usan la paleta "Negro y amarillo" del logo: la serie principal (entregadas,
+tasa de éxito, unidades que entran) va en `#2b2f38`, la segunda (cumplimiento de ventana,
+unidades que salen) en `#e0ae14` y las fallidas en `#e0573f`. El rojo se reserva para
+datos de fallo. **No se usa el par verde/rojo**: bajo daltonismo rojo-verde (cerca del 8 %
+de los hombres) no se distingue. Las series de cada gráfica se separan por luminosidad,
+que el daltonismo conserva: contraste 3.6:1 entre entregadas y fallidas y 6.5:1 entre las
+dos líneas. El amarillo sobre blanco es tenue (2:1), así que el estado además se
 identifica por leyenda y etiqueta, nunca por color solo, y cada gráfica ofrece una vista
 en tabla.
 

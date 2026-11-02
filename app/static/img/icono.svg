@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -29.5 119 119">
+<!-- Rutalytics - icono (camion expres) para fondos claros. -->
+<path fill="#16181d" d="M35 0H75A6 6 0 0 1 81 6V39A6 6 0 0 1 75 45H53.55A11 11 0 0 0 37.45 45H35A6 6 0 0 1 29 39V6A6 6 0 0 1 35 0ZM82 15H98.3L111 30V45H102.05A11 11 0 0 0 85.95 45H82Z"/>
+<g fill="#f5c024"><circle cx="45.5" cy="52.5" r="7.5"/><circle cx="94" cy="52.5" r="7.5"/></g>
+<path stroke="#f5c024" fill="none" stroke-width="6" stroke-linecap="round" d="M3 15H19M9 30H19"/>
+</svg>

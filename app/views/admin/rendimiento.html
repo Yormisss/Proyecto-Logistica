@@ -37,7 +37,7 @@
   </article>
 </section>
 
-<section class="tarjeta">
+<section class="tarjeta tarjeta-grafica">
   <div class="grafica-encabezado">
     <h2 class="tarjeta-titulo sin-borde">Percentil 95 por transacción crítica</h2>
     <span class="nota-umbral">Línea oscura: límite de {{ (datos.umbral_maximo_ms / 1000)|int }} s</span>
@@ -46,7 +46,7 @@
   <div class="grafica-barras grafica-latencia" role="img"
        aria-label="Percentil 95 del tiempo de respuesta por transacción crítica">
   {% for fila in datos.transacciones %}
-    <div class="fila-barra"
+    <div class="fila-barra{{ ' fila-principal' if loop.first }}"
          data-tooltip="{{ fila.nombre }} — mediana {{ fila.mediana_ms }} ms, p95 {{ fila.p95_ms }} ms, maximo {{ fila.maximo_ms }} ms ({{ fila.muestras }} muestras)">
       <span class="etiqueta-barra ancha">{{ fila.nombre }}</span>
       <div class="pista-barra">
