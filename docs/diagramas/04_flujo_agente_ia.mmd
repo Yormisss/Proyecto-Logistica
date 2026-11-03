@@ -1,0 +1,23 @@
+sequenceDiagram
+  autonumber
+  actor U as Usuario
+  participant W as App Fliyt (navegador)
+  participant R as Retell AI (voz + gpt-4.1)
+  participant A as API del asistente (Flask)
+  participant B as MySQL
+  U->>W: Pulsa el botón de voz
+  W->>A: Pide una llamada web (sesión iniciada)
+  A->>R: Crea la llamada con el agente de su rol
+  U->>R: Habla ("¿cuántos pedidos hay hoy?")
+  R->>A: Llama una función (HTTPS, firma X-Retell-Signature)
+  A->>A: Verifica firma, sesión y permisos del rol
+  A->>B: Consulta o modifica datos
+  B-->>A: Resultado
+  alt La acción modifica datos
+    A-->>R: Pide confirmación al usuario
+    U->>R: "Sí, confirmo"
+    R->>A: Repite la función con confirmar
+    A->>B: Guarda el cambio y lo deja en la bitácora
+  end
+  A-->>R: Respuesta en texto
+  R-->>U: Responde con voz

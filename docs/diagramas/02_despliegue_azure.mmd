@@ -1,0 +1,29 @@
+flowchart LR
+  DEV["PC del equipo<br/>git push"] --> GL["GitLab<br/>repositorio principal"]
+  GL -- espejo --> AR["Azure Repos"]
+  DEV -. copia .-> GH["GitHub"]
+  AR -- push a main --> PL
+  subgraph ADO["Azure DevOps"]
+    PL["Pipeline CI/CD<br/>agente propio"]
+    LIB["Library<br/>variables y secretos"]
+    BRD["Boards<br/>sprints y backlog"]
+  end
+  subgraph PASOS["Etapas del pipeline"]
+    direction TB
+    P1["1. Pruebas<br/>30 suites contra MySQL"] --> P2["2. Seguridad<br/>Bandit + pip-audit"] --> P3["3. Imagen Docker"] --> P4["4. Despliegue"]
+  end
+  PL --> P1
+  LIB -.-> P4
+  subgraph AZ["Microsoft Azure · rg-rutalytics"]
+    ACR["Container Registry"]
+    CA["Container App<br/>gunicorn + Flask · HTTPS"]
+    JOB["Container Apps Job<br/>resumen diario 18:00"]
+    DB[("MySQL Flexible Server<br/>TLS obligatorio")]
+  end
+  P3 --> ACR
+  P4 --> CA
+  P4 --> JOB
+  ACR --> CA
+  CA --> DB
+  JOB --> DB
+  U["Usuarios"] -- HTTPS --> CA

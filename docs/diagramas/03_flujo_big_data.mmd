@@ -1,0 +1,21 @@
+flowchart LR
+  subgraph F["Fuentes"]
+    F1["App Fliyt<br/>fuente_app.py"]
+    F2["ERP · CSV<br/>fuente_generador.py"]
+    F3["App móvil · JSON"]
+    F4["WMS · movimientos"]
+  end
+  RAW[("raw<br/>CSV / JSON")]
+  BRZ[("bronze<br/>Parquet + linaje")]
+  SIL[("silver<br/>limpio y tipado")]
+  GLD[("gold<br/>9 tablas")]
+  F1 & F2 & F3 & F4 --> RAW
+  RAW -- "ingesta.py" --> BRZ
+  BRZ -- "etl.py<br/>reglas de calidad" --> SIL
+  SIL -- "elt_gold.py<br/>Spark SQL" --> GLD
+  GLD -- "ml_fallos.py<br/>MLlib" --> ML["Modelo de fallos"]
+  F3 -- "ingesta_streaming.py" --> ST["Streaming<br/>ventanas"]
+  GLD --> R["resultados/*.json<br/>y CSV Power BI"]
+  ML --> R
+  ST --> R
+  R --> V["App: Administración → Big Data<br/>y Tablero"]

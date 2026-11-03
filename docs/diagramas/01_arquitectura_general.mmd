@@ -1,0 +1,32 @@
+flowchart TB
+  subgraph USR["Usuarios"]
+    NAV["Navegador o celular<br/>admin · gestor · conductor · cliente"]
+  end
+  subgraph APP["Aplicación web Fliyt (Flask, patrón MVC)"]
+    direction TB
+    VIS["Vistas<br/>Jinja2 + CSS + JS"]
+    CTL["Controladores<br/>rutas HTTP y API de voz"]
+    SRV["Servicios<br/>lógica de negocio"]
+    MOD["Modelos<br/>SQLAlchemy"]
+    VIS --> CTL --> SRV --> MOD
+  end
+  BD[("MySQL 8<br/>base de datos")]
+  subgraph IA["Agente de IA"]
+    RET["Retell AI<br/>voz + LLM gpt-4.1"]
+  end
+  MAKE["Make<br/>correos y Google Sheets"]
+  OSRM["OSRM<br/>cálculo de rutas"]
+  subgraph BIG["Big Data (Apache Spark)"]
+    PIPE["pipeline.py<br/>ingesta · ETL · ELT · MLlib · streaming"]
+    LAKE[("Data lake<br/>raw / bronze / silver / gold")]
+    RES["resultados/*.json<br/>y CSV para Power BI"]
+    PIPE --> LAKE --> RES
+  end
+  NAV -- HTTPS --> VIS
+  NAV -- llamada de voz --> RET
+  RET -- funciones firmadas HTTPS --> CTL
+  MOD --> BD
+  SRV -- webhooks --> MAKE
+  SRV -- rutas --> OSRM
+  BD -- exporta pedidos y eventos --> PIPE
+  RES -- tablero Big Data --> SRV
