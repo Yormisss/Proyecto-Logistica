@@ -112,6 +112,12 @@ paso "Entorno de Container Apps $ENTORNO_CA"
 if ! az containerapp env show -n "$ENTORNO_CA" -g "$GRUPO" -o none 2>/dev/null; then
     az containerapp env create -n "$ENTORNO_CA" -g "$GRUPO" -l "$UBICACION" -o none
 fi
+# La creacion del entorno sigue en segundo plano; la app no se puede crear antes.
+until estado=$(az containerapp env show -n "$ENTORNO_CA" -g "$GRUPO" --query properties.provisioningState -o tsv); \
+      [[ "$estado" == "Succeeded" || "$estado" == "Failed" ]]; do
+    echo "  entorno: $estado, esperando..."; sleep 15
+done
+[[ "$estado" == "Succeeded" ]] || { echo "El entorno $ENTORNO_CA quedo en $estado"; exit 1; }
 
 paso "Container App $APP"
 if ! az containerapp show -n "$APP" -g "$GRUPO" -o none 2>/dev/null; then
