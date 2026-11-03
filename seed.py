@@ -6,6 +6,7 @@ una flota reducida y pedidos de ultima milla con ventanas horarias comerciales
 """
 
 import os
+import sys
 from datetime import datetime, time, timedelta
 
 from app.extensions import db
@@ -53,6 +54,45 @@ PRODUCTOS = [
     ("SKU-1006", "Papel higienico 12 rollos", 18, 25),  # Bajo minimo
 ]
 
+# Contrasenas de las cuentas demo por rol. En desarrollo y pruebas, si la
+# variable no esta, se usa la de USUARIOS (publicada en el README). En
+# produccion las cuatro son obligatorias: con la aplicacion en internet, una
+# contrasena publicada en el repositorio deja entrar a cualquiera como
+# administrador.
+VARIABLES_CLAVE = {
+    Rol.ADMIN: "SEMILLA_CLAVE_ADMIN",
+    Rol.DESPACHADOR: "SEMILLA_CLAVE_GESTOR",
+    Rol.CONDUCTOR: "SEMILLA_CLAVE_CONDUCTOR",
+    Rol.CLIENTE: "SEMILLA_CLAVE_CLIENTE",
+}
+
+
+def claves_semilla():
+    """{correo: contrasena} de las cuentas demo cuya variable SEMILLA_CLAVE_* esta definida.
+
+    En produccion termina el proceso si falta alguna o no cumple la politica.
+    """
+    from app.services.usuarios import error_politica
+
+    produccion = os.getenv("ENTORNO", "desarrollo") == "produccion"
+    claves, faltantes = {}, []
+    for _, correo, rol, _, _, _ in USUARIOS:
+        variable = VARIABLES_CLAVE[rol]
+        valor = os.getenv(variable, "").strip()
+        if not valor:
+            if produccion and variable not in faltantes:
+                faltantes.append(variable)
+            continue
+        problema = error_politica(valor)
+        if problema:
+            sys.exit(f"{variable} no cumple la politica de contrasenas: {problema}")
+        claves[correo] = valor
+    if faltantes:
+        sys.exit("En produccion las contrasenas de las cuentas demo no pueden ser las del "
+                 f"README: defina {', '.join(faltantes)}.")
+    return claves
+
+
 # Clientes comerciales con su sede de entrega. El ultimo campo es el NIT, clave
 # natural que evita duplicarlos cuando el ERP reescribe la razon social.
 DESTINOS = [
@@ -98,7 +138,9 @@ def _sembrar_datos():
 
     # --- Usuarios (RF1) ---
     usuarios = {}
+    claves = claves_semilla()
     for nombre, correo, rol, clave, documento, telefono in USUARIOS:
+        clave = claves.get(correo, clave)
         usuario = Usuario(nombre=nombre, correo=correo, rol=rol, activo=True,
                           documento=documento, telefono=telefono)
         usuario.establecer_contrasena(clave)
@@ -276,7 +318,10 @@ def _sembrar_datos():
     print("Datos de demostracion cargados.")
     print("-" * 58)
     for _, correo, rol, clave, _, _ in USUARIOS:
-        print(f"  {Rol.ETIQUETAS[rol]:<18} {correo:<26} {clave}")
+        # Las contrasenas definidas por variable (produccion) no se imprimen:
+        # quedarian en los registros del contenedor.
+        mostrar = "(la de " + VARIABLES_CLAVE[rol] + ")" if correo in claves else clave
+        print(f"  {Rol.ETIQUETAS[rol]:<18} {correo:<26} {mostrar}")
     print("-" * 58)
 
 
