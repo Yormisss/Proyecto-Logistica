@@ -47,6 +47,10 @@ COBERTURA = {
                                               "identidad de la cuenta, como la contraseña, y pide la "
                                               "contraseña actual."),
     "usuarios.contrasena": Cobertura(excluida=CONTRASENA_DICTADA),
+    # Aprobada al agregar el correo de avisos (02/11/2026).
+    "auth.correo_avisos": Cobertura(excluida="Cambiar el propio correo de avisos: es un dato de la propia "
+                                             "cuenta que se cambia en Perfil, como el propio correo; el "
+                                             "administrador lo cambia por voz con usuarios:editar."),
     "errores.probar": Cobertura(excluida="Provocar un error a propósito es una herramienta de "
                                          "diagnóstico de pantalla; por voz solo ensuciaría el registro."),
     "asistente.llamada": Cobertura(excluida="Es el botón que inicia la propia llamada de voz."),

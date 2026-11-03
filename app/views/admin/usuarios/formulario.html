@@ -43,6 +43,12 @@
         {% for e in formulario.correo.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
       </div>
       <div class="campo">
+        {{ formulario.correo_avisos.label }}
+        {{ formulario.correo_avisos(placeholder="Vacío = el de inicio de sesión") }}
+        <small class="ayuda-campo">Adonde le llegan los avisos de su rol.</small>
+        {% for e in formulario.correo_avisos.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
         {{ formulario.documento.label }}
         {{ formulario.documento(placeholder="Cédula") }}
         {% for e in formulario.documento.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}

@@ -13,7 +13,8 @@ Solo del administrador:
 - El resumen del panel de rendimiento (última hora, último día o última semana).
 
 Y, con confirmación:
-- Usuarios: consultar, crear (nombre, correo, rol y, si es cliente, el cliente cuyo portal verá), editar (nombre, documento, teléfono, rol o cliente del portal), activar, desactivar y restablecer la contraseña. Una cuenta se busca por su nombre, correo, documento o teléfono.
+- Usuarios: consultar, crear (nombre, correo, rol y, si es cliente, el cliente cuyo portal verá; opcional, el correo de avisos), editar (nombre, documento, teléfono, correo de avisos, rol o cliente del portal), activar, desactivar y restablecer la contraseña.
+  - El correo de avisos es adonde le llegan a esa cuenta los avisos de su rol (su ruta, el stock bajo, el resumen del día...). Es opcional: sin él, le llegan al correo de inicio de sesión. Deletréalo y confírmalo como cualquier correo; para quitarlo, envía "ninguno". Una cuenta se busca por su nombre, correo, documento o teléfono.
   - La contraseña nunca se dice: se genera sola y le llega al usuario a su correo. Es temporal: al iniciar sesión deberá cambiarla por una propia antes de usar la aplicación. Díselo al administrador al leer el resumen. Si al confirmar no está configurado ese envío, la función lo dice: entonces se hace en pantalla.
   - Nadie se desactiva ni se quita el rol de administrador a sí mismo, y siempre queda un administrador activo.
   - Un conductor con rutas sin cerrar no cambia de rol ni se desactiva. Una cuenta de cliente no pasa a un rol interno ni al revés: se crea otra cuenta.

@@ -17,6 +17,8 @@ from app.services import acceso, recuperacion, sesiones
 from app.services.asistente import huella_sesion, trasladar_llamadas
 from app.services.auditoria import registrar_auditoria
 from app.services.configuracion import minutos_inactividad, texto_minutos
+from app.services.usuarios import cambiar_correo_avisos
+from app.services.validacion import DatosInvalidos
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -73,6 +75,15 @@ class FormularioCambioCorreo(FlaskForm):
     contrasena_correo = PasswordField(
         "Contraseña actual", validators=[DataRequired("Ingrese su contrasena actual.")]
     )
+
+
+class FormularioCorreoAvisos(FlaskForm):
+    # Las reglas las aplica `cambiar_correo_avisos` (la misma lista blanca).
+    correo_avisos = campo_correo("Correo para avisos", validar=False)
+
+
+def _formulario_avisos():
+    return FormularioCorreoAvisos(formdata=None, data={"correo_avisos": current_user.correo_avisos})
 
 
 def _verificar_actual(usuario, actual):
@@ -323,7 +334,8 @@ def perfil():
             return redirect(url_for("auth.perfil"))
 
     return render_template("auth/perfil.html", formulario=formulario,
-                           formulario_correo=FormularioCambioCorreo(formdata=None))
+                           formulario_correo=FormularioCambioCorreo(formdata=None),
+                           formulario_avisos=_formulario_avisos())
 
 
 @auth_bp.route("/perfil/correo", methods=["POST"])
@@ -343,4 +355,31 @@ def cambiar_correo():
             return redirect(url_for("auth.perfil"))
 
     return render_template("auth/perfil.html", formulario=FormularioCambioContrasena(formdata=None),
-                           formulario_correo=formulario_correo)
+                           formulario_correo=formulario_correo, formulario_avisos=_formulario_avisos())
+
+
+@auth_bp.route("/perfil/avisos", methods=["POST"])
+@login_required
+def correo_avisos():
+    """El propio correo de avisos. No es el de inicio de sesion, asi que no pide la contrasena."""
+    formulario_avisos = FormularioCorreoAvisos()
+    if not formulario_avisos.validate_on_submit():
+        flash("Solicitud invalida. Intente nuevamente.", "error")
+        return redirect(url_for("auth.perfil"))
+    usuario = current_user._get_current_object()
+    try:
+        antes, nuevo = cambiar_correo_avisos(usuario, formulario_avisos.correo_avisos.data)
+    except DatosInvalidos as error:
+        flash(str(error), "error")
+        return redirect(url_for("auth.perfil"))
+    if antes == nuevo:
+        flash("No hubo cambios.", "exito")
+        return redirect(url_for("auth.perfil"))
+    registrar_auditoria(
+        "Cambiar correo de avisos propio", "usuario",
+        f"{usuario.nombre} cambió su correo de avisos a {nuevo or 'el de inicio de sesión'}.",
+        {"correo_avisos": [antes, nuevo]}, entidad_id=usuario.id,
+    )
+    db.session.commit()
+    flash(f"Sus avisos llegarán a {usuario.correo_para_avisos}.", "exito")
+    return redirect(url_for("auth.perfil"))

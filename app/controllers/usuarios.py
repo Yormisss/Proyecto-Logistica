@@ -62,6 +62,8 @@ class FormularioUsuario(FlaskForm):
     # navegador (la misma que aplica el servicio).
     nombre = StringField("Nombre completo", validators=[Optional()])
     correo = campo_correo(validar=False)
+    # Adonde le llegan los avisos de Make; vacio = el correo de inicio de sesion.
+    correo_avisos = campo_correo("Correo para avisos (opcional)", validar=False)
     documento = StringField("Documento", validators=[Optional()])
     telefono = StringField("Teléfono", validators=[Optional()])
     # `validate_choice=False`: la comprobacion de WTForms responde en ingles.
@@ -87,7 +89,8 @@ class FormularioUsuario(FlaskForm):
 
     def datos(self):
         return {
-            "nombre": self.nombre.data, "correo": self.correo.data, "documento": self.documento.data,
+            "nombre": self.nombre.data, "correo": self.correo.data,
+            "correo_avisos": self.correo_avisos.data, "documento": self.documento.data,
             "telefono": self.telefono.data, "rol": self.rol.data, "cliente_id": self.cliente_id.data,
             "contrasena": self.contrasena.data or None, "exigir_cambio": self.exigir_cambio.data,
             "activo": self.activo.data,
@@ -139,6 +142,8 @@ def _mostrar_errores(formulario, error):
 def _datos_cuenta(usuario, cliente=None):
     datos = {"nombre": usuario.nombre, "correo": usuario.correo, "rol": usuario.rol_etiqueta,
              "activo": usuario.activo}
+    if usuario.correo_avisos:
+        datos["correo_avisos"] = usuario.correo_avisos
     if cliente is not None:
         datos["cliente"] = cliente.nombre
     return datos

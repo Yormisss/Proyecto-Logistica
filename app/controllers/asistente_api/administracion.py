@@ -44,6 +44,9 @@ from app.tiempo import hoy
 ESPACIO = "admin"
 ROLES = (Rol.ADMIN,)
 
+# Como se dice "quitale el correo de avisos" (vuelve al de inicio de sesion).
+SIN_CORREO_AVISOS = {"ninguno", "ninguna", "quitar", "borrar", "vacio", "el de inicio de sesion"}
+
 SIN_CREDENCIALES = (
     "No puedo {} por voz: falta configurar el envío de contraseñas por correo "
     "(MAKE_WEBHOOK_CREDENCIALES_URL). Hazlo en pantalla, en Usuarios."
@@ -70,12 +73,13 @@ def _no_se_pudo(error):
 # --------------------------------------------------------------------------
 
 ETIQUETAS_USUARIO = {"nombre": "el nombre", "documento": "el documento", "telefono": "el teléfono",
-                     "rol": "el rol", "cliente": "el cliente del portal"}
+                     "rol": "el rol", "cliente": "el cliente del portal",
+                     "correo_avisos": "el correo de avisos"}
 
 usuarios = funcion_agrupada(
     ESPACIO, "usuarios", roles=ROLES, entidad="usuario",
     descripcion="Cuentas de acceso. Las contrasenas nunca se dicen por voz: al crear o restablecer, "
-                "llegan al correo del usuario. El correo de una cuenta existente solo se cambia en "
+                "llegan al correo del usuario. El correo de acceso de una cuenta solo se cambia en "
                 "pantalla.",
     parametros={
         "usuario": {"type": "string",
@@ -90,6 +94,10 @@ usuarios = funcion_agrupada(
                     "description": "crear y editar con rol cliente: cliente cuyo portal vera (sin cuenta aun)."},
         "documento": {"type": "string", "description": "crear y editar: documento (opcional)."},
         "telefono": {"type": "string", "description": "crear y editar: telefono (opcional)."},
+        "correo_avisos": {"type": "string",
+                          "description": "crear y editar: correo al que le llegan los avisos de su rol, "
+                                         "deletreado y confirmado (opcional; sin el, van al de inicio de "
+                                         "sesion). En editar, 'ninguno' lo quita."},
     },
 )
 
@@ -131,6 +139,9 @@ def _cliente_dicho(usuario=None):
 def _datos_usuario(usuario=None):
     """(datos para el servicio, error)."""
     datos = dichos("nombre", "documento", "telefono")
+    if texto("correo_avisos"):
+        dicho = texto("correo_avisos")
+        datos["correo_avisos"] = "" if normalizar_texto(dicho) in SIN_CORREO_AVISOS else dicho
     rol, error = _rol_dicho()
     if error:
         return None, error
@@ -173,6 +184,8 @@ def consultar_usuarios():
                   if valor]
     if personales:
         partes.append(f"Tiene {enumerar(personales)}.")
+    partes.append(f"Sus avisos le llegan a {usuario.correo_para_avisos}"
+                  + ("." if usuario.correo_avisos else ", el de inicio de sesión."))
     if usuario.cliente is not None:
         partes.append(f"Ve el portal de {usuario.cliente.nombre}.")
     if usuario.vehiculo is not None:
@@ -208,6 +221,7 @@ def crear_usuario_voz():
 
     portal = (f", con acceso al portal de {_nombre_cliente(limpios['cliente_id'])}"
               if limpios["cliente_id"] else "")
+    portal += (f". Sus avisos le llegarán a {limpios['correo_avisos']}" if limpios["correo_avisos"] else "")
     pendiente = exigir_confirmacion(
         f"Voy a crear la cuenta de {limpios['nombre']}, con el correo {limpios['correo']}, como "
         f"{etiqueta_rol(limpios['rol']).lower()}{portal}. {AVISO_CORREO}"
@@ -225,7 +239,8 @@ def crear_usuario_voz():
 
 
 @usuarios("editar", "Editar usuario",
-          "cambia nombre, documento, telefono, rol o el cliente del portal; el correo no; requiere usuario")
+          "cambia nombre, documento, telefono, correo de avisos, rol o cliente del portal; requiere "
+          "usuario")
 def editar_usuario_voz():
     usuario, error = _usuario()
     if usuario is None:
@@ -238,14 +253,16 @@ def editar_usuario_voz():
         return responder(error)
     if not datos:
         return responder(f"¿Qué quieres cambiar de la cuenta de {usuario.nombre}? Puedo cambiar el nombre, "
-                         "el documento, el teléfono, el rol o el cliente de su portal.")
+                         "el documento, el teléfono, el correo de avisos, el rol o el cliente de su portal.")
     actuales = {"nombre": usuario.nombre, "documento": usuario.documento, "telefono": usuario.telefono,
-                "rol": usuario.rol, "cliente_id": usuario.cliente.id if usuario.cliente else None}
+                "correo_avisos": usuario.correo_avisos, "rol": usuario.rol,
+                "cliente_id": usuario.cliente.id if usuario.cliente else None}
     try:
         limpios = validar_usuario(datos, usuario, g.usuario)
     except DatosInvalidos as error:
         return responder(frase_datos_invalidos(error))
-    cambios = diferencias(actuales, limpios, ("nombre", "documento", "telefono", "rol", "cliente_id"))
+    cambios = diferencias(actuales, limpios, ("nombre", "documento", "telefono", "correo_avisos", "rol",
+                                              "cliente_id"))
     if not cambios:
         return responder(f"La cuenta de {usuario.nombre} ya tiene esos datos; no hay nada que cambiar.")
     leidos = dict(cambios)

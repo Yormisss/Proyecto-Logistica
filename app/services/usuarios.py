@@ -35,7 +35,7 @@ from app.models import Cliente, EstadoRuta, Rol, Ruta, Usuario
 from app.services.validacion import DatosInvalidos, Validador
 
 LONGITUD_MINIMA = 8
-CAMPOS_USUARIO = ("nombre", "correo", "documento", "telefono", "rol", "activo")
+CAMPOS_USUARIO = ("nombre", "correo", "correo_avisos", "documento", "telefono", "rol", "activo")
 
 # Politica de contrasenas: ademas del largo, al menos un caracter de cada
 # clase. Asi no pasan secuencias como "123456789101112131415" o "abcdefgh".
@@ -136,6 +136,8 @@ def validar_usuario(datos, usuario=None, actor=None):
     v = Validador()
     nombre = v.texto(datos, "nombre", "el nombre", 120, requerido=True)
     correo = v.correo(datos, "correo", "el correo", requerido=True)
+    # Opcional: vacio = los avisos van al correo de inicio de sesion.
+    correo_avisos = v.correo(datos, "correo_avisos", "el correo de avisos") or None
     documento = v.texto(datos, "documento", "el documento", 30)
     telefono = v.texto(datos, "telefono", "el teléfono", 30)
     rol = (datos.get("rol") or "").strip() if isinstance(datos.get("rol"), str) else datos.get("rol")
@@ -195,8 +197,9 @@ def validar_usuario(datos, usuario=None, actor=None):
         v.invalido(None, "Debe quedar al menos un administrador activo en el sistema.")
 
     v.lanzar_si_hay()
-    return {"nombre": nombre, "correo": correo, "documento": documento, "telefono": telefono,
-            "rol": rol, "activo": activo, "cliente_id": cliente_id, "contrasena": contrasena}
+    return {"nombre": nombre, "correo": correo, "correo_avisos": correo_avisos, "documento": documento,
+            "telefono": telefono, "rol": rol, "activo": activo, "cliente_id": cliente_id,
+            "contrasena": contrasena}
 
 
 def _vincular_cliente(usuario, cliente_id):
@@ -226,8 +229,9 @@ def crear_usuario(datos, actor=None):
     el evento "credencial_usuario").
     """
     limpios = validar_usuario(datos, actor=actor)
-    usuario = Usuario(nombre=limpios["nombre"], correo=limpios["correo"], documento=limpios["documento"],
-                      telefono=limpios["telefono"], rol=limpios["rol"], activo=limpios["activo"])
+    usuario = Usuario(nombre=limpios["nombre"], correo=limpios["correo"], correo_avisos=limpios["correo_avisos"],
+                      documento=limpios["documento"], telefono=limpios["telefono"], rol=limpios["rol"],
+                      activo=limpios["activo"])
     generada = None if limpios["contrasena"] else generar_contrasena()
     # La escrita por el administrador solo es definitiva si el lo pide
     # (`exigir_cambio` falso) y la cuenta es de un rol cuya contrasena administra.
@@ -369,3 +373,19 @@ def exigir_cambio_cuentas(ids):
         .filter(Usuario.id.in_(list(ids)), Usuario.debe_cambiar_contrasena.is_(False))
         .update({Usuario.debe_cambiar_contrasena: True}, synchronize_session=False)
     )
+
+
+def validar_correo_avisos(valor):
+    """El correo de avisos normalizado, o None si viene vacio. Lanza DatosInvalidos."""
+    v = Validador()
+    correo = v.correo({"correo_avisos": valor}, "correo_avisos", "el correo de avisos")
+    v.lanzar_si_hay()
+    return correo or None
+
+
+def cambiar_correo_avisos(usuario, valor):
+    """Fija el correo de avisos (Perfil). Devuelve (antes, despues); vacio = el de inicio de sesion."""
+    nuevo = validar_correo_avisos(valor)
+    antes = usuario.correo_avisos
+    usuario.correo_avisos = nuevo
+    return antes, nuevo

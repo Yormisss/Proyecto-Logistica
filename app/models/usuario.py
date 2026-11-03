@@ -57,6 +57,9 @@ class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(120), nullable=False)
     correo = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    # Adonde le llegan los avisos de Make (ruta asignada, stock bajo, resumen...).
+    # Opcional: vacio = el correo de inicio de sesion (ver `correo_para_avisos`).
+    correo_avisos = db.Column(db.String(120))
     # RNF5 - Datos personales cifrados (ver app/cifrado.py). Hasta 30 caracteres
     # en claro; el texto cifrado ocupa hasta 250. La unicidad del documento la
     # garantiza su indice ciego, que `_indexar_documento` mantiene al dia.
@@ -159,6 +162,11 @@ class Usuario(UserMixin, db.Model):
     def es_interno(self):
         """Personal del centro de distribucion, en oposicion al cliente externo."""
         return self.rol in Rol.INTERNOS
+
+    @property
+    def correo_para_avisos(self):
+        """El correo de avisos o, si no tiene uno, el de inicio de sesion."""
+        return self.correo_avisos or self.correo
 
     @property
     def contrasena_administrable(self):

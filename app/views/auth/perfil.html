@@ -15,6 +15,7 @@
   <dl class="lista-datos">
     <dt>Nombre</dt><dd>{{ current_user.nombre }}</dd>
     <dt>Correo</dt><dd>{{ current_user.correo }}</dd>
+    <dt>Avisos</dt><dd>{{ current_user.correo_para_avisos }}{% if not current_user.correo_avisos %} <small class="ayuda-campo">(el de inicio de sesión)</small>{% endif %}</dd>
     <dt>Rol</dt><dd>{{ current_user.rol_etiqueta }}</dd>
     <dt>Teléfono</dt><dd>{{ current_user.telefono or 'No registrado' }}</dd>
   </dl>
@@ -55,6 +56,20 @@
       {% for error in formulario_correo.contrasena_correo.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
     </div>
     <button type="submit" class="boton boton-primario">Actualizar correo</button>
+  </form>
+</div>
+
+<div class="tarjeta">
+  <h2 class="tarjeta-titulo">Correo para avisos</h2>
+  <p class="nota-pie">Adonde le llegan los avisos de su rol (por ejemplo, su ruta asignada o el
+    resumen del día). Déjelo vacío para recibirlos en el correo con el que inicia sesión.</p>
+  <form method="post" action="{{ url_for('auth.correo_avisos') }}" class="formulario" novalidate>
+    {{ formulario_avisos.hidden_tag() }}
+    <div class="campo">
+      {{ formulario_avisos.correo_avisos.label }}
+      {{ formulario_avisos.correo_avisos(placeholder=current_user.correo, autocomplete="email") }}
+    </div>
+    <button type="submit" class="boton boton-primario">Guardar correo para avisos</button>
   </form>
 </div>
 {% endif %}
