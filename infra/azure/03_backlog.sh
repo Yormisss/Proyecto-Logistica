@@ -16,6 +16,8 @@ set -euo pipefail
 ORG="${1:?Uso: bash infra/azure/03_backlog.sh <organizacion> [proyecto] [correo]}"
 PROYECTO="${2:-Rutalytics}"
 RESPONSABLE="${3:-$(az account show --query user.name -o tsv 2>/dev/null || true)}"
+# Cloud Shell entrega las cuentas personales como "live.com#correo"; DevOps espera el correo.
+RESPONSABLE="${RESPONSABLE#live.com#}"
 EQUIPO="$PROYECTO Team"
 paso() { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
 
