@@ -154,7 +154,8 @@ if recibidos:
                                               "Gestor logístico"),
           f"lleva quien hizo el movimiento que cruzo el umbral ({aviso['realizado_por']}, en pantalla)")
     check(aviso["pedido"] is None, "pedido=null en un movimiento manual")
-    check(aviso["correo_destino"] == OPERACIONES, "correo_destino es CORREO_OPERACIONES")
+    check(aviso["correo_destino"] == "despachador@sgds.com",
+          "correo_destino es el del gestor logistico activo (su correo de inicio de sesion, sin uno de avisos)")
 
 inicio = len(envios_make)
 ajustar(prod_a, 7)
@@ -240,11 +241,12 @@ check(all(e["url"] == URL_MAKE and e["timeout"] == (3, 5) for e in envios_make),
 app.config["MAKE_WEBHOOK_KEY"] = ""
 
 
-print("\n== 5. Sin CORREO_OPERACIONES no hay avisos internos ==")
+print("\n== 5. Sin CORREO_OPERACIONES los avisos internos van igual a los gestores ==")
 app.config["CORREO_OPERACIONES"] = ""
 inicio = len(envios_make)
 ajustar(prod_e, 5)
-check(not avisos("stock_bajo", inicio), "20 -> 5 cruza el minimo, pero no se envia nada")
+check([a["correo_destino"] for a in avisos("stock_bajo", inicio)] == ["despachador@sgds.com"],
+      "20 -> 5 cruza el minimo y avisa al gestor: CORREO_OPERACIONES solo es el respaldo")
 
 
 print("\n== 6. pedido_estado CANCELADO con motivo ==")

@@ -20,6 +20,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import _preparar  # noqa: E402  Primero: base de pruebas, sin Make, Retell ni red externa.
 from retell.lib.webhook_auth import symmetric
+from sqlalchemy import text
 
 from run import app
 from app.extensions import db
@@ -85,38 +86,43 @@ GESTOR, ADMIN = ("despachador@sgds.com", "Despacho123*"), ("admin@sgds.com", "Ad
 
 
 print("\n== 1. El evento lleva exactamente lo mismo que el GET de respaldo ==")
+DESTINOS = ["admin@sgds.com", "despachador@sgds.com"]   # administradores y gestores activos
 r = comando()
-check(r.exit_code == 0 and f"enviado a Make para {OPERACIONES}" in r.output, f"el comando lo envia: {r.output.strip()}")
+check(r.exit_code == 0 and f"enviado a Make para {', '.join(DESTINOS)}" in r.output,
+      f"el comando lo envia: {r.output.strip()}")
 eventos = resumenes()
-check(len(eventos) == 1, "sale un solo resumen_diario")
+check(sorted(e["correo_destino"] for _, _, e in eventos) == DESTINOS,
+      "sale un resumen_diario por cada gestor y administrador activo, con su correo en correo_destino")
 url, cabeceras, evento = eventos[0] if eventos else (None, {}, {})
-check(url == URL_PRIVADO and cabeceras.get("x-make-apikey") == API_KEY,
-      "va a MAKE_WEBHOOK_RESUMEN_URL, con la misma API key en x-make-apikey")
+check(all(u == URL_PRIVADO and c.get("x-make-apikey") == API_KEY for u, c, _ in eventos),
+      "van a MAKE_WEBHOOK_RESUMEN_URL, con la misma API key en x-make-apikey")
 check(not any(e.get("tipo") == "resumen_diario" for u, _, e in envios if u == URL_SGDS),
       "nunca al webhook de SGDS")
 get = app.test_client().get("/api/automatizacion/resumen-diario", headers={"X-Automatizacion-Token": TOKEN})
 respaldo = get.get_json() or {}
 check(get.status_code == 200, "el GET de respaldo sigue respondiendo")
 check(set(evento) == set(respaldo) | {"tipo"}, f"mismos campos que el GET, en la raiz, mas tipo {sorted(evento)}")
-iguales = {k: evento.get(k) == respaldo.get(k) for k in respaldo if k != "fecha_hora"}
-check(all(iguales.values()), f"y con los mismos valores (salvo la hora del envio) {[k for k, v in iguales.items() if not v]}")
+iguales = {k: evento.get(k) == respaldo.get(k) for k in respaldo if k not in ("fecha_hora", "correo_destino")}
+check(all(iguales.values()),
+      f"y con los mismos valores (salvo la hora del envio y el destinatario) {[k for k, v in iguales.items() if not v]}")
+check(respaldo.get("correo_destino") == OPERACIONES, "el GET de respaldo sigue con CORREO_OPERACIONES")
 check(isinstance(evento.get("kpis"), dict) and {"total", "entregados", "fallidos", "tasa_exito",
       "cumplimiento_ventana"} <= set(evento["kpis"]) and "<" in evento.get("resumen_html", ""),
       "con kpis anidado y el HTML del correo")
-check(evento.get("correo_destino") == OPERACIONES, "el destino es CORREO_OPERACIONES")
 check(evento.get("realizado_por") == NOMBRE_SISTEMA and evento.get("origen") == "automático",
       "el comando lo origina el sistema (automatico)")
 check(all(f.get("realizado_por") == NOMBRE_SISTEMA for f in evento.get("fallidos_para_reprogramar", [])),
       "y cada fallido para reprogramar lleva el mismo actor")
 with app.app_context():
     registro = db.session.query(Auditoria).filter_by(accion="Enviar resumen del día").one()
-    check(registro.usuario_id is None and registro.origen == "automático" and OPERACIONES in registro.resumen,
-          "el envio del comando queda en la auditoria, como del sistema")
+    check(registro.usuario_id is None and registro.origen == "automático"
+          and all(c in registro.resumen for c in DESTINOS),
+          "el envio del comando queda en la auditoria, como del sistema, con sus destinatarios")
 check(not [e for _, _, e in envios if e.get("tipo") == "accion_asistente"],
       "sin el correo accion_asistente: el resumen ya es un correo")
 
 
-print("\n== 2. Sin webhook o sin correo de operaciones no sale ==")
+print("\n== 2. Sin webhook o sin destinatarios no sale; CORREO_OPERACIONES es el respaldo ==")
 inicio = len(envios)
 app.config["MAKE_WEBHOOK_RESUMEN_URL"] = ""
 r = comando()
@@ -129,11 +135,23 @@ m = dice("gestor/resumen-diario", "call_resumen_gestor", {"operacion": "enviar"}
 check("MAKE_WEBHOOK_RESUMEN_URL" in m and not m.endswith("¿confirmas?"), f"y Gaby, sin pedir confirmacion: {m}")
 app.config.update(MAKE_WEBHOOK_RESUMEN_URL=URL_PRIVADO, CORREO_OPERACIONES="")
 r = comando()
-check(r.exit_code == 1 and "CORREO_OPERACIONES" in r.output, "sin CORREO_OPERACIONES tampoco sale")
-check("CORREO_OPERACIONES" in alertas(gestor.post("/admin/resumen/enviar", follow_redirects=True)),
-      "y el boton lo dice")
-check(not resumenes(inicio), "en ninguno de esos casos se envia nada")
+check(r.exit_code == 0 and len(resumenes(inicio)) == 2,
+      "sin CORREO_OPERACIONES sale igual a los gestores y administradores: es solo el respaldo")
+# Sin ningun gestor ni administrador activo, el respaldo; y sin respaldo, nada.
+with app.app_context():
+    db.session.execute(text("UPDATE usuarios SET activo = 0 WHERE rol IN ('ADMIN', 'DESPACHADOR')"))
+    db.session.commit()
+inicio = len(envios)
+r = comando()
+check(r.exit_code == 1 and "CORREO_OPERACIONES" in r.output and not resumenes(inicio),
+      f"sin destinatarios ni respaldo no sale, y el comando dice por que: {r.output.strip()}")
 app.config.update(CORREO_OPERACIONES=OPERACIONES)
+r = comando()
+check(r.exit_code == 0 and [e["correo_destino"] for _, _, e in resumenes(inicio)] == [OPERACIONES],
+      "sin gestores ni administradores activos, va al respaldo CORREO_OPERACIONES")
+with app.app_context():
+    db.session.execute(text("UPDATE usuarios SET activo = 1 WHERE rol IN ('ADMIN', 'DESPACHADOR')"))
+    db.session.commit()
 
 
 print("\n== 3. Boton del tablero: permiso propio, CSRF y mensaje ==")
@@ -144,11 +162,11 @@ for quien, cliente in (("el gestor", gestor), ("el administrador", admin)):
           f"{quien} ve el boton en el tablero")
 inicio = len(envios)
 r = gestor.post("/admin/resumen/enviar", follow_redirects=True)
-check(f"Resumen del día enviado a {OPERACIONES}." in alertas(r), f"mensaje de resultado: {alertas(r)}")
+check(f"Resumen del día enviado a {', '.join(DESTINOS)}." in alertas(r), f"mensaje de resultado: {alertas(r)}")
 eventos = resumenes(inicio)
-check(len(eventos) == 1 and eventos[0][2]["realizado_por"] == "Carlos Rueda"
-      and eventos[0][2]["origen"] == "pantalla" and eventos[0][2]["rol_realizado_por"] == "Gestor logístico",
-      "desde la pantalla lo origina quien lo pidio")
+check(len(eventos) == 2 and all(e["realizado_por"] == "Carlos Rueda" and e["origen"] == "pantalla"
+                                and e["rol_realizado_por"] == "Gestor logístico" for _, _, e in eventos),
+      "desde la pantalla lo origina quien lo pidio, en cada evento")
 with app.app_context():
     registro = db.session.query(Auditoria).filter_by(accion="Enviar resumen del día", origen="pantalla").one()
 check(registro.usuario_nombre == "Carlos Rueda", "y queda en la auditoria con su nombre")
@@ -184,12 +202,13 @@ for correo, call_id, nombre, rol in ((GESTOR[0], "call_resumen_gestor", "Carlos 
                                      (ADMIN[0], "call_resumen_admin", "Laura Gomez", "Administrador")):
     inicio = len(envios)
     resumen = dice("gestor/resumen-diario", call_id, {"operacion": "enviar"})
-    check(resumen == f"Voy a enviar el resumen de hoy a {OPERACIONES}. ¿confirmas?", f"{rol}: el resumen: {resumen}")
+    check(resumen == f"Voy a enviar el resumen de hoy a {' y '.join(DESTINOS)}. ¿confirmas?",
+          f"{rol}: el resumen: {resumen}")
     check(not resumenes(inicio), f"{rol}: sin confirmar no se envia")
     final = dice("gestor/resumen-diario", call_id, {"operacion": "enviar", "confirmar": True})
     eventos = resumenes(inicio)
-    check(final == f"Listo, envié el resumen de hoy a {OPERACIONES}." and len(eventos) == 1
-          and eventos[0][2]["realizado_por"] == nombre and eventos[0][2]["origen"] == "voz",
+    check(final == f"Listo, envié el resumen de hoy a {' y '.join(DESTINOS)}." and len(eventos) == 2
+          and all(e["realizado_por"] == nombre and e["origen"] == "voz" for _, _, e in eventos),
           f"{rol}: confirmado, se envia y lo origina quien lo pidio por voz")
 with app.app_context():
     por_voz = db.session.query(Auditoria).filter_by(accion="Enviar resumen del día", origen="voz").all()

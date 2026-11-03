@@ -186,9 +186,9 @@ if evento:
         check(e["id_auditoria"] == ultimo.id and e["fecha_hora"] == iso_bogota(ultimo.registrado_en),
               f"con id_auditoria y fecha_hora del registro ({e['id_auditoria']}, {e['fecha_hora']})")
     check(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-05:00", e["fecha_hora"]) is not None, "fecha_hora ISO 8601 con segundos y -05:00")
-    check(e["correo_destino"] == OPERACIONES and e["usuario"] == admin_nombre
+    check(e["correo_destino"] == "admin@sgds.com" and e["usuario"] == admin_nombre
           and e["rol"] == "Administrador" and e["origen"] == "pantalla" and e["resultado"] == "exito",
-          "va a CORREO_OPERACIONES con usuario, rol legible, origen y resultado")
+          "va al administrador activo con usuario, rol legible, origen y resultado")
     check("secreta1" not in json.dumps(e, ensure_ascii=False) and "→" in e["detalle"],
           "con el detalle legible y sin la contrasena")
     check(re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", e["hora"]) is not None, "hora AAAA-MM-DD HH:MM")

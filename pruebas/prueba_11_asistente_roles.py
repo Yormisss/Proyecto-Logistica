@@ -784,7 +784,7 @@ eventos = [e for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_
 check(len(eventos) == 1 and set(eventos[0]) == {"tipo", "cliente", "correo", "telefono", "motivo", "hora",
                                                  "fecha_hora", "correo_destino", "realizado_por", "rol_realizado_por",
                                                  "origen", "realizado_por_publico"}
-      and eventos[0]["correo_destino"] == "operaciones@sgds.invalid"
+      and eventos[0]["correo_destino"] == "despachador@sgds.com"
       and eventos[0]["cliente"] == "Supermercado El Portal"
       and eventos[0]["origen"] == "voz" and eventos[0]["rol_realizado_por"] == "Cliente",
       f"y envia a Make el evento solicitud_contacto {eventos[0] if eventos else None}")
@@ -930,7 +930,7 @@ check("Atendida" in gestor_web.get("/admin/solicitudes/?estado=atendidas").data.
       "el filtro de atendidas la muestra")
 
 # Atendida la anterior, el cliente puede pedir contacto otra vez. Sin
-# CORREO_OPERACIONES se registra igual, pero sin aviso interno.
+# CORREO_OPERACIONES se registra igual, y el aviso va igual al gestor.
 app.config["CORREO_OPERACIONES"] = ""
 envios_antes = len(envios_make)
 cliente_voz("solicitar-contacto", {"motivo": "Cambiar la ventana"})
@@ -939,8 +939,8 @@ notificaciones.esperar_envios()
 with app.app_context():
     check(db.session.query(SolicitudContacto).count() == 2 and "registré tu solicitud" in mensaje(s),
           "atendida la anterior, puede registrar otra; sin CORREO_OPERACIONES se registra igual")
-check(not [e for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_contacto"],
-      "pero no se envia el aviso interno")
+check([e["correo_destino"] for e in envios_make[envios_antes:] if e.get("tipo") == "solicitud_contacto"]
+      == ["despachador@sgds.com"], "y el aviso llega al gestor logistico (CORREO_OPERACIONES es solo el respaldo)")
 s = funcion("gestor/solicitudes-contacto-pendientes", CALL_G)
 check(mensaje(s).startswith("Hay 1 solicitud de contacto pendiente: ") and "Cambiar la ventana" in mensaje(s),
       "y vuelve a figurar como pendiente")

@@ -54,6 +54,7 @@ SUITES = [
     ("prueba_25_roles_permisos.py", "RF1/RNF5 · Roles y permisos configurables"),
     ("prueba_26_voz_seguridad.py", "RF4/RNF5 · Voz: permisos, llamada y datos cifrados"),
     ("prueba_27_resumen_diario.py", "RF6 · Resumen diario enviado a Make"),
+    ("prueba_28_avisos_por_rol.py", "RF4 · Avisos al correo de cada perfil"),
 ]
 
 

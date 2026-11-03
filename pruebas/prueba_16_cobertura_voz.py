@@ -42,7 +42,9 @@ EXCLUSIONES_APROBADAS = {"auth.login", "auth.perfil", "asistente.llamada",
                          # contrasena, el propio correo, escribir una contrasena de
                          # otra cuenta y provocar un error de prueba.
                          "auth.recuperar", "auth.restablecer", "auth.cambiar_correo",
-                         "usuarios.contrasena", "errores.probar"}
+                         "usuarios.contrasena", "errores.probar",
+                         # El propio correo de avisos, en Perfil (02/11/2026).
+                         "auth.correo_avisos"}
 
 
 print("\n== 1. Mapa de cobertura ==")
