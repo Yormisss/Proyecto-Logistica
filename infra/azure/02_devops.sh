@@ -123,7 +123,10 @@ fijar() {  # fijar NOMBRE VALOR [secreto]
 
 for v in GRUPO APP JOB ACR ACR_SERVIDOR ENTORNO_CA URL_PUBLICA; do fijar "$v" "${!v}"; done
 fijar CONEXION_AZURE "$CONEXION"
-for v in DATABASE_URL SECRET_KEY CLAVE_CIFRADO SEMILLA_CLAVE_ADMIN SEMILLA_CLAVE_GESTOR \
+# Azure Pipelines reserva el prefijo "secret" en los nombres de variables: la
+# SECRET_KEY de Flask se guarda como FLASK_SECRET_KEY (desplegar.ps1 la traduce).
+fijar FLASK_SECRET_KEY "$SECRET_KEY" true
+for v in DATABASE_URL CLAVE_CIFRADO SEMILLA_CLAVE_ADMIN SEMILLA_CLAVE_GESTOR \
          SEMILLA_CLAVE_CONDUCTOR SEMILLA_CLAVE_CLIENTE AUTOMATIZACION_TOKEN; do
     fijar "$v" "${!v}" true
 done

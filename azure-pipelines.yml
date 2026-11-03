@@ -152,7 +152,7 @@ stages:
                   env:
                     # Los secretos del grupo de variables solo llegan al script si se mapean.
                     DATABASE_URL: $(DATABASE_URL)
-                    SECRET_KEY: $(SECRET_KEY)
+                    FLASK_SECRET_KEY: $(FLASK_SECRET_KEY)   # "secret..." es un prefijo reservado
                     CLAVE_CIFRADO: $(CLAVE_CIFRADO)
                     SEMILLA_CLAVE_ADMIN: $(SEMILLA_CLAVE_ADMIN)
                     SEMILLA_CLAVE_GESTOR: $(SEMILLA_CLAVE_GESTOR)

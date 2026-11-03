@@ -16,7 +16,13 @@ param(
 # error con "Stop". Los fallos se detectan por el codigo de salida (Invocar-Az).
 $ErrorActionPreference = "Continue"
 
+# Azure Pipelines no admite variables cuyo nombre empiece por "secret" (prefijo
+# reservado, igual que endpoint, input, path y securefile): SECRET_KEY se guarda
+# en el grupo como FLASK_SECRET_KEY y aqui se lee con ese nombre.
+$ORIGEN = @{ SECRET_KEY = "FLASK_SECRET_KEY" }
+
 function Valor([string]$nombre) {
+    if ($ORIGEN.ContainsKey($nombre)) { $nombre = $ORIGEN[$nombre] }
     $v = [Environment]::GetEnvironmentVariable($nombre)
     # Una variable secreta que no existe en el grupo llega como "$(NOMBRE)".
     if ([string]::IsNullOrWhiteSpace($v) -or $v.StartsWith('$(')) { return $null }

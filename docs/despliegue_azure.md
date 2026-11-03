@@ -69,7 +69,7 @@ Las de configuración van como variables normales del grupo; las marcadas 🔒 c
 | Variable | Origen |
 |---|---|
 | `GRUPO`, `APP`, `JOB`, `ACR`, `ACR_SERVIDOR`, `ENTORNO_CA`, `URL_PUBLICA`, `CONEXION_AZURE` | `01_recursos.sh` |
-| 🔒 `DATABASE_URL`, `SECRET_KEY`, `CLAVE_CIFRADO`, `AUTOMATIZACION_TOKEN` | Generadas una vez por `01_recursos.sh`. **`CLAVE_CIFRADO` no se cambia nunca** |
+| 🔒 `DATABASE_URL`, `FLASK_SECRET_KEY` (la `SECRET_KEY` de Flask: Azure Pipelines reserva el prefijo `secret`), `CLAVE_CIFRADO`, `AUTOMATIZACION_TOKEN` | Generadas una vez por `01_recursos.sh`. **`CLAVE_CIFRADO` no se cambia nunca** |
 | 🔒 `SEMILLA_CLAVE_ADMIN/GESTOR/CONDUCTOR/CLIENTE` | Generadas: en producción las contraseñas del README no sirven |
 | 🔒 `RETELL_API_KEY`, `MAKE_WEBHOOK_*` | El `.env` del proyecto |
 | `RETELL_AGENTE_*_ID`, `RETELL_VOZ_ID`, `CORREO_OPERACIONES`, `SEMILLA_CORREO_*` | El `.env` del proyecto |
