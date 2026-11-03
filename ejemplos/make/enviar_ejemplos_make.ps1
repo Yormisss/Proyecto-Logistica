@@ -6,6 +6,7 @@
 # Uso, desde C:\Proyecto-Logistica:
 #   powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps1 -Modo estructura
 #   powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps1 -Modo avisos
+#   powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps1 -Modo ruta
 #   powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps1 -Modo estructura-privado
 #   powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps1 -Modo resumen
 #   powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps1 -Modo credencial
@@ -16,6 +17,7 @@
 #                        los avisos de la operacion, para "Redetermine data
 #                        structure". Ninguna ruta del Router lo procesa.
 #   avisos             : pedido_estado, stock_bajo, solicitud_contacto y accion_asistente.
+#   ruta               : ruta_asignada (al conductor, cuando su ruta se crea, cambia o se elimina).
 # Escenario "Rutalytics Privado" (MAKE_WEBHOOK_RESUMEN_URL, MAKE_WEBHOOK_CREDENCIALES_URL
 # y MAKE_WEBHOOK_RESTABLECIMIENTO_URL, las tres con la URL de su webhook):
 #   estructura-privado : un solo aviso (tipo "estructura") con TODOS los campos de
@@ -26,7 +28,7 @@
 #   credencial         : credencial_usuario, a MAKE_WEBHOOK_CREDENCIALES_URL.
 #   restablecimiento   : restablecimiento_contrasena, a MAKE_WEBHOOK_RESTABLECIMIENTO_URL.
 param(
-    [ValidateSet('estructura', 'avisos', 'estructura-privado', 'resumen', 'credencial', 'restablecimiento')]
+    [ValidateSet('estructura', 'avisos', 'ruta', 'estructura-privado', 'resumen', 'credencial', 'restablecimiento')]
     [string]$Modo = 'avisos',
     [string]$Archivo = '.env'
 )
@@ -59,6 +61,8 @@ $hora      = $ahora.ToString('yyyy-MM-dd HH:mm')
 $fecha     = $ahora.ToString('yyyy-MM-dd')
 $fechaHora = $ahora.ToString('yyyy-MM-ddTHH:mm:ss') + '-05:00'
 $codigo    = 'PED-' + $ahora.ToString('yyyyMMdd') + '-001'
+$rutaCodigo = 'RUT-' + $ahora.ToString('yyyyMMdd') + '-01'
+$fechaRuta = $ahora.ToString('dd/MM/yyyy')
 
 $sistema = 'Sistema SGDS (automático)'
 $rolSistema = 'Sistema'
@@ -117,8 +121,17 @@ switch ($Modo) {
             accion = 'Renombrar motivo de fallo'; entidad = 'configuracion'
             resumen = 'Voy a renombrar el motivo Cliente ausente a Cliente no se encontraba.'
             detalle = $detalle; resultado = 'exito'
+            # ruta_asignada
+            conductor = 'Andres Molina'; ruta = $rutaCodigo; fecha = $fechaRuta; paradas = 3
+            detalle_ruta = 'Se agregó la parada de Tienda La Esquina'
         }
         Enviar $urlAvisos (Con-Actor $d 'Laura Gomez' 'Administrador' 'voz') 'MAKE_WEBHOOK_URL'
+    }
+    'ruta' {
+        $d = [ordered]@{ tipo = 'ruta_asignada'; conductor = 'Andres Molina'; correo_destino = $correo
+            ruta = $rutaCodigo; fecha = $fechaRuta; paradas = 3; accion = 'actualizada'
+            detalle_ruta = 'Se agregó la parada de Tienda La Esquina' }
+        Enviar $urlAvisos (Con-Actor $d 'Carlos Rueda' 'Gestor logístico' 'pantalla') 'MAKE_WEBHOOK_URL'
     }
     'avisos' {
         $d = [ordered]@{ tipo = 'pedido_estado'; codigo = $codigo; estado = 'FALLIDO'
