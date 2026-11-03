@@ -1802,7 +1802,14 @@ Los tiempos de respuesta suben al pasar de un archivo local a TCP, y siguen tres
 
 ## Despliegue
 
-`Procfile` y `render.yaml` están listos para Render o Railway, con gunicorn como servidor
+**Producción: Azure.** La aplicación corre en Azure Container Apps con MySQL Flexible
+Server, y se publica con el pipeline de Azure DevOps (`azure-pipelines.yml`: pruebas,
+SAST, dependencias, imagen Docker y despliegue). Guía completa, arquitectura y variables:
+[`docs/despliegue_azure.md`](docs/despliegue_azure.md). En producción las cuentas demo
+**no** usan las contraseñas de la tabla de arriba: la siembra exige `SEMILLA_CLAVE_ADMIN`,
+`SEMILLA_CLAVE_GESTOR`, `SEMILLA_CLAVE_CONDUCTOR` y `SEMILLA_CLAVE_CLIENTE`.
+
+**Alternativa: Render.** `Procfile` y `render.yaml` están listos para Render o Railway, con gunicorn como servidor
 WSGI y `/salud` como health check. Recuerde que el plan gratuito de Render suspende la
 instancia tras 15 minutos sin tráfico y el siguiente acceso tarda ~30 segundos.
 

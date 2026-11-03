@@ -12,7 +12,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$Imagen
 )
-$ErrorActionPreference = "Stop"
+# "Continue": en Windows PowerShell 5.1 cualquier aviso de az en stderr se volveria un
+# error con "Stop". Los fallos se detectan por el codigo de salida (Invocar-Az).
+$ErrorActionPreference = "Continue"
 
 function Valor([string]$nombre) {
     $v = [Environment]::GetEnvironmentVariable($nombre)
@@ -20,7 +22,8 @@ function Valor([string]$nombre) {
     if ([string]::IsNullOrWhiteSpace($v) -or $v.StartsWith('$(')) { return $null }
     return $v.Trim()
 }
-function Az {
+# No se llama "Az": PowerShell no distingue mayusculas y la funcion taparia al comando az.
+function Invocar-Az {
     & az @args
     if ($LASTEXITCODE -ne 0) { throw "Fallo: az $($args -join ' ')" }
 }
@@ -71,23 +74,23 @@ foreach ($nombre in $planas) {
 }
 
 Write-Host "==> URL publica"
-$fqdn = (Az containerapp show -n $app -g $grupo --query properties.configuration.ingress.fqdn -o tsv)
+$fqdn = (Invocar-Az containerapp show -n $app -g $grupo --query properties.configuration.ingress.fqdn -o tsv)
 $urlPublica = "https://$fqdn"
 $envVars += "URL_PUBLICA=$urlPublica"
 Write-Host "    $urlPublica"
 
 Write-Host "==> Secretos de la Container App ($($paresSecretos.Count))"
-Az containerapp secret set -n $app -g $grupo --secrets @paresSecretos -o none
+Invocar-Az containerapp secret set -n $app -g $grupo --secrets @paresSecretos -o none
 
 Write-Host "==> Credenciales del registro y puerto"
-$servidor = (Az acr show -n $acr --query loginServer -o tsv)
-$usuario = (Az acr credential show -n $acr --query username -o tsv)
-$clave = (Az acr credential show -n $acr --query "passwords[0].value" -o tsv)
-Az containerapp registry set -n $app -g $grupo --server $servidor --username $usuario --password $clave -o none
-Az containerapp ingress update -n $app -g $grupo --target-port 8000 -o none
+$servidor = (Invocar-Az acr show -n $acr --query loginServer -o tsv)
+$usuario = (Invocar-Az acr credential show -n $acr --query username -o tsv)
+$clave = (Invocar-Az acr credential show -n $acr --query "passwords[0].value" -o tsv)
+Invocar-Az containerapp registry set -n $app -g $grupo --server $servidor --username $usuario --password $clave -o none
+Invocar-Az containerapp ingress update -n $app -g $grupo --target-port 8000 -o none
 
 Write-Host "==> Imagen $Imagen"
-Az containerapp update -n $app -g $grupo --image $Imagen --cpu 0.5 --memory 1.0Gi `
+Invocar-Az containerapp update -n $app -g $grupo --image $Imagen --cpu 0.5 --memory 1.0Gi `
     --min-replicas 1 --max-replicas 1 --set-env-vars @envVars -o none
 
 Write-Host "==> Tarea programada $job (resumen diario, 23:00 UTC = 18:00 Bogota)"
@@ -104,15 +107,15 @@ $existe = $false
 & az containerapp job show -n $job -g $grupo -o none 2>$null
 if ($LASTEXITCODE -eq 0) { $existe = $true }
 if (-not $existe) {
-    Az containerapp job create -n $job -g $grupo --environment $entorno `
+    Invocar-Az containerapp job create -n $job -g $grupo --environment $entorno `
         --trigger-type Schedule --cron-expression "0 23 * * *" `
         --replica-timeout 600 --replica-retry-limit 1 --parallelism 1 --replica-completion-count 1 `
         --image $Imagen --cpu 0.25 --memory 0.5Gi --command "/app/docker/resumen.sh" `
         --registry-server $servidor --registry-username $usuario --registry-password $clave `
         --secrets @secretosJob --env-vars @envJob -o none
 } else {
-    Az containerapp job secret set -n $job -g $grupo --secrets @secretosJob -o none
-    Az containerapp job update -n $job -g $grupo --image $Imagen --set-env-vars @envJob -o none
+    Invocar-Az containerapp job secret set -n $job -g $grupo --secrets @secretosJob -o none
+    Invocar-Az containerapp job update -n $job -g $grupo --image $Imagen --set-env-vars @envJob -o none
 }
 
 Write-Host "==> Verificando $urlPublica/salud"

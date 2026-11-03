@@ -54,6 +54,7 @@ stages:
               if (-not $listo) { throw "MySQL (sgds-mysql, puerto 3307) no responde" }
               Write-Host "MySQL listo en 127.0.0.1:3307"
             displayName: Levantar MySQL de pruebas (Docker)
+            errorActionPreference: continue
           - script: |
               py -3 -m venv .venv-ci || python -m venv .venv-ci
               .venv-ci\Scripts\python -m pip install -q --upgrade pip
@@ -64,6 +65,7 @@ stages:
                 Tee-Object -FilePath "$(Build.ArtifactStagingDirectory)\pruebas_funcionales.txt"
               exit $LASTEXITCODE
             displayName: Ejecutar pruebas (pruebas/ejecutar_todas.py)
+            errorActionPreference: continue
           - publish: $(Build.ArtifactStagingDirectory)
             artifact: evidencia-pruebas
             displayName: Publicar evidencia de pruebas
@@ -91,11 +93,13 @@ stages:
               & .venv-seg\Scripts\bandit.exe -r app run.py config.py seed.py -lll -q
               exit $LASTEXITCODE
             displayName: SAST - Bandit (falla con severidad alta)
+            errorActionPreference: continue
           - powershell: |
               & .venv-seg\Scripts\pip-audit.exe -r requirements.txt --progress-spinner off 2>&1 |
                 Tee-Object -FilePath "$(Build.ArtifactStagingDirectory)\sca_pip_audit.txt"
               exit $LASTEXITCODE
             displayName: SCA - pip-audit (falla con dependencias vulnerables)
+            errorActionPreference: continue
           - publish: $(Build.ArtifactStagingDirectory)
             artifact: evidencia-seguridad
             displayName: Publicar reportes de seguridad
@@ -144,6 +148,7 @@ stages:
                     scriptLocation: scriptPath
                     scriptPath: infra/azure/desplegar.ps1
                     arguments: -Imagen "$(ACR_SERVIDOR)/rutalytics:$(etiqueta)"
+                    powerShellErrorActionPreference: continue
                   env:
                     # Los secretos del grupo de variables solo llegan al script si se mapean.
                     DATABASE_URL: $(DATABASE_URL)
