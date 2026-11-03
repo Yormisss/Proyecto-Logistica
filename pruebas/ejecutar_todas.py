@@ -53,6 +53,7 @@ SUITES = [
     ("prueba_24_archivos.py", "RNF5 · Contenido real de los archivos subidos"),
     ("prueba_25_roles_permisos.py", "RF1/RNF5 · Roles y permisos configurables"),
     ("prueba_26_voz_seguridad.py", "RF4/RNF5 · Voz: permisos, llamada y datos cifrados"),
+    ("prueba_27_resumen_diario.py", "RF6 · Resumen diario enviado a Make"),
 ]
 
 

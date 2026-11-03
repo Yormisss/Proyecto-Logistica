@@ -6,7 +6,8 @@ Al importarse, antes de que la suite cargue la aplicacion:
   BASE_PRUEBAS_POR_DEFECTO) y se niega a seguir si su nombre no termina en
   "_pruebas": las suites borran la base y no deben tocar la del .env.
 - Vacia MAKE_WEBHOOK_URL, MAKE_WEBHOOK_CREDENCIALES_URL,
-  MAKE_WEBHOOK_RESTABLECIMIENTO_URL, RETELL_API_KEY y SEMILLA_CORREO_CLIENTE,
+  MAKE_WEBHOOK_RESTABLECIMIENTO_URL, MAKE_WEBHOOK_RESUMEN_URL, RETELL_API_KEY y
+  SEMILLA_CORREO_CLIENTE,
   y fija una CLAVE_CIFRADO propia de las pruebas. load_dotenv no pisa una
   variable ya definida, asi que estas ganan sobre el .env del desarrollador.
 - Bloquea la red: solo se permiten conexiones a la propia maquina (MySQL). Los
@@ -67,6 +68,7 @@ VARIABLES_PRUEBAS = {
     "MAKE_WEBHOOK_URL": "",
     "MAKE_WEBHOOK_CREDENCIALES_URL": "",
     "MAKE_WEBHOOK_RESTABLECIMIENTO_URL": "",
+    "MAKE_WEBHOOK_RESUMEN_URL": "",
     "RETELL_API_KEY": "",
     "CLAVE_CIFRADO": "clave-de-cifrado-solo-para-las-pruebas",
     "SEMILLA_CORREO_CLIENTE": "",
