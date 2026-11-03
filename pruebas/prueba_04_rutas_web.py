@@ -161,9 +161,18 @@ for url in ["/rutas/","/rutas/nueva",f"/rutas/{rid}"]:
 check(app.test_client().get("/rutas/").status_code==302, "anonimo redirigido")
 
 print("\n== 11. Eliminacion de ruta limpia ==")
+# conductor2 ya tiene una ruta activa hoy (la de las secciones anteriores) y el
+# sistema no le asigna una segunda: esta prueba usa a conductor1, que no tiene.
+with app.app_context():
+    otro_id = db.session.query(Usuario).filter_by(correo="conductor1@sgds.com").first().id
+    for ruta_c1 in db.session.query(Ruta).filter_by(conductor_id=otro_id, fecha=hoy).all():
+        for p in ruta_c1.pedidos:
+            p.ruta_id = None
+        db.session.delete(ruta_c1)
+    db.session.commit()
 tok = token(c, f"/rutas/nueva?fecha={hoy.isoformat()}")
 r = c.post("/rutas/nueva", data={"csrf_token":tok,"fecha":hoy.isoformat(),
-           "conductor_id":str(cond_id),"vehiculo_id":"0","estrategia":"DISTANCIA",
+           "conductor_id":str(otro_id),"vehiculo_id":"0","estrategia":"DISTANCIA",
            "pedido_id":[str(ids[0])]}, follow_redirects=True)
 with app.app_context():
     r2 = db.session.query(Ruta).order_by(Ruta.id.desc()).first()

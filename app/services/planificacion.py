@@ -68,6 +68,26 @@ def recalcular_ruta(ruta, estrategia=ESTRATEGIA_DISTANCIA, usuario_id=None):
     return resultado
 
 
+def unidades(pedidos):
+    """Unidades de producto que suman `pedidos` (para la capacidad del vehiculo)."""
+    return sum(item.cantidad for pedido in pedidos for item in pedido.items)
+
+
+def error_capacidad(vehiculo, pedidos):
+    """Mensaje si `pedidos` no caben en el vehiculo; None si caben o no tiene capacidad fijada.
+
+    Solo se controla la capacidad en unidades: los productos no registran peso,
+    asi que la capacidad en kilos es informativa.
+    """
+    if vehiculo is None or not vehiculo.capacidad_unidades:
+        return None
+    total = unidades(pedidos)
+    if total <= vehiculo.capacidad_unidades:
+        return None
+    return (f"Los pedidos suman {total} unidades y el vehiculo {vehiculo.placa} carga "
+            f"{vehiculo.capacidad_unidades}. Quite pedidos o use otro vehiculo.")
+
+
 def verificar_agregar_a_ruta(pedido, ruta):
     """Lanza PlanificacionInvalida si `pedido` no puede sumarse a `ruta`.
 
@@ -91,6 +111,9 @@ def verificar_agregar_a_ruta(pedido, ruta):
             f"El pedido {pedido.codigo} es para el {pedido.fecha_despacho.strftime('%d/%m/%Y')} "
             f"y la ruta {ruta.codigo} es del {ruta.fecha.strftime('%d/%m/%Y')}."
         )
+    excedido = error_capacidad(ruta.vehiculo, [p for p in ruta.pedidos if p.id != pedido.id] + [pedido])
+    if excedido:
+        raise PlanificacionInvalida(excedido)
 
 
 def agregar_a_ruta(pedido, ruta, usuario_id, origen=None, estrategia=ESTRATEGIA_DISTANCIA):
@@ -179,6 +202,26 @@ def validar_ruta(datos):
     if estrategia not in ESTRATEGIAS:
         v.invalido("estrategia", "El criterio de ordenamiento no es valido.")
 
+    # Una sola ruta activa (planificada o en curso) por conductor y por vehiculo
+    # en cada fecha: el conductor solo ve "la ruta de hoy" (`ruta_del_dia`), asi
+    # que las paradas de una segunda ruta le quedarian ocultas, y un vehiculo no
+    # puede salir en dos rutas a la vez.
+    if fecha is not None:
+        from app.models import Ruta
+
+        activas = db.session.query(Ruta).filter(
+            Ruta.fecha == fecha, Ruta.estado.in_((EstadoRuta.PLANIFICADA, EstadoRuta.EN_CURSO)))
+        if conductor is not None:
+            otra = activas.filter(Ruta.conductor_id == conductor.id).first()
+            if otra is not None:
+                v.invalido("conductor_id", f"{conductor.nombre} ya tiene la ruta {otra.codigo} activa "
+                                           "ese dia. Agregue los pedidos a esa ruta o finalicela primero.")
+        if vehiculo is not None:
+            otra = activas.filter(Ruta.vehiculo_id == vehiculo.id).first()
+            if otra is not None:
+                v.invalido("vehiculo_id", f"El vehiculo {vehiculo.placa} ya esta en la ruta {otra.codigo} "
+                                          "activa ese dia.")
+
     ids = [int(x) for x in (datos.get("pedidos") or [])]
     pedidos = []
     if not ids:
@@ -193,6 +236,10 @@ def validar_ruta(datos):
         if len(pedidos) != len(set(ids)):
             v.invalido("pedidos", "Algunos pedidos ya fueron asignados a otra ruta o no son de esa "
                                   "fecha. Verifique la seleccion.")
+        else:
+            excedido = error_capacidad(vehiculo, pedidos)
+            if excedido:
+                v.invalido("pedidos", excedido)
     v.lanzar_si_hay()
     return {"fecha": fecha, "conductor": conductor, "vehiculo": vehiculo, "estrategia": estrategia,
             "pedidos": pedidos}
