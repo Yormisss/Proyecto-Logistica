@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS, JS, fuentes e imágenes (logo y favicon en img/)
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2384 verificaciones automatizadas en 26 suites (MySQL)
+├── pruebas/               2432 verificaciones automatizadas en 27 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -65,7 +65,8 @@ cp .env.example .env
 .venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
 .venv/bin/flask --app run migrar-pruebas-entrega # Pruebas de entrega de solo agregar (m007, MySQL)
 .venv/bin/flask --app run migrar-contrasenas  # Columnas de gestión de contraseñas y tabla de intentos de acceso
-.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011), roles con permisos (m012) y llamadas de voz atadas a la sesión web (m013)
+.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011), roles con permisos (m012), llamadas de voz atadas a la sesión web (m013) y permiso de enviar el resumen (m014)
+.venv/bin/flask --app run enviar-resumen   # Enviar el resumen del día a Make (para programarlo)
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -190,6 +191,9 @@ Los permisos de una cuenta (`app/services/permisos.py`) se calculan así:
 | **Administración > Roles** | Crear roles con sus permisos, editar el reparto de *Gestor logístico* y *Conductor*, eliminar los creados. *Administrador* (todos los permisos) y *Cliente* (solo su portal) no se editan |
 | **Usuarios > Permisos** (en cada cuenta) | Sumar roles adicionales y ajustar cada permiso. Muestra de qué roles viene cada uno y si la cuenta lo tiene |
 
+- **Enviar el resumen del día** (`resumen.enviar`) es un permiso propio: lo tienen el
+  administrador y el gestor, y se puede repartir o quitar como cualquier otro. En una base
+  con datos, `migrar-seguridad` (m014) se lo agrega al rol del gestor.
 - **Una base nueva tiene el reparto de siempre.** Los cuatro roles del sistema quedan con
   los permisos que tenían cuando eran fijos: nadie gana ni pierde acceso al migrar.
 - **El menú y los botones siguen a los permisos.** Quien solo puede *ver* pedidos no ve
@@ -427,7 +431,7 @@ siempre. La lógica está en `app/services/recuperacion.py`.
   contraseña*, *Restablecer contraseña por correo*), nunca con el enlace.
 
 **Entrega del enlace.** Va al correo de la cuenta por su propio webhook de Make,
-`MAKE_WEBHOOK_RESTABLECIMIENTO_URL` (ver el [escenario de restablecimiento](#escenario-de-restablecimiento-de-contraseña)),
+`MAKE_WEBHOOK_RESTABLECIMIENTO_URL` (ver el [escenario Rutalytics Privado](#escenario-rutalytics-privado-resumen-credenciales-y-restablecimiento)),
 y se arma con `URL_PUBLICA`, **nunca con el `Host` de la petición**: ese lo escribe el
 cliente, y un atacante podría hacer llegar a la víctima un enlace válido hacia su propio
 dominio. Sin ese webhook y `URL_PUBLICA`:
@@ -696,15 +700,15 @@ aplicación funciona igual.
 Todo lo que un rol hace en pantalla se puede hacer por voz, salvo las exclusiones de la
 tabla siguiente. Las acciones de una entidad se agrupan en una sola función con el
 parámetro `operacion`; **(M)** marca las operaciones que modifican datos (piden
-confirmación y quedan en la auditoría). En total son **41 funciones con 93 operaciones**
+confirmación y quedan en la auditoría). En total son **42 funciones con 94 operaciones**
 (antes de integrar la seguridad, 37 con 74): conductor 6 funciones (8 operaciones), gestor
-19 (44), administrador 27 (77; antes 23 con 58) y cliente 8 (8).
+20 (45), administrador 28 (78; antes 23 con 58) y cliente 8 (8).
 
 | Rol | Funciones | Total |
 |---|---|---|
 | **Conductor** | Consultas: `mi-ruta`, `siguiente-parada`, `detalle-parada`, `mi-historial` (últimas 5 rutas). `iniciar-ruta` (M). `parada`: `en-camino` (M, también reintenta una fallida), `fallo` (M, con el catálogo o "Otro"), `entregar` (M, con nombre y documento de quien recibe); `entregar` y `fallo` aceptan una observación dictada | 6 |
-| **Gestor logístico** | Consultas: `resumen-dia`, `pendientes-sin-ruta`, `avance-rutas`, `buscar-pedido`, `stock-producto`, `productos-bajo-minimo`, `fallidos-hoy`, `solicitudes-contacto-pendientes`. Analítica, con los periodos del panel: `tiempo-promedio-entrega`, `cumplimiento-ventana`, `productividad-conductores`, `causas-fallo`. `atender-solicitud` (M). `pedidos`: crear, editar, anular, reintentar (M). `productos`: crear, editar, activar, desactivar, entrada, ajuste (M). `rutas`: consultar, crear, agregar-parada, quitar-parada, recalcular, eliminar (M salvo consultar). `clientes` y `sedes`: consultar, crear, editar, activar, desactivar (M salvo consultar). `vehiculos`: consultar, crear, editar, activar, desactivar (M salvo consultar) | 19 |
-| **Administrador** | Todas las del gestor; `resumen-rendimiento` (el panel de rendimiento, solo suyo como en pantalla); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, editar-inactividad, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (últimos registros, con filtros por fecha, usuario y entidad); `roles`: consultar, crear, editar, agregar-permiso, quitar-permiso, eliminar (M salvo consultar); `permisos` de una cuenta: consultar, asignar-rol, quitar-rol, conceder, denegar, quitar-ajuste (M salvo consultar); `contrasenas`: consultar, intentos, exigir-cambio, quitar-exigencia, exigir-cambio-masivo (M salvo consultar e intentos); `errores` (los recientes o uno por su número) | 27 |
+| **Gestor logístico** | Consultas: `resumen-dia`, `pendientes-sin-ruta`, `avance-rutas`, `buscar-pedido`, `stock-producto`, `productos-bajo-minimo`, `fallidos-hoy`, `solicitudes-contacto-pendientes`. Analítica, con los periodos del panel: `tiempo-promedio-entrega`, `cumplimiento-ventana`, `productividad-conductores`, `causas-fallo`. `atender-solicitud` (M). `resumen-diario`: enviar (M, el resumen del día al correo de operaciones). `pedidos`: crear, editar, anular, reintentar (M). `productos`: crear, editar, activar, desactivar, entrada, ajuste (M). `rutas`: consultar, crear, agregar-parada, quitar-parada, recalcular, eliminar (M salvo consultar). `clientes` y `sedes`: consultar, crear, editar, activar, desactivar (M salvo consultar). `vehiculos`: consultar, crear, editar, activar, desactivar (M salvo consultar) | 20 |
+| **Administrador** | Todas las del gestor; `resumen-rendimiento` (el panel de rendimiento, solo suyo como en pantalla); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, editar-inactividad, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (últimos registros, con filtros por fecha, usuario y entidad); `roles`: consultar, crear, editar, agregar-permiso, quitar-permiso, eliminar (M salvo consultar); `permisos` de una cuenta: consultar, asignar-rol, quitar-rol, conceder, denegar, quitar-ajuste (M salvo consultar); `contrasenas`: consultar, intentos, exigir-cambio, quitar-exigencia, exigir-cambio-masivo (M salvo consultar e intentos); `errores` (los recientes o uno por su número) | 28 |
 | **Cliente** | Consultas: `pedidos-en-curso`, `pedidos-recientes`, `estado-pedido`, `ventana-entrega`, `motivo-fallo`, `mis-sedes`. Acciones: `cancelar-pedido` (M, solo PENDIENTE), `solicitar-contacto` (M, una pendiente a la vez) | 8 |
 
 Reglas que el servidor aplica igual que la pantalla, porque usa los mismos servicios
@@ -980,9 +984,10 @@ un registro. Nunca guarda contraseñas ni tokens.
 
 Las ediciones registran solo los campos que cambiaron, con el valor anterior y el nuevo;
 guardar sin cambios no deja registro. El administrador consulta todo en **Bitácora**
-(`/admin/bitacora/`), con filtros por fecha, usuario, origen y acción. Para tenerla en
-Google Sheets, el [escenario 3](#escenario-3-auditoría-en-google-sheets) la lee por lotes
-sin perder ni repetir registros.
+(`/admin/bitacora/`), con filtros por fecha, usuario, origen y acción. El endpoint
+`GET /api/automatizacion/auditoria` (con `AUTOMATIZACION_TOKEN`) la entrega por lotes, sin
+huecos ni repetidos, para quien la quiera llevar a otra herramienta; ningún escenario de
+Make lo usa hoy.
 
 ### Registro de errores
 
@@ -1003,40 +1008,47 @@ base. El administrador lo consulta en **Errores** (`/admin/errores/`, en el men�
 
 ## Automatizaciones con Make
 
-La aplicación se integra con [Make](https://www.make.com) en ambos sentidos, todo
-opcional: **avisa** a un webhook de Make cuando ocurre algo (escenario 1), envía las
-contraseñas de las cuentas creadas por voz por un **webhook aparte** (escenario de
-credenciales), y **expone** un resumen diario (escenario 2) y la auditoría por lotes para
-Google Sheets (escenario 3), que Make consulta de forma programada. Sin las variables
-correspondientes, la aplicación funciona igual y no sale nada.
+La aplicación **envía** avisos a [Make](https://www.make.com); Make nunca la llama. Todo es
+opcional: sin las variables correspondientes la aplicación funciona igual y no sale nada.
+Hay dos escenarios, cada uno con su webhook, y funcionan igual en el PC y en el servidor:
+solo cambian las variables de entorno.
+
+| Escenario | Variables (su webhook) | Recibe | Hoja |
+|---|---|---|---|
+| **SGDS** | `MAKE_WEBHOOK_URL` | Los avisos de la operación: `pedido_estado`, `stock_bajo`, `solicitud_contacto`, `accion_asistente` | Pestaña *Notificaciones* |
+| **Rutalytics Privado**, con **"Data is confidential"** | `MAKE_WEBHOOK_RESUMEN_URL`, `MAKE_WEBHOOK_CREDENCIALES_URL` y `MAKE_WEBHOOK_RESTABLECIMIENTO_URL`, **las tres con la misma URL** | `resumen_diario`, `credencial_usuario` y `restablecimiento_contrasena` | Pestañas *Resumen diario* y *Notificaciones*, sin contraseñas ni enlaces |
+
+Las dos escriben en la hoja de Google Sheets **"SGDS - Bitacora"**. Los dos webhooks usan la
+misma API key, `MAKE_WEBHOOK_KEY`.
 
 ### Variables
 
 | Variable | Para qué | Si está vacía |
 |---|---|---|
-| `MAKE_WEBHOOK_URL` | URL del *Custom webhook* que recibe los avisos | No se envía ningún aviso |
-| `MAKE_WEBHOOK_KEY` | API key de los webhooks; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
-| `MAKE_WEBHOOK_CREDENCIALES_URL` | URL del webhook **aparte** que recibe solo `credencial_usuario` | No se envían contraseñas, y crear o restablecer cuentas **por voz** se rechaza en el resumen (en pantalla funciona igual) |
-| `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` | URL del webhook **aparte** que recibe solo `restablecimiento_contrasena` (requiere `URL_PUBLICA`) | En producción no se ofrece *Olvidé mi contraseña*; en desarrollo el enlace sale en la consola del servidor |
-| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
-| `URL_PUBLICA` | Dirección de acceso que lleva `credencial_usuario` (`url_acceso`) | `url_acceso` va vacía |
-| `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario y la auditoría | Ambos endpoints responden **404** |
+| `MAKE_WEBHOOK_URL` | Webhook del escenario **SGDS**: los avisos de la operación | No se envía ningún aviso de la operación |
+| `MAKE_WEBHOOK_KEY` | API key de los dos webhooks; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
+| `MAKE_WEBHOOK_RESUMEN_URL` | Webhook de **Rutalytics Privado**: `resumen_diario` | El resumen no se envía, y el botón, Gaby y el comando dicen por qué |
+| `MAKE_WEBHOOK_CREDENCIALES_URL` | Webhook de **Rutalytics Privado**: `credencial_usuario` | No se envían contraseñas, y crear o restablecer cuentas **por voz** se rechaza en el resumen (en pantalla funciona igual) |
+| `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` | Webhook de **Rutalytics Privado**: `restablecimiento_contrasena` (requiere `URL_PUBLICA`) | En producción no se ofrece *Olvidé mi contraseña*; en desarrollo el enlace sale en la consola del servidor |
+| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`) y del resumen diario | No se envían avisos internos ni el resumen |
+| `URL_PUBLICA` | Dirección de acceso que lleva `credencial_usuario` (`url_acceso`) y con la que se arma el enlace de restablecimiento | `url_acceso` va vacía y el enlace no se envía |
+| `AUTOMATIZACION_TOKEN` | Token de los endpoints de respaldo `GET /api/automatizacion/resumen-diario` y `/auditoria` (ningún escenario los usa) | Ambos endpoints responden **404** |
 
 Genere el token con `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 ### Eventos salientes
 
-Todo aviso es un `POST` JSON a `MAKE_WEBHOOK_URL` con un campo **`tipo`** (salvo
-`credencial_usuario`, que va solo a `MAKE_WEBHOOK_CREDENCIALES_URL`), y todos usan el mismo
-mecanismo:
+Todo aviso es un `POST` JSON con un campo **`tipo`**: los de la operación a
+`MAKE_WEBHOOK_URL`, y `resumen_diario`, `credencial_usuario` y `restablecimiento_contrasena`
+cada uno a su variable (el webhook de Rutalytics Privado). Todos usan el mismo mecanismo:
 
 - Solo sale **después del commit**: un cambio revertido no genera correo.
 - Va en segundo plano, con un timeout de 3 s de conexión y 5 s de respuesta. **Si Make
   falla o tarda, la operación no se bloquea ni se revierte**; el fallo queda solo en el log
-  y el aviso no se reintenta (por eso la hoja de auditoría se llena con el escenario 3, que
-  sí recupera lo que falte).
-- Todo evento lleva `hora` (`2026-10-06 11:20`) y **`fecha_hora`** en ISO 8601 con segundos
-  y el desplazamiento de Bogotá (`2026-10-06T11:20:37-05:00`).
+  y el aviso no se reintenta. La bitácora de la aplicación sigue teniendo cada acción.
+- Todo evento lleva **`fecha_hora`** en ISO 8601 con segundos y el desplazamiento de Bogotá
+  (`2026-10-06T11:20:37-05:00`), y todos salvo `resumen_diario` también `hora`
+  (`2026-10-06 11:20`); el resumen trae en cambio `fecha`.
 
 | `tipo` | Cuándo | Destinatario | Campos |
 |---|---|---|---|
@@ -1045,6 +1057,7 @@ mecanismo:
 | `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `fecha_hora`, `correo_destino` |
 | `accion_asistente` | Se agrega a la **auditoría** un registro con correo: una acción confirmada por voz (con su resultado), salvo el flujo del conductor y las entradas de mercancía, o una acción de *Usuarios* o *Configuración* (ver [Auditoría](#auditoría-y-bitácora)) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `id_auditoria`, `usuario`, `rol`, `accion`, `entidad`, `resumen`, `detalle` (texto plano, una línea por dato), `resultado` (`exito` o `error`), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva contraseñas ni tokens** |
 | `credencial_usuario` | Se **crea o restablece por voz** una cuenta: la contraseña se genera en el servidor | El propio usuario, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `contrasena`, `debe_cambiar_contrasena` (siempre `true`: es temporal), `indicaciones` (el texto para el correo), `url_acceso` (`URL_PUBLICA`), `creado_por` (nombre y rol), `accion` (`creación` o `restablecimiento`), `hora`, `fecha_hora`, `correo_destino`. Es el **único** lugar por el que viaja la contraseña: no se guarda en la auditoría ni sale en otro evento, y va **solo** a `MAKE_WEBHOOK_CREDENCIALES_URL`. En pantalla la contraseña se sigue mostrando una vez, como antes, y no se envía |
+| `resumen_diario` | Alguien lo pide con **Enviar resumen del día** en el tablero o por voz, o lo dispara el comando programado `enviar-resumen` (ver [Resumen diario](#resumen-diario-lo-envía-la-app)) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | Exactamente los de `GET /api/automatizacion/resumen-diario`, en la raíz: `fecha`, `fecha_hora`, `correo_destino`, `kpis` (anidado), `productos_bajo_minimo`, `fallidos_para_reprogramar`, `resumen_html`. Va **solo** a `MAKE_WEBHOOK_RESUMEN_URL` |
 | `restablecimiento_contrasena` | Alguien pide *Olvidé mi contraseña* para una cuenta activa (como máximo uno cada 5 minutos) | La propia persona, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `enlace` (armado con `URL_PUBLICA`, de un solo uso), `vence_en_minutos` (30), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva la contraseña**, ni la actual ni una nueva: solo el enlace para definirla. Va **solo** a `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` y no se guarda en la auditoría |
 
 **Todo evento lleva además quién originó la acción:**
@@ -1057,8 +1070,10 @@ mecanismo:
 | `realizado_por_publico` | Solo la etiqueta del rol. Es el que deben usar los correos a clientes (`pedido_estado`): no exponen nombres del personal |
 
 En `stock_bajo` es quien hizo el movimiento que cruzó el umbral (en una entrega, el
-conductor que la confirmó). El resumen diario y cada fila de reprogramación salen como
-`Sistema SGDS (automático)`, con origen `automático`.
+conductor que la confirmó). En `resumen_diario` (y en cada fila de reprogramación) es
+quien lo pidió, desde la pantalla o por voz, o `Sistema SGDS (automático)`, con origen
+`automático`, si lo envió el comando programado; el GET de respaldo siempre sale como el
+sistema.
 
 `stock_bajo` avisa **una vez por umbral, al cruzarlo hacia abajo**, y no en cada
 movimiento posterior:
@@ -1185,13 +1200,13 @@ movimiento posterior:
 }
 ```
 
-### Escenario 1: webhook con router
+### Escenario "SGDS": avisos de la operación
 
 1. Cree un escenario con el disparador **Webhooks → Custom webhook** y copie su URL en
-   `MAKE_WEBHOOK_URL`. Si le asigna una *API key* al webhook, cópiela en
-   `MAKE_WEBHOOK_KEY`: Make rechazará los avisos que no la traigan.
-2. Pulse *Redetermine data structure* y provoque un evento de cada tipo (ver la demo más
-   abajo) para que Make aprenda todos los campos.
+   `MAKE_WEBHOOK_URL`. Asígnele una *API key* y cópiela en `MAKE_WEBHOOK_KEY`: Make
+   rechazará los avisos que no la traigan.
+2. Pulse *Redetermine data structure* y envíe el aviso de estructura (todos los campos en
+   uno, ver [Ejemplos](#ejemplos-para-make-sin-la-app)) para que Make aprenda los campos.
 3. Agregue un **Router** con una ruta por tipo, cada una con un filtro sobre `tipo`:
    - `tipo` = `pedido_estado` → módulo de correo (Gmail, Outlook o *Email → Send an
      email*) para `{{correo}}`. Para un texto distinto por estado, anide otro Router con
@@ -1202,74 +1217,93 @@ movimiento posterior:
      su teléfono, su correo y el motivo, para que el gestor lo llame.
    - `tipo` = `accion_asistente` → correo para `{{correo_destino}}` con
      `{{realizado_por}}`, `{{rol}}`, `{{origen}}`, `{{resumen}}`, `{{detalle}}` y
-     `{{resultado}}`. La hoja de Google Sheets **no** se llena desde aquí sino con el
-     escenario 3, que no pierde registros.
+     `{{resultado}}`.
    - En los correos a clientes use `{{realizado_por_publico}}`, nunca `{{realizado_por}}`.
+4. Al final de cada ruta, **Google Sheets → Add a Row** en la pestaña *Notificaciones* de
+   la hoja "SGDS - Bitacora": `fecha_hora`, `tipo`, el destinatario (`correo` o
+   `correo_destino`), un asunto corto, `realizado_por` y `origen`.
 
-   Este escenario **no** tiene ruta para `credencial_usuario`: ese evento nunca llega a
-   `MAKE_WEBHOOK_URL`. Si su escenario ya tenía esa ruta, elimínela.
+Este escenario **no** tiene rutas para `resumen_diario`, `credencial_usuario` ni
+`restablecimiento_contrasena`: esos eventos nunca llegan a `MAKE_WEBHOOK_URL`. Si su
+escenario ya tenía alguna, elimínela.
 
-### Escenario de credenciales: webhook aparte
+### Escenario "Rutalytics Privado": resumen, credenciales y restablecimiento
 
-`credencial_usuario` lleva una contraseña en claro, así que tiene su propio escenario, con
-acceso restringido y sin historial del contenido:
+Recibe lo que no debe quedar en un historial: la contraseña temporal de una cuenta
+creada por voz, el enlace que permite definir una contraseña y el resumen del día.
 
-1. Cree un escenario **separado** con el disparador **Webhooks → Custom webhook** y copie su
-   URL en `MAKE_WEBHOOK_CREDENCIALES_URL`. Lleva la misma API key, `MAKE_WEBHOOK_KEY`.
+1. Cree un escenario **separado** con **Webhooks → Custom webhook**, con la misma API key
+   (`MAKE_WEBHOOK_KEY`). Copie su URL en **las tres** variables:
+   `MAKE_WEBHOOK_RESUMEN_URL`, `MAKE_WEBHOOK_CREDENCIALES_URL` y
+   `MAKE_WEBHOOK_RESTABLECIMIENTO_URL`. Defina también `URL_PUBLICA`.
 2. En *Scenario settings* active **"Data is confidential"**: Make deja de guardar el
-   contenido de cada ejecución, y la contraseña no queda en el historial del escenario.
-3. Un único módulo de correo para `{{correo_destino}}` (el propio usuario) con
-   `{{url_acceso}}`, `{{correo}}`, `{{contrasena}}` e `{{indicaciones}}`, que le dice que
-   es temporal y que la cambiará al entrar. No agregue otros destinatarios, hojas ni
-   registros.
-4. Compártalo solo con quien administre las cuentas.
+   contenido de cada ejecución, así que ni la contraseña ni el enlace quedan en el
+   historial. Compártalo solo con quien administre las cuentas.
+3. *Redetermine data structure* con el aviso `estructura-privado` del
+   [script de ejemplos](#ejemplos-para-make-sin-la-app): trae todos los campos de los tres
+   tipos, con `kpis` anidado y un elemento en cada lista.
+4. Un **Router** con tres rutas, cada una con un filtro sobre `tipo`:
+   - `tipo` = `resumen_diario` → correo para `{{correo_destino}}` con el contenido en
+     **HTML** y el cuerpo `{{resumen_html}}`. Luego **Google Sheets → Add a Row** en la
+     pestaña *Resumen diario*: `fecha`, `kpis.total`, `kpis.entregados`, `kpis.fallidos`,
+     `kpis.cancelados`, `kpis.pendientes`, `kpis.tasa_exito`, `kpis.cumplimiento_ventana`,
+     cuántos productos bajo el mínimo y cuántos fallidos para reprogramar (`length()` de
+     cada lista), `realizado_por` y `origen`. Opcional: un **Iterator** sobre
+     `fallidos_para_reprogramar` y un correo por pedido a `{{correo}}`, para que el cliente
+     coordine otra visita.
+   - `tipo` = `credencial_usuario` → correo para `{{correo_destino}}` (el propio usuario)
+     con `{{url_acceso}}`, `{{correo}}`, `{{contrasena}}` e `{{indicaciones}}`, que le dice
+     que es temporal y que la cambiará al entrar.
+   - `tipo` = `restablecimiento_contrasena` → correo para `{{correo_destino}}` con
+     `{{nombre}}`, el enlace `{{enlace}}` y su vigencia, `{{vence_en_minutos}}` minutos, y un
+     texto como *"Si no lo pidió, ignore este correo: su contraseña no cambia"*.
+5. En las rutas de credenciales y restablecimiento, después del correo, **Add a Row** en
+   la pestaña *Notificaciones*: `fecha_hora`, `tipo`, `correo_destino`, `accion` (o
+   "restablecimiento"), `realizado_por` y `origen`. **Nunca** mapee `contrasena` ni
+   `enlace` a la hoja ni a otro módulo que no sea el correo.
 
 Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, Gaby no ofrece crear ni restablecer cuentas por voz:
 responde, ya en el resumen, que se hace en pantalla.
 
-### Escenario de restablecimiento de contraseña
+### Resumen diario: lo envía la app
 
-`restablecimiento_contrasena` lleva el enlace de *Olvidé mi contraseña*, y quien lo tiene
-cambia la contraseña. Va por su propio webhook, aparte del de credenciales, para no
-alterar ese escenario:
+El resumen del día ya no lo consulta Make en un horario: **la app lo envía**, como evento
+`resumen_diario`, al escenario Rutalytics Privado. Lo arma `app/services/resumen_diario.py`,
+la misma función que responde `GET /api/automatizacion/resumen-diario`, que queda como
+respaldo sin cambios (con `AUTOMATIZACION_TOKEN`). Tres formas de dispararlo, todas con
+el mismo servicio y todas en la bitácora (*Enviar resumen del día*):
 
-1. Cree un escenario **separado** con **Webhooks → Custom webhook** y copie su URL en
-   `MAKE_WEBHOOK_RESTABLECIMIENTO_URL`. Defina también `URL_PUBLICA`: sin ella no se envía.
-2. Active **"Data is confidential"**, como en el de credenciales.
-3. Un único módulo de correo para `{{correo_destino}}` con `{{nombre}}`, el enlace
-   `{{enlace}}` y su vigencia, `{{vence_en_minutos}}` minutos. Un texto como *"Si no lo
-   pidió, ignore este correo: su contraseña no cambia"*.
+| Desde | Quién | Origen del evento |
+|---|---|---|
+| Botón **Enviar resumen del día** del tablero | Quien tenga el permiso *Enviar el resumen del día* (por defecto administrador y gestor; se reparte en *Roles*) | Quien lo pidió, `pantalla` |
+| Gaby: *"envía el resumen del día"* (`gestor/resumen-diario`, operación `enviar`) | Gestor y administrador, con el mismo permiso. Confirma antes: *"Voy a enviar el resumen de hoy a operaciones@... ¿confirmas?"* | Quien lo pidió, `voz` |
+| `flask --app run enviar-resumen`, programado | El Programador de tareas de Windows o el cron del servidor | `Sistema SGDS (automático)`, `automático` |
 
-### Escenario 2: resumen diario programado
-
-`GET /api/automatizacion/resumen-diario` devuelve el estado del día (`hoy()` en hora de
-Bogotá):
-
-- Se autentica con el encabezado **`X-Automatizacion-Token`**, comparado en tiempo
-  constante contra `AUTOMATIZACION_TOKEN`. Responde **401** si falta o no coincide, y
-  **404** si la variable no está configurada.
 - `kpis` sale de las mismas funciones que el tablero y la analítica, así que el correo y
   la pantalla siempre muestran las mismas cifras. `cumplimiento_ventana` es `null` si hoy
   no hubo entregas con ventana horaria.
 - `fallidos_para_reprogramar` lista los pedidos FALLIDOS de hoy cuyo cliente tiene correo.
 - `resumen_html` es el correo ya armado en español, con estilos en línea y los datos de
   clientes escapados.
+- Sin `MAKE_WEBHOOK_RESUMEN_URL` o sin `CORREO_OPERACIONES` no sale nada: el botón lo dice
+  en pantalla, Gaby lo dice sin pedir confirmación y el comando termina con código 1.
 
 ```json
 {
-  "fecha": "2026-10-06",
-  "fecha_hora": "2026-10-06T18:00:04-05:00",
+  "tipo": "resumen_diario",
+  "fecha": "2026-11-02",
+  "fecha_hora": "2026-11-02T18:00:04-05:00",
   "correo_destino": "operaciones@ejemplo.com",
   "kpis": {
-    "total": 17, "entregados": 7, "fallidos": 5, "cancelados": 2, "pendientes": 3,
-    "tasa_exito": 58.3, "cumplimiento_ventana": 100.0
+    "total": 6, "entregados": 2, "fallidos": 1, "cancelados": 0, "pendientes": 3,
+    "tasa_exito": 66.7, "cumplimiento_ventana": 100.0
   },
   "productos_bajo_minimo": [
     {"sku": "SKU-1004", "producto": "Aceite vegetal 1 L", "stock_actual": 30,
      "stock_minimo": 45, "negativo": false}
   ],
   "fallidos_para_reprogramar": [
-    {"codigo": "PED-20261006-005", "cliente": "Supermercado El Portal",
+    {"codigo": "PED-20261102-005", "cliente": "Supermercado El Portal",
      "correo": "compras@ejemplo.com", "direccion": "Av. Cra 68 #75-50, Bogota",
      "motivo": "Cliente ausente", "realizado_por": "Sistema SGDS (automático)",
      "rol_realizado_por": "Sistema", "origen": "automático", "realizado_por_publico": "Sistema"}
@@ -1282,78 +1316,47 @@ Bogotá):
 }
 ```
 
-Configuración del escenario:
+**Programarlo en Windows (Programador de tareas)**, a las 18:00 todos los días, desde
+`C:\Proyecto-Logistica`. El comando lee el `.env` de la carpeta del proyecto, así que la
+tarea debe arrancar en ella:
 
-1. Disparador **Schedule** una vez al día, por ejemplo a las 18:00. Fije la zona horaria
-   del escenario en *America/Bogota*.
-2. Módulo **HTTP → Make a request**: método `GET`, URL
-   `https://<su-dominio>/api/automatizacion/resumen-diario`, encabezado
-   `X-Automatizacion-Token` con el valor de `AUTOMATIZACION_TOKEN` y *Parse response*
-   activado. En el plan gratuito de Render la instancia puede estar suspendida y tardar
-   ~30 s en responder; deje el timeout del módulo en 60 s o más.
-3. Módulo de correo para `{{data.correo_destino}}`, con el contenido en **HTML** y el
-   cuerpo `{{data.resumen_html}}`.
-4. Opcional: un **Iterator** sobre `fallidos_para_reprogramar` y un correo por pedido a
-   `{{correo}}`, para que el cliente coordine una nueva visita.
-
-### Escenario 3: auditoría en Google Sheets
-
-`GET /api/automatizacion/auditoria?desde_id=<n>&limite=<m>` entrega la auditoría por
-lotes, en el orden de la hoja. Se autentica igual que el resumen diario
-(`X-Automatizacion-Token`; **401** con otro token, **404** sin `AUTOMATIZACION_TOKEN`).
-
-| Parámetro | Valor |
-|---|---|
-| `desde_id` | Último `id_auditoria` ya escrito en la hoja (0 la primera vez). Negativo: **400** |
-| `limite` | Registros por lote: 200 por defecto, como máximo 500 |
-
-```json
-{
-  "columnas": ["id_auditoria", "fecha_hora", "usuario", "rol", "origen", "accion", "entidad",
-               "entidad_id", "resumen", "detalle", "resultado", "call_id"],
-  "filas": [
-    [1842, "2026-10-06T11:20:37-05:00", "Carlos Rueda", "Gestor logístico", "voz",
-     "Anular pedido", "pedido", "", "Voy a anular el pedido PED-20261006-004 de Tienda La Esquina por: Duplicado.",
-     "funcion: gestor/pedidos:anular\ndatos / operacion: anular\n…", "exito", "call_9f2c…"]
-  ],
-  "siguiente_desde_id": 1842,
-  "hay_mas": false,
-  "fecha_hora": "2026-10-06T12:00:02-05:00"
-}
+```bat
+schtasks /Create /TN "Rutalytics - Resumen diario" /SC DAILY /ST 18:00 /F /TR "cmd /c cd /d C:\Proyecto-Logistica && C:\Proyecto-Logistica\.venv\Scripts\flask.exe --app run enviar-resumen >> C:\Proyecto-Logistica\instance\logs\resumen.log 2>&1"
 ```
 
-**Sin huecos.** Solo se entregan registros con al menos **60 segundos** de antigüedad, y el
-recorrido es por `id`: se corta en el primer registro todavía reciente, aunque haya otros
-posteriores ya viejos. En MySQL, dos transacciones simultáneas pueden confirmar el id 11
-antes que el 10; con este corte el 11 no sale antes que el 10, y el cursor nunca salta un
-registro. Un id que nunca llegó a existir (un *rollback*) no importa, porque el cursor es
-"mayor que".
+- `instance\logs` la crea la aplicación al arrancar. Si nunca la ha corrido en ese equipo,
+  créela antes (`mkdir instance\logs`): `cmd` abre el archivo del `>>` antes de que corra
+  el comando.
+- Probarla sin esperar: `schtasks /Run /TN "Rutalytics - Resumen diario"`, y revise
+  `instance\logs\resumen.log` (y que llegue el correo).
+- Ver su estado y el último resultado: `schtasks /Query /TN "Rutalytics - Resumen diario" /V /FO LIST`.
+  *Último resultado* 0 es éxito; 1, que faltaba una variable (el motivo queda en el log).
+- Quitarla: `schtasks /Delete /TN "Rutalytics - Resumen diario" /F`.
+- La tarea corre solo con la sesión de Windows iniciada. Para que corra aunque no lo esté,
+  ábrala en el Programador de tareas y marque *Ejecutar tanto si el usuario inició sesión
+  como si no*. La base (el contenedor de MySQL) debe estar arriba a esa hora.
 
-**Sin repetidos.** El cursor solo avanza si la hoja se escribió, y `id_auditoria` identifica
-cada fila si un lote se reintenta.
+En el servidor se programa con el cron del proveedor: ver [Despliegue](#despliegue).
 
-Configuración del escenario:
+### Ejemplos para Make sin la app
 
-1. Disparador **Schedule** cada hora (zona horaria *America/Bogota*).
-2. **Data store → Get a record**: un almacén `cursor_auditoria` con la clave `auditoria` y
-   el campo `desde_id` (número; 0 si no existe).
-3. **HTTP → Make a request**: `GET`
-   `https://<su-dominio>/api/automatizacion/auditoria?desde_id={{desde_id}}&limite=200`, con
-   el encabezado `X-Automatizacion-Token` y *Parse response* activado; timeout de 60 s.
-4. **Filtro**: continúa solo si `filas` no está vacío.
-5. **Google Sheets → Bulk Add Rows (Advanced)**: hoja `Auditoria`, cuya primera fila tiene
-   los nombres de `columnas`; *Rows* = `{{data.filas}}`. Es **una sola operación por lote**.
-6. **Data store → Add/replace a record**: `auditoria` → `desde_id = {{data.siguiente_desde_id}}`.
-   Va después de la escritura, así que solo se guarda si Bulk Add Rows salió bien; si
-   falla, la siguiente ejecución vuelve a pedir el mismo lote.
-7. Si `hay_mas` es `true`, quedan registros: la siguiente ejecución los trae. Para vaciar la
-   cola de una vez, envuelva los pasos 2 a 6 en un **Repeater** que se detenga cuando
-   `hay_mas` sea `false`.
+`ejemplos/make/enviar_ejemplos_make.ps1` envía avisos de ejemplo con los mismos campos que
+arma la app, para que Make aprenda la estructura y para probar los escenarios. Lee las URLs
+del `.env` (aunque la línea esté comentada) y manda todos los correos a
+`CORREO_OPERACIONES`:
 
-Para detectar una fila repetida por un reintento (un lote que se escribió pero cuyo cursor
-no alcanzó a guardarse), la columna A es `id_auditoria`: en la hoja, una columna auxiliar
-`=COUNTIF(A:A; A2)>1` marca los duplicados, o un paso **Search Rows** por `id_auditoria`
-antes de escribir los evita, a costa de una operación por fila.
+```bat
+powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps1 -Modo estructura
+```
+
+| Modo | Escenario | Qué envía |
+|---|---|---|
+| `estructura` | SGDS | Un aviso de tipo `estructura` con todos los campos de la operación |
+| `avisos` | SGDS | `pedido_estado`, `stock_bajo`, `solicitud_contacto` y `accion_asistente` |
+| `estructura-privado` | Rutalytics Privado | Un aviso de tipo `estructura` con todos los campos de `resumen_diario`, `credencial_usuario` y `restablecimiento_contrasena` (con `kpis` anidado y un elemento en cada lista), a `MAKE_WEBHOOK_RESUMEN_URL` |
+| `resumen` | Rutalytics Privado | Un `resumen_diario` de ejemplo, a `MAKE_WEBHOOK_RESUMEN_URL` |
+| `credencial` | Rutalytics Privado | `credencial_usuario`, a `MAKE_WEBHOOK_CREDENCIALES_URL` |
+| `restablecimiento` | Rutalytics Privado | `restablecimiento_contrasena`, a `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` |
 
 ### Demo con los datos sembrados
 
@@ -1399,12 +1402,11 @@ El formulario de movimientos manuales solo ofrece Entrada y Ajuste, y el ajuste 
 valores negativos. Por eso el aviso con `negativo: true` solo lo dispara una
 **entrega** que deja el stock por debajo de cero.
 
-**Resumen diario**: con `AUTOMATIZACION_TOKEN` definido, ejecute el escenario 2 con *Run
-once*, o pruébelo desde la terminal:
+**Resumen diario**: con `MAKE_WEBHOOK_RESUMEN_URL` y `CORREO_OPERACIONES` definidos, pulse
+**Enviar resumen del día** en el tablero, pídaselo a Gaby, o desde la terminal:
 
-```bash
-curl -H "X-Automatizacion-Token: $AUTOMATIZACION_TOKEN" \
-     http://localhost:5001/api/automatizacion/resumen-diario
+```bat
+.venv\Scripts\flask.exe --app run enviar-resumen
 ```
 
 Para repetir la demo desde cero, vuelva a sembrar con `reset-db` y `seed.py`.
@@ -1436,11 +1438,10 @@ la raíz del proyecto):
    | `URL_PUBLICA` | La URL `https://` del paso 2, sin barra final |
    | `RETELL_VOZ_ID` | Una voz en español del panel de Retell |
    | `RETELL_AGENTE_CONDUCTOR_ID`, `_GESTOR_ID`, `_ADMIN_ID`, `_CLIENTE_ID` | Vacías la primera vez; se llenan en el paso 4 |
-   | `MAKE_WEBHOOK_URL` | El webhook del escenario de avisos (paso 5a) |
+   | `MAKE_WEBHOOK_URL` | El webhook del escenario SGDS (paso 5a) |
    | `MAKE_WEBHOOK_KEY` | La API key de los webhooks de Make (opcional, recomendada) |
-   | `MAKE_WEBHOOK_CREDENCIALES_URL` | El webhook **aparte** del escenario de credenciales (paso 5b). Sin él, crear o restablecer cuentas por voz se rechaza |
+   | `MAKE_WEBHOOK_RESUMEN_URL`, `MAKE_WEBHOOK_CREDENCIALES_URL`, `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` | Las tres, el webhook de Rutalytics Privado (paso 5b). Sin la de credenciales, crear o restablecer cuentas por voz se rechaza |
    | `CORREO_OPERACIONES` | Destino de `stock_bajo`, `solicitud_contacto`, `accion_asistente` y el resumen diario |
-   | `AUTOMATIZACION_TOKEN` | `python -c "import secrets; print(secrets.token_urlsafe(32))"`; lo usan los pasos 5c y 5d |
 
    Con `MAKE_WEBHOOK_URL` definido, correr `seed.py` a mano envía avisos reales (ver
    [Verificación](#verificación)). Las pruebas automáticas siguen sin contactar nada:
@@ -1456,18 +1457,16 @@ la raíz del proyecto):
    servidor: el botón del micrófono aparece para cada rol con agente. Cada vez que cambie
    la URL de ngrok, vuelva a ejecutar el comando.
 5. **Escenarios de Make:**
-   - a. [Router de avisos](#escenario-1-webhook-con-router): un *Custom webhook* en
+   - a. [SGDS](#escenario-sgds-avisos-de-la-operación): un *Custom webhook* en
      `MAKE_WEBHOOK_URL` y un Router con una ruta por `tipo` (`pedido_estado`,
-     `stock_bajo`, `solicitud_contacto`, `accion_asistente`).
-   - b. [Credenciales](#escenario-de-credenciales-webhook-aparte): un escenario aparte con
-     su webhook en `MAKE_WEBHOOK_CREDENCIALES_URL`, solo para `credencial_usuario`, con
-     **"Data is confidential"** activado en *Scenario settings* para que Make no guarde
-     las contraseñas.
-   - c. [Resumen diario](#escenario-2-resumen-diario-programado): programado, con un
-     `GET /api/automatizacion/resumen-diario` y el encabezado `X-Automatizacion-Token`.
-   - d. [Auditoría a Google Sheets](#escenario-3-auditoría-en-google-sheets): programado,
-     lee `GET /api/automatizacion/auditoria?desde_id=<n>&limite=200` por lotes y agrega
-     las filas a la hoja `Auditoria`.
+     `stock_bajo`, `solicitud_contacto`, `accion_asistente`), con la pestaña
+     *Notificaciones* de la hoja "SGDS - Bitacora".
+   - b. [Rutalytics Privado](#escenario-rutalytics-privado-resumen-credenciales-y-restablecimiento):
+     otro *Custom webhook*, cuya URL va en las tres variables del escenario, con
+     **"Data is confidential"** y un Router para `resumen_diario`, `credencial_usuario` y
+     `restablecimiento_contrasena`.
+   - c. [Programe el resumen diario](#resumen-diario-lo-envía-la-app) con el Programador
+     de tareas (o el cron del servidor).
 6. **Pruebas de voz recomendadas**, una llamada por rol con las cuentas de demostración:
    - *Conductor:* "¿cuál es mi ruta?"; iniciar la ruta; "la siguiente parada"; entregar
      una parada (Gaby debe pedir nombre y documento si faltan, y el stock debe bajar);
@@ -1505,7 +1504,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2384 verificaciones en 26 suites contra MySQL 8.0, todas pasando, en unos cinco
+**2432 verificaciones en 27 suites contra MySQL 8.0, todas pasando, en unos cinco
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1540,7 +1539,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 92 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 376 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 383 |
 | `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración (incluido el tiempo de inactividad) y bitácora (admin); resúmenes, rechazos y auditoría | 104 |
 | `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba, con la observación dictada | 82 |
 | `prueba_19_contrasenas.py` | RF1/RNF5 · apartado de contraseñas: acceso solo del admin, sin hash ni contraseña en la página, asignar, generar temporal, exigir cambio (uno y en bloque), cambio obligatorio en el perfil, cierre de sesiones abiertas, hash fuera de política, reglas por rol (cliente y otros administradores fuera de su alcance, la propia con la actual), migración `m008` | 153 |
@@ -1551,6 +1550,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_24_archivos.py` | RNF5 · archivos subidos por su contenido: un ejecutable renombrado a `.pdf` y a `.csv` (Windows, Linux, macOS, script), PDF, comprimidos, imágenes, UTF-16 y binarios rechazados sin guardarse, cada rechazo en la bitácora, sin falsos positivos con CSV reales, límite de 2 MB y de 5 MB por petición (413) | 28 |
 | `prueba_25_roles_permisos.py` | RF1/RNF5 · roles y permisos: reparto por defecto igual a los roles fijos, un rol nuevo asignado a dos cuentas con dos permisos propios distintos cada una, dos roles en una cuenta con la totalidad de sus permisos invertida, menú y botones según permisos, editar un rol del sistema (también por voz), reglas contra la escalada de privilegios, eliminar un rol, auditoría, migración `m012` | 59 |
 | `prueba_26_voz_seguridad.py` | RF4/RNF5 · voz y seguridad: cada operación de voz con el permiso de su pantalla; roles, permisos de una cuenta, exigencia de cambio de contraseña, intentos de acceso y errores por voz (quitar un permiso lo quita por voz); la llamada atada a la sesión web (otro navegador, contraseña propia o restablecida, bloqueo por intentos, cuenta desactivada) y no cortada por inactividad (voz y latido); búsqueda por documento, teléfono y NIT; avisos y auditoría sin textos cifrados ni contraseñas; exclusiones con su motivo | 91 |
+| `prueba_27_resumen_diario.py` | RF6 · resumen diario enviado por la app: el evento `resumen_diario` con los mismos campos que el GET de respaldo, solo al webhook privado con la API key; sin webhook o sin correo de operaciones no sale y se dice; quién lo originó (pantalla, voz, sistema); botón del tablero con su permiso y CSRF; operación de voz con confirmación; comando `enviar-resumen`; migración `m014` | 41 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
@@ -1748,3 +1748,24 @@ Los tiempos de respuesta suben al pasar de un archivo local a TCP, y siguen tres
 `Procfile` y `render.yaml` están listos para Render o Railway, con gunicorn como servidor
 WSGI y `/salud` como health check. Recuerde que el plan gratuito de Render suspende la
 instancia tras 15 minutos sin tráfico y el siguiente acceso tarda ~30 segundos.
+
+La aplicación es la misma en el PC y en el servidor: todo se configura con variables de
+entorno. Al pasar a un servidor cambia esto:
+
+| Qué | En el PC | En el servidor |
+|---|---|---|
+| `URL_PUBLICA` | La de ngrok, que cambia en cada sesión | La del servicio (`https://<su-servicio>.onrender.com` o su dominio), fija, **sin ngrok** |
+| Agentes de Retell | `sincronizar-asistentes` cada vez que cambia ngrok | `flask --app run sincronizar-asistentes` **una vez después de fijar `URL_PUBLICA`** (en la *Shell* de Render, o desde el PC con la `URL_PUBLICA` del servidor), y de nuevo solo si vuelve a cambiar |
+| Resumen diario | Programador de tareas de Windows | El **cron del proveedor** corre `flask --app run enviar-resumen` |
+| `CLAVE_CIFRADO` | La del `.env` | **Fija**: `render.yaml` la genera una sola vez. Si migra una base existente, use la misma con la que se cifró; nunca la regenere |
+| Variables de Make | Las del `.env` | **Las mismas**: `MAKE_WEBHOOK_URL` (SGDS), `MAKE_WEBHOOK_RESUMEN_URL`, `MAKE_WEBHOOK_CREDENCIALES_URL` y `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` (Rutalytics Privado), `MAKE_WEBHOOK_KEY` y `CORREO_OPERACIONES` |
+
+**Cron del resumen.** El horario de los cron va en UTC: las 18:00 de Bogotá son las
+**23:00 UTC** (`0 23 * * *`). En Render es un servicio aparte de tipo *cron*, de pago (no
+tiene plan gratuito), que comparte el código y las variables de la web: `render.yaml`
+trae uno **comentado**; descoméntelo para crearlo. Debe tener la **misma** `CLAVE_CIFRADO`
+y la misma `SECRET_KEY` que la web (el ejemplo las toma de ella con `fromService`), porque
+en producción la aplicación no arranca sin ellas. En otro proveedor, programe el mismo
+comando, `flask --app run enviar-resumen`, con su cron o su *scheduler* a las 23:00 UTC.
+Si prefiere no pagar el cron, el resumen se puede seguir enviando desde el tablero o por
+voz.

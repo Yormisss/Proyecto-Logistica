@@ -37,11 +37,48 @@ services:
         sync: false
       - key: RETELL_VOZ_ID
         sync: false
+      # Make: el escenario "SGDS" (avisos de la operacion) y "Rutalytics
+      # Privado" (las tres siguientes, con la URL de su webhook).
       - key: MAKE_WEBHOOK_URL
+        sync: false
+      - key: MAKE_WEBHOOK_RESUMEN_URL
+        sync: false
+      - key: MAKE_WEBHOOK_CREDENCIALES_URL
+        sync: false
+      - key: MAKE_WEBHOOK_RESTABLECIMIENTO_URL
         sync: false
       - key: MAKE_WEBHOOK_KEY
         sync: false
       - key: CORREO_OPERACIONES
         sync: false
+      # Solo para los endpoints de respaldo; ningun escenario los consulta.
       - key: AUTOMATIZACION_TOKEN
         sync: false
+
+  # OPCIONAL (de pago: Render no tiene plan gratuito para cron). Envia el
+  # resumen del dia a Make a las 18:00 de Bogota = 23:00 UTC. Descomentelo para
+  # crearlo. Comparte la base, las claves y las variables de Make con la web:
+  # CLAVE_CIFRADO y SECRET_KEY deben ser las mismas, por eso salen de ella.
+  # - type: cron
+  #   name: sgds-resumen-diario
+  #   runtime: python
+  #   schedule: "0 23 * * *"
+  #   buildCommand: pip install -r requirements.txt
+  #   startCommand: flask --app run enviar-resumen
+  #   envVars:
+  #     - key: ENTORNO
+  #       value: produccion
+  #     - key: PYTHON_VERSION
+  #       value: "3.11.9"
+  #     - key: SECRET_KEY
+  #       fromService: {type: web, name: sgds, envVarKey: SECRET_KEY}
+  #     - key: CLAVE_CIFRADO
+  #       fromService: {type: web, name: sgds, envVarKey: CLAVE_CIFRADO}
+  #     - key: DATABASE_URL
+  #       fromService: {type: web, name: sgds, envVarKey: DATABASE_URL}
+  #     - key: MAKE_WEBHOOK_RESUMEN_URL
+  #       fromService: {type: web, name: sgds, envVarKey: MAKE_WEBHOOK_RESUMEN_URL}
+  #     - key: MAKE_WEBHOOK_KEY
+  #       fromService: {type: web, name: sgds, envVarKey: MAKE_WEBHOOK_KEY}
+  #     - key: CORREO_OPERACIONES
+  #       fromService: {type: web, name: sgds, envVarKey: CORREO_OPERACIONES}
