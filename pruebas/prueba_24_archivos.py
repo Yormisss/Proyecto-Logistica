@@ -36,8 +36,9 @@ EXE_WINDOWS = (b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00" + b
                + b"\x80\x00\x00\x00" + b"This program cannot be run in DOS mode.\r\r\n$" + b"\x00" * 200
                + b"PE\x00\x00")
 CSV_OK = b"""cliente_nombre,direccion,ciudad,latitud,longitud,fecha_despacho,sku,cantidad,codigo
-Panaderia Central,Cra 15 #80-10,Bogota,4.6680,-74.0550,2026-09-11,SKU-1001,4,LOTE-A
-"""
+Panaderia Central,Cra 15 #80-10,Bogota,4.6680,-74.0550,{fecha},SKU-1001,4,LOTE-A
+""".replace(b"{fecha}", (__import__("app.tiempo", fromlist=["hoy"]).hoy()
+                         + __import__("datetime").timedelta(days=2)).isoformat().encode())
 
 
 def subir(datos, nombre):

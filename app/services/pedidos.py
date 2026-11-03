@@ -27,7 +27,7 @@ class PedidoInvalido(DatosInvalidos):
 
 
 def validar_pedido(*, items, fecha_despacho, prioridad, ventana_inicio=None, ventana_fin=None,
-                   codigo=None):
+                   codigo=None, permitir_fecha_pasada=False):
     """Valida los datos de un pedido nuevo.
 
     `items` es una lista de (producto_id, cantidad). Devuelve (items, errores):
@@ -38,6 +38,11 @@ def validar_pedido(*, items, fecha_despacho, prioridad, ventana_inicio=None, ven
 
     if fecha_despacho is None:
         errores.append(("fecha_despacho", "Indique la fecha de despacho."))
+    elif fecha_despacho < hoy() and not permitir_fecha_pasada:
+        # Un pedido nuevo no se despacha en el pasado (la edicion aplica la
+        # misma regla). Al editar solo los productos de un pedido pendiente que
+        # ya tenia una fecha vencida se omite: la fecha no es lo que cambia.
+        errores.append(("fecha_despacho", "La fecha de despacho no puede ser anterior a hoy."))
 
     if prioridad not in PRIORIDADES:
         errores.append(("prioridad", "La prioridad debe ser 1 (alta), 2 (media) o 3 (baja)."))
@@ -251,6 +256,7 @@ def validar_edicion(pedido, datos):
 
     if "items" in recibidos:
         items, errores = validar_pedido(items=recibidos["items"], fecha_despacho=pedido.fecha_despacho,
+                                        permitir_fecha_pasada=True,
                                         prioridad=pedido.prioridad)
         for campo, mensaje in errores:
             v.invalido(campo or "items", mensaje)

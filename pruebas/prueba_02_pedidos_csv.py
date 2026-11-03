@@ -39,6 +39,11 @@ r = c.get("/pedidos/plantilla.csv")
 check(r.status_code == 200 and "attachment" in r.headers.get("Content-Disposition",""), "plantilla descargable")
 check(b"cliente_nombre" in r.data and b"SKU-1001" in r.data, "plantilla trae encabezados y ejemplo")
 
+# Fecha futura: un pedido nuevo no puede tener fecha de despacho pasada.
+from datetime import timedelta  # noqa: E402
+from app.tiempo import hoy as _hoy  # noqa: E402
+MANANA = _hoy() + timedelta(days=1)
+
 print("\n== 3. Alta manual ==")
 with app.app_context():
     prod = db.session.query(Producto).filter_by(sku="SKU-1001").first()
@@ -47,7 +52,7 @@ with app.app_context():
 
 r = c.post("/pedidos/nuevo", data={
     "cliente_nombre":"Tienda Prueba Manual", "direccion":"Calle 100 #15-20",
-    "ciudad":"Bogota", "fecha_despacho":"2026-09-10", "prioridad":"1",
+    "ciudad":"Bogota", "fecha_despacho":MANANA.isoformat(), "prioridad":"1",
     "ventana_inicio":"08:00","ventana_fin":"12:00",
     "latitud":"4.6860","longitud":"-74.0480",
     "producto_id":[str(prod_id)], "cantidad":["7"],
@@ -56,21 +61,21 @@ check(b"registrado correctamente" in r.data, "crea pedido manual")
 check(b"Tienda Prueba Manual" in r.data, "muestra el detalle del pedido creado")
 with app.app_context():
     p = db.session.query(Pedido).filter_by(cliente_nombre="Tienda Prueba Manual").first()
-    check(p is not None and p.codigo.startswith("PED-20260910-"), f"codigo autogenerado: {p.codigo if p else None}")
+    check(p is not None and p.codigo.startswith(f"PED-{MANANA:%Y%m%d}-"), f"codigo autogenerado: {p.codigo if p else None}")
     check(len(p.items) == 1 and p.items[0].cantidad == 7, "guarda los items")
     check(p.estado == "PENDIENTE", "nace en estado PENDIENTE")
     check(len(p.eventos) == 1, "registra evento de trazabilidad")
     check(db.session.get(Producto, prod_id).stock_actual == stock_previo, "NO descuenta inventario al crear (RF5)")
 
 print("\n== 4. Validaciones del alta manual ==")
-r = c.post("/pedidos/nuevo", data={"cliente_nombre":"","direccion":"","fecha_despacho":"2026-09-10","prioridad":"3"}, follow_redirects=True)
+r = c.post("/pedidos/nuevo", data={"cliente_nombre":"","direccion":"","fecha_despacho":MANANA.isoformat(),"prioridad":"3"}, follow_redirects=True)
 check(b"Indique el cliente" in r.data, "exige cliente")
 r = c.post("/pedidos/nuevo", data={
-    "cliente_nombre":"X","direccion":"Y","fecha_despacho":"2026-09-10","prioridad":"3",
+    "cliente_nombre":"X","direccion":"Y","fecha_despacho":MANANA.isoformat(),"prioridad":"3",
     "ventana_inicio":"14:00","ventana_fin":"09:00","producto_id":[str(prod_id)],"cantidad":["1"]}, follow_redirects=True)
 check(b"posterior a la inicial" in r.data, "rechaza ventana horaria invertida")
 r = c.post("/pedidos/nuevo", data={
-    "cliente_nombre":"X","direccion":"Y","fecha_despacho":"2026-09-10","prioridad":"3"}, follow_redirects=True)
+    "cliente_nombre":"X","direccion":"Y","fecha_despacho":MANANA.isoformat(),"prioridad":"3"}, follow_redirects=True)
 check(b"al menos un producto" in r.data, "exige al menos un producto")
 
 print("\n== 5. Importacion CSV: archivo valido ==")
@@ -78,7 +83,7 @@ csv_ok = b"""cliente_nombre,direccion,ciudad,latitud,longitud,fecha_despacho,ven
 Panaderia Central,Cra 15 #80-10,Bogota,4.6680,-74.0550,2026-09-11,08:00,11:00,2,SKU-1001,4,LOTE-A
 Panaderia Central,Cra 15 #80-10,Bogota,4.6680,-74.0550,2026-09-11,08:00,11:00,2,SKU-1002,6,LOTE-A
 Cafeteria Norte,Calle 140 #12-05,Bogota,4.7220,-74.0330,2026-09-11,09:00,13:00,3,SKU-1003,3,LOTE-B
-"""
+""".replace(b"2026-09-11", (_hoy() + timedelta(days=2)).isoformat().encode())
 r = c.post("/pedidos/importar", data={"archivo":(io.BytesIO(csv_ok),"pedidos.csv")},
            content_type="multipart/form-data", follow_redirects=True)
 html = r.data.decode()
@@ -106,7 +111,7 @@ Tienda Sin SKU,Calle 3,SKU-9999,5,2026-09-12
 Tienda Cant Cero,Calle 4,SKU-1001,0,2026-09-12
 Tienda Fecha Mala,Calle 5,SKU-1001,5,32/13/2026
 Tienda Dup,Calle 6,SKU-1001,5,2026-09-12
-"""
+""".replace(b"2026-09-12", (_hoy() + timedelta(days=3)).isoformat().encode())
 r = c.post("/pedidos/importar", data={"archivo":(io.BytesIO(csv_malo),"malo.csv")},
            content_type="multipart/form-data", follow_redirects=True)
 html = r.data.decode()

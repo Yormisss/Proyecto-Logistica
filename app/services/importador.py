@@ -160,6 +160,8 @@ def analizar_csv(contenido_binario):
                 raise ValueError("cantidad debe ser mayor que cero")
 
             fecha_despacho = _leer_fecha(datos.get("fecha_despacho"), numero_linea)
+            if fecha_despacho < hoy():
+                raise ValueError("fecha_despacho no puede ser anterior a hoy")
             ventana_inicio = _leer_hora(datos.get("ventana_inicio"), "ventana_inicio")
             ventana_fin = _leer_hora(datos.get("ventana_fin"), "ventana_fin")
             if ventana_inicio and ventana_fin and ventana_inicio >= ventana_fin:
