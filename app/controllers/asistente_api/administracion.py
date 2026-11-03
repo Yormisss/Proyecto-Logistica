@@ -48,8 +48,9 @@ SIN_CREDENCIALES = (
     "No puedo {} por voz: falta configurar el envío de contraseñas por correo "
     "(MAKE_WEBHOOK_CREDENCIALES_URL). Hazlo en pantalla, en Usuarios."
 )
-AVISO_CORREO = ("La contraseña se genera sola y le llega solo a ese correo; si no le llega, "
-                "restablécela en pantalla.")
+AVISO_CORREO = ("La contraseña se genera sola, le llega solo a ese correo y es temporal: deberá "
+                "cambiarla al iniciar sesión. Si no le llega, restablécela en pantalla.")
+TEMPORAL = "Es temporal: deberá cambiarla al iniciar sesión."
 
 # Como se dice cada rol -> constante.
 ROLES_DICHOS = {
@@ -79,7 +80,7 @@ usuarios = funcion_agrupada(
     parametros={
         "usuario": {"type": "string",
                     "description": "consultar, editar, activar, desactivar, restablecer-contrasena: "
-                                   "nombre o correo de la cuenta. En consultar, sin usuario da el resumen."},
+                                   "nombre, correo, documento o telefono de la cuenta. En consultar, sin usuario da el resumen."},
         "nombre": {"type": "string", "description": "crear y editar: nombre completo."},
         "correo": {"type": "string",
                    "description": "crear: correo de inicio de sesion, deletreado y confirmado."},
@@ -166,6 +167,12 @@ def consultar_usuarios():
         return responder(error)
     partes = [f"{usuario.nombre} es {etiqueta_rol(usuario.rol).lower()}, con el correo {usuario.correo}, "
               f"y su cuenta está {'activa' if usuario.activo else 'inactiva'}."]
+    # Descifrados por el ORM; solo los ultimos digitos, como en el resumen de editar.
+    personales = [f"{etiqueta} terminado en {valor[-4:]}"
+                  for etiqueta, valor in (("documento", usuario.documento), ("teléfono", usuario.telefono))
+                  if valor]
+    if personales:
+        partes.append(f"Tiene {enumerar(personales)}.")
     if usuario.cliente is not None:
         partes.append(f"Ve el portal de {usuario.cliente.nombre}.")
     if usuario.vehiculo is not None:
@@ -213,7 +220,8 @@ def crear_usuario_voz():
         return _no_se_pudo(error)
     aviso_credencial_usuario(usuario, generada, ACCION_CREACION, g.usuario)
     db.session.commit()
-    return responder(f"Listo, creé la cuenta de {usuario.nombre}. La contraseña va en camino a su correo.")
+    return responder(f"Listo, creé la cuenta de {usuario.nombre}. La contraseña va en camino a su correo. "
+                     f"{TEMPORAL}")
 
 
 @usuarios("editar", "Editar usuario",
@@ -318,8 +326,9 @@ def restablecer_contrasena_voz():
     if rechazo:
         return responder(rechazo)
     pendiente = exigir_confirmacion(
-        f"Voy a restablecer la contraseña de {usuario.nombre}; la anterior deja de servir. "
-        f"La nueva le llega solo a su correo, {usuario.correo}; si no le llega, restablécela en pantalla."
+        f"Voy a restablecer la contraseña de {usuario.nombre}; la anterior deja de servir y se cierran "
+        f"sus sesiones abiertas. La nueva le llega solo a su correo, {usuario.correo}, y es temporal: "
+        "deberá cambiarla al iniciar sesión. Si no le llega, restablécela en pantalla."
     )
     if pendiente:
         return pendiente
@@ -329,7 +338,8 @@ def restablecer_contrasena_voz():
         return _no_se_pudo(error)
     aviso_credencial_usuario(usuario, nueva, ACCION_RESTABLECIMIENTO, g.usuario)
     db.session.commit()
-    return responder(f"Listo, restablecí la contraseña de {usuario.nombre}. La nueva va en camino a su correo.")
+    return responder(f"Listo, restablecí la contraseña de {usuario.nombre}. La nueva va en camino a su correo. "
+                     f"{TEMPORAL}")
 
 
 # --------------------------------------------------------------------------

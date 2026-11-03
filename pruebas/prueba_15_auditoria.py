@@ -352,6 +352,7 @@ inicio = len(envios_make)
 with app.test_request_context():
     lucia = db.session.get(Usuario, lucia_id)
     admin = db.session.get(Usuario, admin_id)
+    lucia_temporal = lucia.debe_cambiar_contrasena
     notificaciones.aviso_credencial_usuario(lucia, "Generada123", notificaciones.ACCION_CREACION, admin)
     db.session.commit()
 e = eventos("credencial_usuario", inicio)
@@ -360,7 +361,11 @@ check(len(e) == 1 and urls_make[inicio] == URL_CREDENCIALES,
 if e:
     e = e[0]
     check(set(e) == {"tipo", "nombre", "correo", "contrasena", "url_acceso", "creado_por", "accion",
-                     "hora", "fecha_hora", "correo_destino"} | CAMPOS_ACTOR, f"campos {sorted(e)}")
+                     "debe_cambiar_contrasena", "indicaciones", "hora", "fecha_hora",
+                     "correo_destino"} | CAMPOS_ACTOR, f"campos {sorted(e)}")
+    check(e["debe_cambiar_contrasena"] is bool(lucia_temporal)
+          and (("temporal" in e["indicaciones"]) if lucia_temporal else e["indicaciones"] == ""),
+          "dice si la contrasena es temporal y, si lo es, que se cambia al entrar")
     check(e["correo_destino"] == "lucia.herrera@sgds.com" == e["correo"],
           "va al correo de inicio de sesion del propio usuario, no a operaciones")
     check(e["url_acceso"] == URL_PUBLICA and e["accion"] == "creación"

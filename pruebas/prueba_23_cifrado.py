@@ -187,6 +187,7 @@ check(por_voz is not None and "3017776655" not in (por_voz.detalle or "") + por_
       and "******6655" in por_voz.detalle, "la auditoria de voz los guarda enmascarados")
 
 print("\n== 6. Con otra clave no se leen ==")
+clave_correcta = app.config.get("CLAVE_CIFRADO", "")
 app.config["CLAVE_CIFRADO"] = "otra-clave-distinta"
 with app.app_context():
     try:
@@ -195,7 +196,7 @@ with app.app_context():
     except ValueError as error:
         check("CLAVE_CIFRADO" in str(error), "con otra clave no se descifran, y el error explica por que")
     db.session.rollback()
-app.config.pop("CLAVE_CIFRADO")
+app.config["CLAVE_CIFRADO"] = clave_correcta
 check(usuario("conductor1@sgds.com").documento == "1023456789", "con la clave correcta vuelven a leerse")
 
 print("\n== 7. Migracion m011 sobre una base con datos en claro ==")

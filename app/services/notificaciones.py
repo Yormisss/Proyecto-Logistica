@@ -15,9 +15,10 @@ que va solo a MAKE_WEBHOOK_CREDENCIALES_URL):
 * `accion_asistente`: un registro de la auditoria, con su `id_auditoria`.
   Interno. No todo registro lo envia: ver `registrar_auditoria(avisar=...)`.
 * `credencial_usuario`: la contrasena de una cuenta creada o restablecida por
-  voz. Va al correo de inicio de sesion del propio usuario y es el UNICO lugar
-  por el que viaja esa contrasena: nunca se guarda en la auditoria ni en otro
-  evento. Sale por su propio webhook, MAKE_WEBHOOK_CREDENCIALES_URL, para que
+  voz. Siempre es temporal (`debe_cambiar_contrasena`: true): el usuario la
+  reemplaza al iniciar sesion. Va al correo de inicio de sesion del propio
+  usuario y es el UNICO lugar por el que viaja esa contrasena: nunca se guarda
+  en la auditoria ni en otro evento. Sale por su propio webhook, MAKE_WEBHOOK_CREDENCIALES_URL, para que
   no quede en el historial del escenario general; sin el, no se envia.
 * `restablecimiento_contrasena`: el enlace de "Olvide mi contrasena", al
   correo de inicio de sesion de quien lo pidio. Quien tiene el enlace cambia
@@ -262,6 +263,8 @@ def aviso_accion_asistente(registro):
 
 ACCION_CREACION = "creación"
 ACCION_RESTABLECIMIENTO = "restablecimiento"
+INDICACION_TEMPORAL = ("Esta contraseña es temporal: al iniciar sesión el sistema le pedirá cambiarla "
+                       "por una propia antes de continuar.")
 
 
 def aviso_credencial_usuario(usuario, contrasena, accion, creado_por):
@@ -275,6 +278,9 @@ def aviso_credencial_usuario(usuario, contrasena, accion, creado_por):
         "nombre": usuario.nombre,
         "correo": usuario.correo,
         "contrasena": contrasena,
+        # La generada por voz siempre es temporal (ver services/usuarios.py).
+        "debe_cambiar_contrasena": bool(usuario.debe_cambiar_contrasena),
+        "indicaciones": INDICACION_TEMPORAL if usuario.debe_cambiar_contrasena else "",
         "url_acceso": (current_app.config.get("URL_PUBLICA") or "").strip().rstrip("/"),
         "creado_por": f"{creado_por.nombre} ({etiqueta_rol(creado_por.rol)})",
         "accion": accion,

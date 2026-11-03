@@ -57,7 +57,7 @@ clientes = funcion_agrupada(
     descripcion="Clientes comerciales (empresas destinatarias).",
     parametros={
         "cliente": {"type": "string",
-                    "description": "consultar, editar, activar, desactivar: nombre del cliente registrado."},
+                    "description": "consultar, editar, activar, desactivar: nombre, NIT o telefono del cliente registrado."},
         "nombre": {"type": "string", "description": "crear: nombre o razon social. editar: el nombre nuevo."},
         "nit": {"type": "string", "description": "crear y editar: NIT, digito por digito (opcional)."},
         "telefono": {"type": "string", "description": "crear y editar: telefono (opcional)."},
@@ -206,7 +206,7 @@ sedes = funcion_agrupada(
     descripcion="Sedes (puntos de entrega) de un cliente. Una sede desactivada no se ofrece para "
                 "pedidos nuevos.",
     parametros={
-        "cliente": {"type": "string", "description": "Nombre del cliente. Requerido en todas."},
+        "cliente": {"type": "string", "description": "Nombre, NIT o telefono del cliente. Requerido en todas."},
         "sede": {"type": "string",
                  "description": "editar, activar, desactivar: nombre o direccion de la sede."},
         "etiqueta": {"type": "string",

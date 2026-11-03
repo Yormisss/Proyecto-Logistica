@@ -482,7 +482,7 @@ pedidos = funcion_agrupada(
                 "pedido usa buscar-pedido.",
     parametros={
         **PARAMETRO_PEDIDO,
-        "cliente": {"type": "string", "description": "crear: nombre del cliente registrado."},
+        "cliente": {"type": "string", "description": "crear: nombre, NIT o telefono del cliente registrado."},
         "sede": {"type": "string",
                  "description": "crear y editar: etiqueta o direccion de la sede. Al crear, "
                                 "opcional si el cliente tiene una sola."},

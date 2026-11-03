@@ -346,16 +346,22 @@ inicio = len(envios)
 args_nora = {"operacion": "crear", "nombre": "Nora Diaz", "correo": "nora@sgds.com", "rol": "conductor"}
 r, final = confirma("admin/usuarios", A, args_nora)
 check(r == "Voy a crear la cuenta de Nora Diaz, con el correo nora@sgds.com, como conductor. La contraseña se "
-          "genera sola y le llega solo a ese correo; si no le llega, restablécela en pantalla. ¿confirmas?",
-      f"el resumen avisa como llega la contraseña: {r}")
+          "genera sola, le llega solo a ese correo y es temporal: deberá cambiarla al iniciar sesión. Si no le "
+          "llega, restablécela en pantalla. ¿confirmas?",
+      f"el resumen avisa como llega la contraseña y que es temporal: {r}")
 credencial = eventos("credencial_usuario", inicio)
 with app.app_context():
     nora = db.session.query(Usuario).filter_by(correo="nora@sgds.com").one()
     clave_ok = credencial and nora.verificar_contrasena(credencial[0][1]["contrasena"])
+    nora_temporal = nora.debe_cambiar_contrasena
     registro = db.session.query(Auditoria).order_by(Auditoria.id.desc()).first()
     texto_registro = (registro.resumen or "") + (registro.detalle or "")
-check(final == "Listo, creé la cuenta de Nora Diaz. La contraseña va en camino a su correo." and clave_ok,
+check(final == "Listo, creé la cuenta de Nora Diaz. La contraseña va en camino a su correo. Es temporal: "
+               "deberá cambiarla al iniciar sesión." and clave_ok,
       "crea la cuenta y la contrasena generada sirve")
+check(nora_temporal and credencial and credencial[0][1]["debe_cambiar_contrasena"] is True
+      and "temporal" in credencial[0][1]["indicaciones"],
+      "la cuenta creada por voz debe cambiar la contrasena al entrar, y credencial_usuario lo indica")
 check(len(credencial) == 1 and credencial[0][0] == URL_CREDENCIALES
       and credencial[0][1]["correo_destino"] == "nora@sgds.com" and credencial[0][1]["accion"] == "creación",
       "la contrasena viaja solo en credencial_usuario, al webhook de credenciales y al correo del usuario")
@@ -396,7 +402,11 @@ with app.app_context():
     diego = db.session.query(Usuario).filter_by(correo="conductor2@sgds.com").one()
     cambio = diego.contrasena_hash != hash_antes and credencial and diego.verificar_contrasena(
         credencial[0][1]["contrasena"])
-check("la anterior deja de servir" in r and "si no le llega, restablécela en pantalla" in r and cambio
+    diego_temporal = diego.debe_cambiar_contrasena
+check(diego_temporal and "es temporal: deberá cambiarla al iniciar sesión" in r
+      and credencial and credencial[0][1]["debe_cambiar_contrasena"] is True,
+      "restablecer por voz deja la contrasena temporal; Gaby y credencial_usuario lo dicen")
+check("la anterior deja de servir" in r and "Si no le llega, restablécela en pantalla" in r and cambio
       and credencial[0][1]["accion"] == "restablecimiento" and credencial[0][1]["contrasena"] not in final,
       "restablecer genera una nueva que solo viaja por credencial_usuario")
 # Las reglas de contrasenas de la pantalla (RNF5) tambien rigen por voz.

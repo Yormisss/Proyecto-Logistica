@@ -11,6 +11,12 @@ no hay ninguna, el agente lo dice. Cada busqueda prueba primero la forma mas
 exacta (codigo, SKU, nombre identico) y solo si no encuentra nada pasa a una
 mas amplia, para que "Tienda La Esquina" no se confunda con "Tienda La
 Esquina 2".
+
+Numeros dichos (RNF5): una cuenta se encuentra tambien por su documento o su
+telefono, y un cliente por su NIT o su telefono. El documento y el telefono
+de las cuentas estan cifrados en la base (app/cifrado.py): el documento se
+busca por su indice ciego, como en la pantalla, y el telefono comparando el
+valor ya descifrado por el ORM, nunca el texto cifrado.
 """
 
 import re
@@ -20,6 +26,7 @@ from difflib import SequenceMatcher
 
 from sqlalchemy import func, or_
 
+from app.cifrado import indice_ciego
 from app.extensions import db
 from app.models import (
     Cliente, EstadoPedido, EstadoRuta, Pedido, Producto, Rol, Ruta, Usuario, Vehiculo, normalizar_texto,
@@ -34,6 +41,9 @@ PARECIDO_MINIMO = 0.75
 
 # Largo minimo de una palabra para buscar por ella sola ("detergente" si, "dos" no).
 LARGO_PALABRA_SIGNIFICATIVA = 4
+
+# Digitos minimos de un documento, NIT o telefono dicho para buscar por el.
+DIGITOS_MINIMOS_IDENTIFICACION = 5
 
 # Palabras que acompanan al numero del pedido del dia: "el pedido numero 5 de hoy".
 _RELLENO_NUMERO = {"el", "la", "pedido", "orden", "numero", "no", "n", "nro", "de", "del",
@@ -266,7 +276,7 @@ def buscar_productos(texto, solo_activos=True):
 # --------------------------------------------------------------------------
 
 def buscar_clientes(texto, solo_activos=True):
-    """Cliente por nombre: identico, que contenga las palabras o parecido.
+    """Cliente por NIT o telefono, o por nombre: identico, que contenga las palabras o parecido.
 
     Por omision solo los activos (para pedidos); para editarlos o reactivarlos,
     `solo_activos=False`.
@@ -278,6 +288,14 @@ def buscar_clientes(texto, solo_activos=True):
     base = db.session.query(Cliente)
     if solo_activos:
         base = base.filter(Cliente.activo.is_(True))
+    if _es_identificacion(texto):
+        digitos = _digitos(texto)
+        # El NIT con o sin digito de verificacion ("900123456-7" o "900123456").
+        por_nit = [c for c in base.filter(Cliente.documento.isnot(None))
+                   if _digitos(c.documento) in (digitos, digitos[:-1]) or _digitos(c.documento)[:-1] == digitos]
+        if por_nit:
+            return Coincidencias(por_nit)
+        return Coincidencias([c for c in base.order_by(Cliente.nombre) if _mismo_telefono(c.telefono, digitos)])
     identicos = base.filter(Cliente.nombre_normalizado == buscado).all()
     if identicos:
         return Coincidencias(identicos)
@@ -350,13 +368,37 @@ def buscar_conductores(texto):
     return Coincidencias(_por_parecido(conductores, texto, lambda c: normalizar_texto(c.nombre)))
 
 
+def _digitos(texto):
+    return re.sub(r"\D", "", str(texto or ""))
+
+
+def _es_identificacion(texto):
+    """True si lo dicho es un numero (documento, NIT o telefono) y no un nombre."""
+    return (not re.search(r"[^\d\s.\-+()]", str(texto or ""))
+            and len(_digitos(texto)) >= DIGITOS_MINIMOS_IDENTIFICACION)
+
+
+def _mismo_telefono(guardado, digitos):
+    """Compara sin separadores; admite el indicativo +57 de un lado y no del otro."""
+    propio = _digitos(guardado)
+    return bool(propio) and (propio == digitos or (len(digitos) >= 10 and propio[-10:] == digitos[-10:]))
+
+
 def buscar_usuarios(texto):
-    """Cuenta por correo exacto o por nombre, activa o no (para administrarla)."""
+    """Cuenta por correo exacto, documento, telefono o nombre, activa o no (para administrarla)."""
     buscado = (texto or "").strip().lower()
     if not buscado:
         return Coincidencias([])
     if "@" in buscado:
         return Coincidencias(db.session.query(Usuario).filter(func.lower(Usuario.correo) == buscado).all())
+    if _es_identificacion(buscado):
+        digitos = _digitos(buscado)
+        indices = {indice_ciego(buscado), indice_ciego(digitos)}
+        por_documento = db.session.query(Usuario).filter(Usuario.documento_indice.in_(indices)).all()
+        if por_documento:
+            return Coincidencias(por_documento)
+        return Coincidencias([u for u in db.session.query(Usuario).order_by(Usuario.nombre)
+                              if _mismo_telefono(u.telefono, digitos)])
 
     usuarios = db.session.query(Usuario).order_by(Usuario.nombre).all()
     normalizado = normalizar_texto(texto)

@@ -11,10 +11,13 @@ sin correo; llega a Google Sheets por /api/automatizacion/auditoria.
 Las contrasenas y los tokens nunca llegan a la auditoria: cualquier dato cuya
 clave los nombre se reemplaza por "(no se registra)" antes de guardar. El
 documento y el telefono de una cuenta, que en `usuarios` estan cifrados, se
-guardan enmascarados ("******4567").
+guardan enmascarados ("******4567"). Y ningun texto cifrado (un token de
+Fernet, ver app/cifrado.py) llega a la auditoria, ni en el detalle ni en el
+resumen: sin la clave no le sirve a nadie y con ella seria el dato completo.
 """
 
 import json
+import re
 
 from app.cifrado import CAMPOS_PERSONALES, enmascarar
 from app.extensions import db
@@ -37,6 +40,9 @@ COLUMNAS_HOJA = ("id_auditoria", "fecha_hora", "usuario", "rol", "origen", "acci
 CLAVES_SENSIBLES = ("contrasena", "contraseña", "password", "clave", "token", "secret",
                     "api_key", "apikey", "firma", "signature")
 OCULTO = "(no se registra)"
+# Un token de Fernet: version 0x80 en base64 url-safe ("gAAAAA...") y al menos
+# el IV, la marca de tiempo y un bloque cifrado.
+_TEXTO_CIFRADO = re.compile(r"gAAAAA[A-Za-z0-9_\-]{60,}={0,2}")
 # Entidad de las cuentas de acceso: sus datos personales van enmascarados.
 ENTIDAD_USUARIO = "usuario"
 LARGO_RESUMEN = 500
@@ -52,13 +58,20 @@ def _sensible(clave):
 
 
 def limpiar(datos):
-    """Copia de `datos` sin contrasenas ni tokens (recorre dicts y listas)."""
+    """Copia de `datos` sin contrasenas, tokens ni textos cifrados (recorre dicts y listas)."""
     if isinstance(datos, dict):
         return {clave: (OCULTO if _sensible(clave) else limpiar(valor))
                 for clave, valor in datos.items()}
     if isinstance(datos, (list, tuple)):
         return [limpiar(valor) for valor in datos]
+    if isinstance(datos, str):
+        return sin_cifrados(datos)
     return datos
+
+
+def sin_cifrados(texto):
+    """`texto` con cada token cifrado reemplazado por "(no se registra)"."""
+    return _TEXTO_CIFRADO.sub(OCULTO, texto) if texto else texto
 
 
 def enmascarar_personales(datos):
@@ -101,7 +114,7 @@ def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RES
         accion=accion[:80],
         entidad=entidad[:40],
         entidad_id=str(entidad_id)[:60] if entidad_id is not None else None,
-        resumen=(resumen or accion)[:LARGO_RESUMEN],
+        resumen=sin_cifrados(resumen or accion)[:LARGO_RESUMEN],
         detalle=json.dumps(limpiar(detalle), ensure_ascii=False, default=str) if detalle else None,
         resultado=resultado,
         call_id=call_id,
