@@ -295,6 +295,8 @@ check(retell.agentes["agent_conductor"][0]["publicada"]
       and retell.llms["llm_de_agent_conductor"][2]["general_prompt"] == "prompt viejo",
       "la version publicada anterior queda intacta, con su version del LLM")
 llm_cond = llm_de("agent_conductor")
+check(llm_cond.get("model") == "gpt-4.1" and llm_cond.get("model_temperature") == 0.2,
+      "el LLM del agente fija el modelo (gpt-4.1) y una temperatura baja")
 check(len(llm_cond["general_tools"]) == 6 and all(t["url"].startswith(URL + "/api/asistente/conductor/") for t in llm_cond["general_tools"]),
       "su LLM trae las 6 funciones con la URL publica (sin la barra final)")
 check(llm_cond["begin_message"] == conf.bienvenida(conf.AGENTES[0]) and llm_cond["general_prompt"] == conf.prompt(conf.AGENTES[0])

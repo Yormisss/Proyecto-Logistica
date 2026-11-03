@@ -84,9 +84,20 @@ def _ajustes(definicion, voz):
     return ajustes
 
 
-def _configuracion_llm(definicion, url_publica):
+# Modelo de lenguaje del agente (Retell LLM). Se fija explicitamente para que el
+# comportamiento no cambie cuando Retell cambie su modelo por defecto, y para
+# documentar que modelo usa Gaby: GPT-4.1 de OpenAI, servido por Retell, con buena
+# llamada a funciones y baja latencia para voz. Se cambia con RETELL_MODELO_LLM.
+MODELO_LLM_POR_DEFECTO = "gpt-4.1"
+# Temperatura baja: el agente debe llamar funciones de forma predecible, no improvisar.
+TEMPERATURA_LLM = 0.2
+
+
+def _configuracion_llm(definicion, url_publica, modelo=None):
     tools = conf.herramientas(definicion, url_publica)
     return {
+        "model": (modelo or "").strip() or MODELO_LLM_POR_DEFECTO,
+        "model_temperature": TEMPERATURA_LLM,
         "general_prompt": conf.prompt(definicion),
         "begin_message": conf.bienvenida(definicion),
         "general_tools": tools,
@@ -103,7 +114,7 @@ def sincronizar_agente(cliente, definicion, url_publica, config):
         agent_id = _buscar_por_nombre(cliente, definicion.nombre)
         resultado.accion = "encontrado por nombre" if agent_id else "creado"
 
-    llm = _configuracion_llm(definicion, url_publica)
+    llm = _configuracion_llm(definicion, url_publica, config.get("RETELL_MODELO_LLM"))
     resultado.funciones = len(llm["general_tools"])
 
     if agent_id:

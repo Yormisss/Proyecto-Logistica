@@ -81,6 +81,9 @@ class ConfiguracionBase:
     # que se crean los agentes nuevos.
     URL_PUBLICA = os.getenv("URL_PUBLICA", "")
     RETELL_VOZ_ID = os.getenv("RETELL_VOZ_ID", "")
+    # Modelo de lenguaje de los agentes (Retell LLM). Vacio = gpt-4.1
+    # (app/asistentes/sincronizacion.py, MODELO_LLM_POR_DEFECTO).
+    RETELL_MODELO_LLM = os.getenv("RETELL_MODELO_LLM", "")
 
     # Avisos al cliente por correo a traves de un escenario de Make. Vacio = no
     # se envia ningun aviso.
