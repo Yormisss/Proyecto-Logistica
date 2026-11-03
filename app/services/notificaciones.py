@@ -9,23 +9,30 @@ variable al escenario privado):
   Va al cliente, asi que solo se envia si el cliente tiene correo. FALLIDO y
   CANCELADO llevan ademas el motivo.
 * `stock_bajo`: un movimiento dejo un producto en o por debajo de su stock
-  minimo, o por debajo de cero. Es un aviso interno: va a CORREO_OPERACIONES y
-  sin esa variable no se envia.
-* `solicitud_contacto`: un cliente pidio que el gestor lo contacte. Tambien es
-  interno, con la misma regla.
-* `accion_asistente`: un registro de la auditoria, con su `id_auditoria`.
-  Interno. No todo registro lo envia: ver `registrar_auditoria(avisar=...)`.
+  minimo, o por debajo de cero. Aviso interno: a los gestores logisticos.
+* `solicitud_contacto`: un cliente pidio que el gestor lo contacte. A los
+  gestores logisticos.
+* `accion_asistente`: un registro de la auditoria, con su `id_auditoria`. A
+  los administradores. No todo registro lo envia: ver
+  `registrar_auditoria(avisar=...)`.
+* `ruta_asignada`: al conductor, cuando su ruta de hoy o futura se crea,
+  cambia (paradas, recalculo) o se elimina (ver `aviso_ruta`).
+
+Los avisos internos salen uno por destinatario, al correo de avisos de cada
+cuenta activa del rol (ver "Destinatarios por rol"); CORREO_OPERACIONES es
+solo el respaldo si ninguna tiene correo.
 * `credencial_usuario`: la contrasena de una cuenta creada o restablecida por
   voz. Siempre es temporal (`debe_cambiar_contrasena`: true): el usuario la
   reemplaza al iniciar sesion. Va al correo de inicio de sesion del propio
   usuario y es el UNICO lugar por el que viaja esa contrasena: nunca se guarda
-  en la auditoria ni en otro evento. Sale por su propio webhook, MAKE_WEBHOOK_CREDENCIALES_URL, para que
-  no quede en el historial del escenario general; sin el, no se envia.
+  en la auditoria ni en otro evento. Sale por su propio webhook,
+  MAKE_WEBHOOK_CREDENCIALES_URL, para que no quede en el historial del
+  escenario general; sin el, no se envia.
 * `restablecimiento_contrasena`: el enlace de "Olvide mi contrasena", al
   correo de inicio de sesion de quien lo pidio. Quien tiene el enlace cambia
   la contrasena, asi que tambien va por su propio webhook,
   MAKE_WEBHOOK_RESTABLECIMIENTO_URL (ver app/services/recuperacion.py).
-* `resumen_diario`: el resumen del dia para operaciones, cuando alguien lo
+* `resumen_diario`: el resumen del dia, a los gestores y administradores, cuando alguien lo
   pide (tablero o voz) o lo dispara el comando programado `enviar-resumen`.
   Va por MAKE_WEBHOOK_RESUMEN_URL y lleva los mismos campos que GET
   /api/automatizacion/resumen-diario (ver app/services/resumen_diario.py).
@@ -57,9 +64,10 @@ Tres garantias, iguales para todos los tipos:
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, wait
+from contextlib import contextmanager
 
 import requests
-from flask import current_app, g, has_request_context
+from flask import current_app, g, has_app_context, has_request_context
 from sqlalchemy import event
 
 from app.extensions import db
@@ -73,6 +81,11 @@ TIPO_ACCION_ASISTENTE = "accion_asistente"
 TIPO_CREDENCIAL_USUARIO = "credencial_usuario"
 TIPO_RESTABLECIMIENTO_CONTRASENA = "restablecimiento_contrasena"
 TIPO_RESUMEN_DIARIO = "resumen_diario"
+TIPO_RUTA_ASIGNADA = "ruta_asignada"
+
+ACCION_RUTA_CREADA = "creada"
+ACCION_RUTA_ACTUALIZADA = "actualizada"
+ACCION_RUTA_ELIMINADA = "eliminada"
 
 ORIGEN_PANTALLA = "pantalla"
 ORIGEN_VOZ = "voz"
@@ -158,6 +171,55 @@ def _usuario(usuario_id):
     return db.session.get(Usuario, usuario_id) if usuario_id else None
 
 
+# --------------------------------------------------------------------------
+# Destinatarios por rol
+# --------------------------------------------------------------------------
+# Los avisos internos llegan a las cuentas activas del rol que los atiende, a su
+# `correo_para_avisos` (el de avisos o, sin el, el de inicio de sesion): sale un
+# evento por destinatario, cada uno con su `correo_destino`, y los escenarios de
+# Make no cambian. CORREO_OPERACIONES queda de respaldo, solo si ninguna cuenta
+# de esos roles tiene correo.
+DESTINATARIOS_STOCK = (Rol.DESPACHADOR,)
+DESTINATARIOS_SOLICITUD = (Rol.DESPACHADOR,)
+DESTINATARIOS_RESUMEN = (Rol.DESPACHADOR, Rol.ADMIN)
+DESTINATARIOS_ACCION = (Rol.ADMIN,)
+
+
+def correos_de_rol(roles):
+    """Correos de avisos de las cuentas activas de `roles`, sin repetir; o el de respaldo.
+
+    Lista vacia si no hay ninguno, ni CORREO_OPERACIONES: entonces el aviso no sale.
+    """
+    cuentas = (db.session.query(Usuario)
+               .filter(Usuario.rol.in_(list(roles)), Usuario.activo.is_(True))
+               .order_by(Usuario.rol, Usuario.nombre).all())
+    correos = list(dict.fromkeys(c.correo_para_avisos.strip().lower() for c in cuentas
+                                 if (c.correo_para_avisos or "").strip()))
+    if correos:
+        return correos
+    respaldo = (current_app.config.get("CORREO_OPERACIONES") or "").strip()
+    return [respaldo] if respaldo else []
+
+
+def encolar_por_destinatario(tipo, datos, roles, actor=None, clave_url="MAKE_WEBHOOK_URL"):
+    """Un evento por cada correo de `roles` (ver `correos_de_rol`). Devuelve los correos."""
+    correos = correos_de_rol(roles)
+    for correo in correos:
+        encolar_evento(tipo, {**datos, "correo_destino": correo}, actor, clave_url=clave_url)
+    return correos
+
+
+@contextmanager
+def sin_avisos():
+    """Dentro del bloque no se encola ningun evento (la siembra de datos de demostracion)."""
+    anterior = g.get("_sin_avisos", False)
+    g._sin_avisos = True
+    try:
+        yield
+    finally:
+        g._sin_avisos = anterior
+
+
 def encolar_evento(tipo, datos, actor=None, clave_url="MAKE_WEBHOOK_URL"):
     """Encola un evento de `tipo` para Make; sale tras el commit.
 
@@ -166,6 +228,8 @@ def encolar_evento(tipo, datos, actor=None, clave_url="MAKE_WEBHOOK_URL"):
     viene, se toma de la peticion en curso. `clave_url` es la variable con el
     webhook de destino.
     """
+    if has_app_context() and g.get("_sin_avisos"):
+        return
     config = current_app.config
     url = (config.get(clave_url) or "").strip()
     if not url:
@@ -222,43 +286,31 @@ def aviso_stock(producto, stock_previo, pedido=None, usuario_id=None):
     cruza_cero = stock_previo >= 0 > nuevo
     if not (cruza_minimo or cruza_cero) or not producto.activo:
         return
-    correo = (current_app.config.get("CORREO_OPERACIONES") or "").strip()
-    if not correo:
-        return
-
-    encolar_evento(TIPO_STOCK_BAJO, {
+    encolar_por_destinatario(TIPO_STOCK_BAJO, {
         "sku": producto.sku,
         "producto": producto.nombre,
         "stock_actual": nuevo,
         "stock_minimo": producto.stock_minimo,
         "negativo": nuevo < 0,
         "pedido": pedido,
-        "correo_destino": correo,
         **_marca(),
-    }, datos_actor(_usuario(usuario_id)))
+    }, DESTINATARIOS_STOCK, datos_actor(_usuario(usuario_id)))
 
 
 def aviso_solicitud_contacto(solicitud):
-    """Avisa a operaciones que un cliente pidio contacto con el gestor."""
-    correo_destino = (current_app.config.get("CORREO_OPERACIONES") or "").strip()
-    if not correo_destino:
-        return
-    encolar_evento(TIPO_SOLICITUD_CONTACTO, {
+    """Avisa a los gestores logisticos que un cliente pidio contacto."""
+    encolar_por_destinatario(TIPO_SOLICITUD_CONTACTO, {
         "cliente": solicitud.cliente.nombre,
         "correo": solicitud.correo,
         "telefono": solicitud.telefono,
         "motivo": solicitud.motivo,
         **_marca(),
-        "correo_destino": correo_destino,
-    }, datos_actor(solicitud.usuario))
+    }, DESTINATARIOS_SOLICITUD, datos_actor(solicitud.usuario))
 
 
 def aviso_accion_asistente(registro):
-    """Envia a operaciones un registro de la auditoria (nunca lleva contrasenas)."""
-    correo_destino = (current_app.config.get("CORREO_OPERACIONES") or "").strip()
-    if not correo_destino:
-        return
-    encolar_evento(TIPO_ACCION_ASISTENTE, {
+    """Envia a los administradores un registro de la auditoria (nunca lleva contrasenas)."""
+    encolar_por_destinatario(TIPO_ACCION_ASISTENTE, {
         "id_auditoria": registro.id,
         "usuario": registro.usuario_nombre,
         "rol": etiqueta_rol(registro.rol) if registro.rol else ROL_SISTEMA,
@@ -268,8 +320,32 @@ def aviso_accion_asistente(registro):
         "detalle": registro.detalle_legible,
         "resultado": registro.resultado,
         **_marca(registro.registrado_en),
-        "correo_destino": correo_destino,
-    }, datos_actor(registro.usuario, registro.origen))
+    }, DESTINATARIOS_ACCION, datos_actor(registro.usuario, registro.origen))
+
+
+def aviso_ruta(ruta, accion, detalle, paradas, usuario_id=None):
+    """Avisa al conductor que su ruta se creo, cambio o se elimino.
+
+    Solo rutas de hoy o de una fecha futura: cambiar una ruta pasada no le
+    sirve al conductor. Un evento por operacion, al correo de avisos del
+    conductor. `paradas` son las que tiene la ruta despues del cambio (0 si se
+    elimino) y `detalle` lo cuenta en una frase ("Se agregó la parada de ...").
+    """
+    from app.tiempo import hoy
+
+    conductor = ruta.conductor
+    if conductor is None or ruta.fecha < hoy() or not (conductor.correo_para_avisos or "").strip():
+        return
+    encolar_evento(TIPO_RUTA_ASIGNADA, {
+        "conductor": conductor.nombre,
+        "correo_destino": conductor.correo_para_avisos.strip().lower(),
+        "ruta": ruta.codigo,
+        "fecha": ruta.fecha.strftime("%d/%m/%Y"),
+        "paradas": paradas,
+        "accion": accion,
+        "detalle_ruta": detalle,
+        **_marca(),
+    }, datos_actor(_usuario(usuario_id)))
 
 
 ACCION_CREACION = "creación"

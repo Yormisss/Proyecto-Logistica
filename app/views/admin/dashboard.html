@@ -31,7 +31,7 @@
     <form method="post" action="{{ url_for('admin.enviar_resumen') }}" class="formulario-en-linea">
       {{ formulario.hidden_tag() }}
       <button type="submit" class="boton boton-secundario"
-              title="{{ 'Se envía a ' ~ correo_resumen if correo_resumen else 'Falta configurar CORREO_OPERACIONES' }}">
+              title="{{ 'Se envía a ' ~ correos_resumen|join(', ') if correos_resumen else 'No hay gestores ni administradores con correo' }}">
         Enviar resumen del día
       </button>
     </form>

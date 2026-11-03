@@ -14,6 +14,9 @@ mismas del tablero. Lo usan:
 
 El evento lleva exactamente los campos de la respuesta del GET, en la raiz,
 mas `tipo`; quien lo origino es quien lo pidio, o el sistema si fue el comando.
+Sale un evento por destinatario: los gestores y los administradores activos,
+cada uno con su correo de avisos en `correo_destino` (CORREO_OPERACIONES solo
+si ninguno tiene correo). El GET de respaldo sigue con CORREO_OPERACIONES.
 """
 
 from flask import current_app, render_template
@@ -23,7 +26,8 @@ from app.extensions import db
 from app.models import Cliente, EstadoPedido, Pedido
 from app.services import analitica
 from app.services.notificaciones import (
-    ORIGEN_AUTOMATICO, TIPO_RESUMEN_DIARIO, datos_actor, encolar_evento, esperar_envios,
+    DESTINATARIOS_RESUMEN, ORIGEN_AUTOMATICO, TIPO_RESUMEN_DIARIO, correos_de_rol, datos_actor,
+    encolar_evento, esperar_envios,
 )
 from app.tiempo import hoy, iso_bogota
 
@@ -33,8 +37,8 @@ ENTIDAD = "resumen"
 
 SIN_WEBHOOK = ("No se envió el resumen: falta configurar el webhook del escenario privado "
                "(MAKE_WEBHOOK_RESUMEN_URL).")
-SIN_CORREO = ("No se envió el resumen: falta el correo de operaciones (CORREO_OPERACIONES), "
-              "que es su destino.")
+SIN_CORREO = ("No se envió el resumen: no hay gestores ni administradores activos con correo, ni "
+              "un correo de respaldo (CORREO_OPERACIONES).")
 
 
 class ResumenNoEnviado(Exception):
@@ -42,8 +46,13 @@ class ResumenNoEnviado(Exception):
 
 
 def correo_destino():
-    """CORREO_OPERACIONES, o None si no esta configurado."""
+    """CORREO_OPERACIONES, o None si no esta configurado (el destino del GET de respaldo)."""
     return (current_app.config.get("CORREO_OPERACIONES") or "").strip() or None
+
+
+def destinatarios():
+    """Los correos a los que sale el resumen: gestores y administradores activos, o el respaldo."""
+    return correos_de_rol(DESTINATARIOS_RESUMEN)
 
 
 def webhook_configurado():
@@ -129,26 +138,31 @@ def contenido(actor=None):
 
 
 def verificar_envio():
-    """Lanza ResumenNoEnviado si falta el webhook o el correo de destino."""
+    """Lanza ResumenNoEnviado si falta el webhook o no hay a quien enviarlo. Devuelve los correos."""
     if not webhook_configurado():
         raise ResumenNoEnviado(SIN_WEBHOOK)
-    if not correo_destino():
+    correos = destinatarios()
+    if not correos:
         raise ResumenNoEnviado(SIN_CORREO)
+    return correos
 
 
 def enviar(usuario=None, origen=None):
-    """Encola el evento `resumen_diario` y devuelve su contenido.
+    """Encola un evento `resumen_diario` por destinatario y devuelve el contenido.
 
-    `usuario` es quien lo pidio (pantalla o voz); sin el, el sistema
-    (automatico). El aviso sale despues del commit de quien llama, como todo
-    evento de Make. Lanza ResumenNoEnviado si falta configuracion.
+    El contenido lleva en `destinatarios` la lista de correos (no viaja en el
+    evento: cada evento lleva el suyo en `correo_destino`). `usuario` es quien
+    lo pidio (pantalla o voz); sin el, el sistema (automatico). Los avisos
+    salen despues del commit de quien llama, como todo evento de Make. Lanza
+    ResumenNoEnviado si falta configuracion.
     """
-    verificar_envio()
+    correos = verificar_envio()
     actor = datos_actor(usuario, origen) if usuario is not None else datos_actor(origen=ORIGEN_AUTOMATICO)
     datos = contenido(actor)
     campos = {clave: valor for clave, valor in datos.items() if clave not in actor}
-    encolar_evento(TIPO_RESUMEN_DIARIO, campos, actor, clave_url=CLAVE_URL)
-    return datos
+    for correo in correos:
+        encolar_evento(TIPO_RESUMEN_DIARIO, {**campos, "correo_destino": correo}, actor, clave_url=CLAVE_URL)
+    return {**datos, "destinatarios": correos}
 
 
 def esperar(segundos=10):
@@ -166,7 +180,7 @@ def registrar_envio(datos):
 
     registrar_auditoria(
         "Enviar resumen del día", ENTIDAD,
-        f"Envió el resumen del {datos['fecha']} a {datos['correo_destino']}.",
-        {"fecha": datos["fecha"], "correo_destino": datos["correo_destino"], "kpis": datos["kpis"]},
+        f"Envió el resumen del {datos['fecha']} a {', '.join(datos['destinatarios'])}.",
+        {"fecha": datos["fecha"], "destinatarios": datos["destinatarios"], "kpis": datos["kpis"]},
         avisar=False,
     )

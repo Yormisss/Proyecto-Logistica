@@ -42,7 +42,7 @@ from app.services.pedidos import (
 )
 from app.services.planificacion import (
     PlanificacionInvalida, agregar_a_ruta, crear_ruta, eliminar_ruta, quitar_parada,
-    recalcular_secuencia, validar_ruta, verificar_agregar_a_ruta, verificar_eliminar_ruta,
+    recalcular_ruta, validar_ruta, verificar_agregar_a_ruta, verificar_eliminar_ruta,
     verificar_quitar_parada,
 )
 from app.services.notificaciones import ORIGEN_VOZ
@@ -165,10 +165,10 @@ resumen = funcion_agrupada(
          "envia ahora el resumen de hoy al correo de operaciones", avisar=False)
 def enviar_resumen_voz():
     try:
-        resumen_diario.verificar_envio()
+        correos = resumen_diario.verificar_envio()
     except resumen_diario.ResumenNoEnviado as error:
         return responder(f"{error} Pídele a un administrador que lo configure.")
-    pendiente = exigir_confirmacion(f"Voy a enviar el resumen de hoy a {resumen_diario.correo_destino()}.")
+    pendiente = exigir_confirmacion(f"Voy a enviar el resumen de hoy a {enumerar(correos)}.")
     if pendiente:
         return pendiente
     try:
@@ -176,7 +176,7 @@ def enviar_resumen_voz():
     except resumen_diario.ResumenNoEnviado as error:
         return responder(str(error))
     db.session.commit()
-    return responder(f"Listo, envié el resumen de hoy a {datos['correo_destino']}.")
+    return responder(f"Listo, envié el resumen de hoy a {enumerar(datos['destinatarios'])}.")
 
 
 @funcion_asistente(
@@ -1074,7 +1074,7 @@ def recalcular_ruta_voz():
     if pendiente:
         return pendiente
     try:
-        resultado = recalcular_secuencia(ruta, estrategia)
+        resultado = recalcular_ruta(ruta, estrategia, g.usuario.id)
     except PlanificacionInvalida as causa:
         db.session.rollback()
         return responder(str(causa))

@@ -3,10 +3,17 @@
 Lo usan la pantalla de la ruta ("Recalcular") y el asistente de voz del
 gestor, para que ambos reordenen las paradas con la misma regla: las cerradas
 conservan su posicion y solo se reordena lo pendiente.
+
+Cada operacion (crear, agregar o quitar una parada, recalcular, eliminar)
+encola un aviso `ruta_asignada` al conductor si la ruta es de hoy o futura
+(ver `notificaciones.aviso_ruta`); sale con el commit de quien llama.
 """
 
 from app.models import EstadoPedido, EstadoRuta, EventoPedido
 from app.extensions import db
+from app.services.notificaciones import (
+    ACCION_RUTA_ACTUALIZADA, ACCION_RUTA_CREADA, ACCION_RUTA_ELIMINADA, aviso_ruta,
+)
 from app.services.ruteo import ESTRATEGIA_DISTANCIA, calcular_ruta
 
 
@@ -50,6 +57,14 @@ def recalcular_secuencia(ruta, estrategia=ESTRATEGIA_DISTANCIA):
     ruta.duracion_min = resultado.duracion_min
     ruta.geometria = resultado.geometria
     ruta.proveedor_ruteo = resultado.proveedor
+    return resultado
+
+
+def recalcular_ruta(ruta, estrategia=ESTRATEGIA_DISTANCIA, usuario_id=None):
+    """`recalcular_secuencia` como operacion propia (pantalla y voz): ademas avisa al conductor."""
+    resultado = recalcular_secuencia(ruta, estrategia)
+    aviso_ruta(ruta, ACCION_RUTA_ACTUALIZADA, "Se recalculó el orden de las paradas",
+               len(ruta.pedidos), usuario_id)
     return resultado
 
 
@@ -99,7 +114,10 @@ def agregar_a_ruta(pedido, ruta, usuario_id, origen=None, estrategia=ESTRATEGIA_
             nota=f"{nota}. {origen}" if origen else nota,
         )
     )
-    return recalcular_secuencia(ruta, estrategia)
+    resultado = recalcular_secuencia(ruta, estrategia)
+    aviso_ruta(ruta, ACCION_RUTA_ACTUALIZADA, f"Se agregó la parada de {pedido.cliente_nombre}",
+               len(ruta.pedidos), usuario_id)
+    return resultado
 
 
 # --------------------------------------------------------------------------
@@ -214,6 +232,10 @@ def crear_ruta(datos, usuario_id, origen=None):
     ruta.duracion_min = resultado.duracion_min
     ruta.geometria = resultado.geometria
     ruta.proveedor_ruteo = resultado.proveedor
+    paradas = len(limpios["pedidos"])
+    aviso_ruta(ruta, ACCION_RUTA_CREADA,
+               f"Se te asignó una ruta nueva con {paradas} {'parada' if paradas == 1 else 'paradas'}",
+               paradas, usuario_id)
     return ruta, resultado
 
 
@@ -236,6 +258,10 @@ def quitar_parada(ruta, pedido, usuario_id, origen=None):
         estado_anterior=anterior, estado_nuevo=EstadoPedido.PENDIENTE,
         nota=_nota(f"Retirado de la ruta {ruta.codigo}", origen),
     ))
+    # `ruta.pedidos` aun puede traerlo: el cambio de ruta_id no se ha reflejado.
+    quedan = len([p for p in ruta.pedidos if p.id != pedido.id])
+    aviso_ruta(ruta, ACCION_RUTA_ACTUALIZADA, f"Se quitó la parada de {pedido.cliente_nombre}",
+               quedan, usuario_id)
 
 
 def verificar_eliminar_ruta(ruta):
@@ -249,7 +275,13 @@ def eliminar_ruta(ruta, usuario_id, origen=None):
     Devuelve (codigo, pedidos devueltos).
     """
     verificar_eliminar_ruta(ruta)
-    codigo, devueltos = ruta.codigo, 0
+    codigo, devueltos = ruta.codigo, len(ruta.pedidos)
+    # Antes de borrarla: despues ya no hay ruta de la cual leer el conductor.
+    aviso_ruta(ruta, ACCION_RUTA_ELIMINADA,
+               "Se eliminó la ruta" + (f"; sus {devueltos} paradas vuelven a pendientes" if devueltos > 1
+                                       else "; su parada vuelve a pendientes" if devueltos else ""),
+               0, usuario_id)
+    devueltos = 0
     for pedido in list(ruta.pedidos):
         anterior = pedido.estado
         pedido.ruta_id = None

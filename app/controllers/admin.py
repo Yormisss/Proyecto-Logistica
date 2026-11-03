@@ -52,7 +52,7 @@ def dashboard():
         conductores_activos=conductores_activos,
         bd=bigdata.panel(),
         formulario=FormularioAccion(),
-        correo_resumen=resumen_diario.correo_destino(),
+        correos_resumen=resumen_diario.destinatarios(),
     )
 
 
@@ -71,7 +71,7 @@ def enviar_resumen():
         return redirect(url_for("admin.dashboard"))
     resumen_diario.registrar_envio(datos)
     db.session.commit()
-    flash(f"Resumen del día enviado a {datos['correo_destino']}.", "exito")
+    flash(f"Resumen del día enviado a {', '.join(datos['destinatarios'])}.", "exito")
     return redirect(url_for("admin.dashboard"))
 
 

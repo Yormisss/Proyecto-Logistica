@@ -25,7 +25,7 @@ from app.models import (
 from app.services.auditoria import auditar_pantalla
 from app.services.configuracion import centro_distribucion
 from app.services.planificacion import (
-    PlanificacionInvalida, crear_ruta, eliminar_ruta, recalcular_secuencia,
+    PlanificacionInvalida, crear_ruta, eliminar_ruta, recalcular_ruta,
 )
 from app.services.planificacion import quitar_parada as quitar_parada_servicio
 from app.services.validacion import DatosInvalidos
@@ -239,7 +239,7 @@ def recalcular(ruta_id):
         estrategia = ESTRATEGIA_DISTANCIA
 
     try:
-        resultado = recalcular_secuencia(ruta, estrategia)
+        resultado = recalcular_ruta(ruta, estrategia, current_user.id)
     except PlanificacionInvalida as error:
         flash(str(error), "error")
         return redirect(url_for("rutas.detalle", ruta_id=ruta.id))
