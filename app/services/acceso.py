@@ -32,7 +32,8 @@ def maximo_intentos():
 def _segundos_restantes(fila, momento):
     if fila is None or fila.bloqueado_hasta is None:
         return 0
-    return max(0, math.ceil((fila.bloqueado_hasta - momento).total_seconds()))
+    restantes = math.ceil((fila.bloqueado_hasta - momento).total_seconds())
+    return max(0, min(restantes, current_app.config["LOGIN_BLOQUEO_SEGUNDOS"]))
 
 
 def segundos_bloqueo(correo):
@@ -80,8 +81,11 @@ def _registrar_fallo(correo):
     fila.fallidos += 1
     fila.ultimo_fallo_en = momento
     if fila.fallidos >= maximo_intentos():
+        # Desde el segundo siguiente al fallo: contado desde `momento` (truncado),
+        # un reintento en el segundo siguiente anunciaba 59 segundos y no 1 minuto.
+        # `_segundos_restantes` nunca anuncia mas que el bloqueo configurado.
         fila.bloqueado_hasta = momento + timedelta(
-            seconds=current_app.config["LOGIN_BLOQUEO_SEGUNDOS"]
+            seconds=current_app.config["LOGIN_BLOQUEO_SEGUNDOS"] + 1
         )
     db.session.commit()
     return fila.fallidos, _segundos_restantes(fila, momento)
