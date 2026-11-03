@@ -27,7 +27,8 @@ COPY . .
 RUN useradd --create-home --uid 1000 sgds \
     && mkdir -p instance \
     && chown -R sgds:sgds instance \
-    && chmod +x docker/arrancar.sh
+    && sed -i 's/\r$//' docker/*.sh \
+    && chmod +x docker/*.sh
 USER sgds
 
 EXPOSE 8000

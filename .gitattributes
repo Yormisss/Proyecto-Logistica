@@ -1,0 +1,6 @@
+# Los scripts que corren dentro del contenedor Linux deben tener fin de linea LF,
+# aunque el repositorio se clone en Windows (core.autocrlf=true): con CRLF,
+# "/bin/sh" falla con "set: Illegal option -" o "not found".
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.ps1 text eol=crlf

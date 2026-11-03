@@ -1,0 +1,162 @@
+# =============================================================================
+# Rutalytics - Integracion y despliegue continuos (Azure DevOps Pipelines)
+#
+#   Pruebas     -> 29 suites funcionales contra MySQL (Docker) + evidencia
+#   Seguridad   -> SAST con Bandit y analisis de dependencias con pip-audit
+#   Imagen      -> docker build + push a Azure Container Registry
+#   Despliegue  -> Azure Container Apps (entorno "produccion") + resumen programado
+#
+# Corre en un agente propio (grupo "Default") instalado en el PC del equipo:
+# una organizacion nueva de Azure DevOps no tiene agentes hospedados gratuitos
+# hasta que Microsoft aprueba la solicitud, y las cuentas gratuitas de Azure no
+# pueden construir imagenes con ACR Tasks. El agente necesita Python 3, Docker
+# Desktop (con el contenedor sgds-mysql de docker-compose.yml) y Azure CLI.
+#
+# Configuracion y secretos: grupo de variables "rutalytics-produccion"
+# (Pipelines > Library), creado por infra/azure/02_devops.sh.
+# =============================================================================
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    exclude: ["*.md", "docs/*", "bigdata/documentacion/*"]
+
+pr: none   # En Azure Repos la validacion de PR se configura como directiva de rama.
+
+pool:
+  name: Default
+
+variables:
+  - group: rutalytics-produccion
+  - name: etiqueta
+    value: $(Build.BuildId)
+  - name: PYTHONUTF8
+    value: "1"
+
+stages:
+  - stage: Pruebas
+    displayName: Pruebas funcionales
+    jobs:
+      - job: pruebas
+        displayName: 29 suites contra MySQL
+        timeoutInMinutes: 30
+        steps:
+          - checkout: self
+            clean: true
+          - powershell: |
+              docker start sgds-mysql | Out-Null
+              $listo = $false
+              for ($i = 0; $i -lt 30; $i++) {
+                $c = New-Object Net.Sockets.TcpClient
+                try { $c.Connect("127.0.0.1", 3307); $listo = $true; break } catch { Start-Sleep 2 } finally { $c.Dispose() }
+              }
+              if (-not $listo) { throw "MySQL (sgds-mysql, puerto 3307) no responde" }
+              Write-Host "MySQL listo en 127.0.0.1:3307"
+            displayName: Levantar MySQL de pruebas (Docker)
+          - script: |
+              py -3 -m venv .venv-ci || python -m venv .venv-ci
+              .venv-ci\Scripts\python -m pip install -q --upgrade pip
+              .venv-ci\Scripts\python -m pip install -q -r requirements.txt
+            displayName: Instalar dependencias
+          - powershell: |
+              & .venv-ci\Scripts\python.exe pruebas\ejecutar_todas.py --detalle 2>&1 |
+                Tee-Object -FilePath "$(Build.ArtifactStagingDirectory)\pruebas_funcionales.txt"
+              exit $LASTEXITCODE
+            displayName: Ejecutar pruebas (pruebas/ejecutar_todas.py)
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: evidencia-pruebas
+            displayName: Publicar evidencia de pruebas
+            condition: always()
+
+  - stage: Seguridad
+    displayName: Seguridad (SAST y dependencias)
+    dependsOn: Pruebas
+    jobs:
+      - job: seguridad
+        displayName: Bandit + pip-audit
+        steps:
+          - checkout: self
+            clean: true
+          - script: |
+              py -3 -m venv .venv-seg || python -m venv .venv-seg
+              .venv-seg\Scripts\python -m pip install -q --upgrade pip bandit pip-audit
+            displayName: Instalar herramientas
+          - powershell: |
+              $dir = "$(Build.ArtifactStagingDirectory)"
+              & .venv-seg\Scripts\bandit.exe -r app run.py config.py seed.py -f txt -o "$dir\sast_bandit.txt"
+              & .venv-seg\Scripts\bandit.exe -r app run.py config.py seed.py -f json -o "$dir\sast_bandit.json"
+              Get-Content "$dir\sast_bandit.txt" -Tail 25
+              # Falla solo con hallazgos de severidad ALTA (-lll).
+              & .venv-seg\Scripts\bandit.exe -r app run.py config.py seed.py -lll -q
+              exit $LASTEXITCODE
+            displayName: SAST - Bandit (falla con severidad alta)
+          - powershell: |
+              & .venv-seg\Scripts\pip-audit.exe -r requirements.txt --progress-spinner off 2>&1 |
+                Tee-Object -FilePath "$(Build.ArtifactStagingDirectory)\sca_pip_audit.txt"
+              exit $LASTEXITCODE
+            displayName: SCA - pip-audit (falla con dependencias vulnerables)
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: evidencia-seguridad
+            displayName: Publicar reportes de seguridad
+            condition: always()
+
+  - stage: Imagen
+    displayName: Imagen Docker
+    dependsOn: Seguridad
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: imagen
+        displayName: Build y push a Azure Container Registry
+        steps:
+          - checkout: self
+            clean: true
+          - task: AzureCLI@2
+            displayName: docker build + push
+            inputs:
+              azureSubscription: azure-rutalytics
+              scriptType: batch
+              scriptLocation: inlineScript
+              inlineScript: |
+                call az acr login -n $(ACR) || exit /b 1
+                docker build -t $(ACR_SERVIDOR)/rutalytics:$(etiqueta) -t $(ACR_SERVIDOR)/rutalytics:latest . || exit /b 1
+                docker push $(ACR_SERVIDOR)/rutalytics:$(etiqueta) || exit /b 1
+                docker push $(ACR_SERVIDOR)/rutalytics:latest || exit /b 1
+
+  - stage: Despliegue
+    displayName: Despliegue en Azure
+    dependsOn: Imagen
+    condition: succeeded()
+    jobs:
+      - deployment: produccion
+        displayName: Azure Container Apps
+        environment: produccion
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: AzureCLI@2
+                  displayName: Publicar en Container Apps
+                  inputs:
+                    azureSubscription: azure-rutalytics
+                    scriptType: ps
+                    scriptLocation: scriptPath
+                    scriptPath: infra/azure/desplegar.ps1
+                    arguments: -Imagen "$(ACR_SERVIDOR)/rutalytics:$(etiqueta)"
+                  env:
+                    # Los secretos del grupo de variables solo llegan al script si se mapean.
+                    DATABASE_URL: $(DATABASE_URL)
+                    SECRET_KEY: $(SECRET_KEY)
+                    CLAVE_CIFRADO: $(CLAVE_CIFRADO)
+                    SEMILLA_CLAVE_ADMIN: $(SEMILLA_CLAVE_ADMIN)
+                    SEMILLA_CLAVE_GESTOR: $(SEMILLA_CLAVE_GESTOR)
+                    SEMILLA_CLAVE_CONDUCTOR: $(SEMILLA_CLAVE_CONDUCTOR)
+                    SEMILLA_CLAVE_CLIENTE: $(SEMILLA_CLAVE_CLIENTE)
+                    AUTOMATIZACION_TOKEN: $(AUTOMATIZACION_TOKEN)
+                    RETELL_API_KEY: $(RETELL_API_KEY)
+                    MAKE_WEBHOOK_URL: $(MAKE_WEBHOOK_URL)
+                    MAKE_WEBHOOK_KEY: $(MAKE_WEBHOOK_KEY)
+                    MAKE_WEBHOOK_RESUMEN_URL: $(MAKE_WEBHOOK_RESUMEN_URL)
+                    MAKE_WEBHOOK_CREDENCIALES_URL: $(MAKE_WEBHOOK_CREDENCIALES_URL)
+                    MAKE_WEBHOOK_RESTABLECIMIENTO_URL: $(MAKE_WEBHOOK_RESTABLECIMIENTO_URL)
