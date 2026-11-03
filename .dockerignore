@@ -1,0 +1,40 @@
+# Lo que NO entra en la imagen Docker.
+
+# Credenciales: nunca dentro de la imagen (llegan como variables de entorno).
+.env
+.env.*
+
+# Control de versiones y entornos locales
+.git
+.gitignore
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+
+# Datos locales: base SQLite, archivos subidos, registros
+instance/
+*.db
+*.sqlite3
+*.log
+
+# Big Data: el data lake se regenera; la app solo lee bigdata/resultados/
+bigdata/datalake/
+bigdata/muestras/
+
+# No hacen falta para ejecutar la aplicacion
+pruebas/
+ejemplos/
+infra/
+Documento/
+herramientas_capturas/
+.venv-capturas/
+_run_*.sh
+correr_sgds.command
+docker-compose.yml
+render.yaml
+Procfile
+azure-pipelines.yml
+*.md

@@ -15,6 +15,23 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def opciones_ssl_mysql(url):
+    """connect_args con TLS verificado para MySQL administrado (RNF5, datos en transito).
+
+    Azure Database for MySQL exige conexiones cifradas (require_secure_transport
+    = ON) y PyMySQL no activa TLS por si solo. Se activa cuando el servidor es de
+    Azure o cuando MYSQL_SSL=1, y se verifica el certificado del servidor contra
+    las autoridades raiz de `certifi` (incluye las DigiCert que usa Azure).
+    """
+    if not url.startswith("mysql"):
+        return {}
+    if os.getenv("MYSQL_SSL", "") != "1" and ".mysql.database.azure.com" not in url:
+        return {}
+    import certifi
+
+    return {"connect_args": {"ssl": {"ca": certifi.where()}}}
+
+
 class ConfiguracionBase:
     SECRET_KEY = os.getenv("SECRET_KEY", "clave-de-desarrollo-cambiar-en-produccion")
     # RNF5 - Clave del cifrado del documento y el telefono de las cuentas (ver
@@ -109,7 +126,9 @@ class ConfiguracionProduccion(ConfiguracionBase):
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 280,
+        **opciones_ssl_mysql(os.getenv("DATABASE_URL", "")),
     }
+    DETRAS_DE_PROXY = True
 
     # Variables sin las que produccion no puede arrancar de forma segura:
     # sin SECRET_KEY las sesiones quedarian firmadas con la clave de

@@ -42,6 +42,15 @@ def crear_app(nombre_configuracion="desarrollo"):
         configuracion.validar()
     app.config.from_object(configuracion)
 
+    # Detras del proxy de la plataforma (Azure Container Apps, Render), la
+    # peticion llega por HTTP desde el proxy: sin ProxyFix, `request.remote_addr`
+    # seria la IP del proxy en el registro de errores, y `request.scheme` http.
+    # Solo se confia en un salto (el proxy de la plataforma).
+    if app.config.get("DETRAS_DE_PROXY"):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     _registrar_extensiones(app)
     _registrar_controladores(app)
     _registrar_errores(app)
