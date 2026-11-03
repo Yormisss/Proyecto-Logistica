@@ -35,7 +35,8 @@ from app.services import acceso
 from app.services import permisos as servicio_permisos
 from app.services.auditoria import cambios_legibles, registrar_auditoria
 from app.services.usuarios import (
-    cambiar_estado_usuario, clientes_disponibles, crear_usuario, editar_usuario,
+    cambiar_estado_usuario, cambiar_exigencia, clientes_disponibles, crear_usuario,
+    cuentas_contrasena_administrada, editar_usuario, exigir_cambio_cuentas,
     rechazo_contrasena, restablecer_contrasena, rutas_abiertas,
 )
 from app.services.validacion import DatosInvalidos
@@ -560,12 +561,12 @@ def alternar_exigencia(usuario_id):
         flash("Solicitud invalida. Intente nuevamente.", "error")
         return redirect(destino)
 
-    rechazo = rechazo_contrasena(usuario, current_user)
-    if rechazo:
-        flash(rechazo, "error")
+    try:
+        cambiar_exigencia(usuario, not usuario.debe_cambiar_contrasena, current_user)
+    except DatosInvalidos as error:
+        flash(str(error), "error")
         return redirect(destino)
 
-    usuario.debe_cambiar_contrasena = not usuario.debe_cambiar_contrasena
     registrar_auditoria(
         "Exigir cambio de contraseña" if usuario.debe_cambiar_contrasena
         else "Quitar exigencia de cambio de contraseña", "usuario",
@@ -601,20 +602,12 @@ def exigir_cambio_masivo():
         return redirect(destino)
 
     ids = set(request.form.getlist("usuarios", type=int))
-    administrables = [
-        id_ for (id_,) in db.session.query(Usuario.id).filter(
-            Usuario.id.in_(ids), Usuario.rol.in_(Rol.CONTRASENA_ADMINISTRADA)
-        )
-    ]
+    administrables = cuentas_contrasena_administrada(ids)
     if not administrables:
         flash("Seleccione al menos una cuenta de gestor logistico o conductor.", "error")
         return redirect(destino)
 
-    marcadas = (
-        db.session.query(Usuario)
-        .filter(Usuario.id.in_(administrables), Usuario.debe_cambiar_contrasena.is_(False))
-        .update({Usuario.debe_cambiar_contrasena: True}, synchronize_session=False)
-    )
+    marcadas = exigir_cambio_cuentas(administrables)
     if marcadas:
         registrar_auditoria(
             "Exigir cambio de contraseña", "usuario",

@@ -36,17 +36,13 @@ app.config.update(RETELL_API_KEY=CLAVE, MAKE_WEBHOOK_URL="", CORREO_OPERACIONES=
 # Exclusiones aprobadas por el usuario. Agregar otra exige cambiar esta lista
 # a conciencia (y preguntarlo antes).
 EXCLUSIONES_APROBADAS = {"auth.login", "auth.perfil", "asistente.llamada",
+                         # Subir o revisar archivos.
                          "pedidos.importar", "pedidos.confirmar_importacion",
-                         # Apartado Contrasenas: aprobadas al integrarlo (22/10/2026).
-                         "usuarios.contrasena", "usuarios.alternar_exigencia",
-                         "usuarios.exigir_cambio_masivo",
-                         # Correo propio y prueba del registro de errores: aprobadas
-                         # al integrarlos (30/10/2026).
-                         "auth.cambiar_correo", "errores.probar",
-                         # Olvide mi contrasena: paginas sin sesion, como el login.
-                         "auth.recuperar", "auth.restablecer",
-                         # Roles y permisos: solo en pantalla, con la matriz completa.
-                         "roles.nuevo", "roles.editar", "roles.eliminar", "usuarios.permisos"}
+                         # Aprobadas al integrar la seguridad (02/11/2026): olvide mi
+                         # contrasena, el propio correo, escribir una contrasena de
+                         # otra cuenta y provocar un error de prueba.
+                         "auth.recuperar", "auth.restablecer", "auth.cambiar_correo",
+                         "usuarios.contrasena", "errores.probar"}
 
 
 print("\n== 1. Mapa de cobertura ==")
@@ -65,7 +61,7 @@ for endpoint, entrada in sorted(cobertura.COBERTURA.items()):
 
 excluidas = {e for e, c in cobertura.COBERTURA.items() if c.excluida}
 check(excluidas == EXCLUSIONES_APROBADAS,
-      f"solo se excluye lo aprobado (login, perfil, correo propio, olvide mi contrasena, iniciar la llamada, importar CSV, contrasenas, roles y permisos, prueba de errores) {sorted(excluidas)}")
+      f"solo se excluye lo aprobado (login, perfil, correo propio, olvide mi contrasena, iniciar la llamada, archivos, escribir una contrasena, prueba de errores) {sorted(excluidas)}")
 check(all(len(cobertura.COBERTURA[e].excluida) >= 20 for e in excluidas), "cada exclusion dice por que")
 
 

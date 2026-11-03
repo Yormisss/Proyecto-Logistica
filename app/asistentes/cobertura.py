@@ -29,36 +29,29 @@ class Cobertura:
 
 
 # Exclusiones aprobadas: no se agrega ninguna sin preguntar.
-IMPORTAR_CSV = "Importar pedidos exige subir un archivo CSV; no tiene equivalente hablado."
-ROLES_Y_PERMISOS = ("Roles y permisos: se reparten solo en pantalla, viendo la matriz completa "
-                    "de cada rol y cada cuenta.")
-APARTADO_CONTRASENAS = ("Apartado Contraseñas: las contraseñas se gestionan solo en pantalla; "
-                        "por voz solo se restablece, con la nueva enviada al correo.")
+SUBIR_ARCHIVOS = ("Subir o revisar archivos: importar pedidos exige elegir un archivo CSV y revisar su "
+                  "contenido en pantalla; no tiene equivalente hablado.")
+CONTRASENA_DICTADA = ("Escribir una contraseña: las contraseñas nunca se dicen por voz. Por voz, "
+                      "restablecer-contrasena genera una temporal y la envía al correo de la cuenta.")
 
 COBERTURA = {
     # --- Fuera del alcance por voz (aprobado) ---
     "auth.login": Cobertura(excluida="Iniciar sesión: la llamada de voz parte de una sesión ya iniciada."),
     "auth.perfil": Cobertura(excluida="Cambiar la propia contraseña: las contraseñas nunca se dicen por voz."),
+    # Aprobadas al integrar la seguridad de juan/seguridad-evaluacion (02/11/2026).
     "auth.recuperar": Cobertura(excluida="Olvidé mi contraseña: es para quien no puede iniciar sesión, "
                                          "y la llamada de voz parte de una sesión ya iniciada."),
     "auth.restablecer": Cobertura(excluida="Definir la contraseña con el enlace del correo: las "
                                            "contraseñas nunca se dicen por voz."),
-    # Roles y permisos configurables (30/10/2026): se reparten en pantalla, viendo la matriz.
-    "roles.nuevo": Cobertura(excluida=ROLES_Y_PERMISOS),
-    "roles.editar": Cobertura(excluida=ROLES_Y_PERMISOS),
-    "roles.eliminar": Cobertura(excluida=ROLES_Y_PERMISOS),
-    "usuarios.permisos": Cobertura(excluida=ROLES_Y_PERMISOS),
-    # Aprobadas al agregar sesion unica, inactividad y registro de errores (30/10/2026).
-    "auth.cambiar_correo": Cobertura(excluida="Cambiar el propio correo pide la contraseña actual, "
-                                              "y las contraseñas nunca se dicen por voz."),
-    "errores.probar": Cobertura(excluida="Provocar un error a propósito es una prueba del registro "
-                                         "de errores, solo de pantalla."),
+    "auth.cambiar_correo": Cobertura(excluida="Cambiar el propio correo de inicio de sesión: es la "
+                                              "identidad de la cuenta, como la contraseña, y pide la "
+                                              "contraseña actual."),
+    "usuarios.contrasena": Cobertura(excluida=CONTRASENA_DICTADA),
+    "errores.probar": Cobertura(excluida="Provocar un error a propósito es una herramienta de "
+                                         "diagnóstico de pantalla; por voz solo ensuciaría el registro."),
     "asistente.llamada": Cobertura(excluida="Es el botón que inicia la propia llamada de voz."),
-    "pedidos.importar": Cobertura(excluida=IMPORTAR_CSV),
-    "pedidos.confirmar_importacion": Cobertura(excluida=IMPORTAR_CSV),
-    "usuarios.contrasena": Cobertura(excluida=APARTADO_CONTRASENAS),
-    "usuarios.alternar_exigencia": Cobertura(excluida=APARTADO_CONTRASENAS),
-    "usuarios.exigir_cambio_masivo": Cobertura(excluida=APARTADO_CONTRASENAS),
+    "pedidos.importar": Cobertura(excluida=SUBIR_ARCHIVOS),
+    "pedidos.confirmar_importacion": Cobertura(excluida=SUBIR_ARCHIVOS),
 
     # --- Conductor ---
     "conductor.marcar_en_ruta": Cobertura(voz=("conductor/parada:en-camino",)),
@@ -107,6 +100,18 @@ COBERTURA = {
                                       "admin/usuarios:desactivar")),
     "usuarios.alternar_estado": Cobertura(voz=("admin/usuarios:activar", "admin/usuarios:desactivar")),
     "usuarios.restablecer": Cobertura(voz=("admin/usuarios:restablecer-contrasena",)),
+    "usuarios.permisos": Cobertura(voz=("admin/permisos:asignar-rol", "admin/permisos:quitar-rol",
+                                        "admin/permisos:conceder", "admin/permisos:denegar",
+                                        "admin/permisos:quitar-ajuste")),
+    "usuarios.alternar_exigencia": Cobertura(voz=("admin/contrasenas:exigir-cambio",
+                                                  "admin/contrasenas:quitar-exigencia")),
+    "usuarios.exigir_cambio_masivo": Cobertura(voz=("admin/contrasenas:exigir-cambio-masivo",)),
+
+    # --- Roles (administrador) ---
+    "roles.nuevo": Cobertura(voz=("admin/roles:crear",)),
+    "roles.editar": Cobertura(voz=("admin/roles:editar", "admin/roles:agregar-permiso",
+                                   "admin/roles:quitar-permiso")),
+    "roles.eliminar": Cobertura(voz=("admin/roles:eliminar",)),
 
     # --- Configuracion del negocio (administrador) ---
     "configuracion.centro": Cobertura(voz=("admin/configuracion:editar-centro",)),

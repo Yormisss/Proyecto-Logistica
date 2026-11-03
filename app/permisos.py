@@ -84,7 +84,11 @@ ROLES_EDITABLES = (Rol.DESPACHADOR, Rol.CONDUCTOR)
 PERMISOS_VOZ = {
     "admin/bitacora": "bitacora.ver",
     "admin/configuracion": "configuracion.gestionar",
+    "admin/contrasenas": "contrasenas.gestionar",
+    "admin/errores": "errores.ver",
+    "admin/permisos": "usuarios.gestionar",
     "admin/resumen-rendimiento": "rendimiento.ver",
+    "admin/roles": "roles.gestionar",
     "admin/usuarios": "usuarios.gestionar",
     "gestor/atender-solicitud": "solicitudes.atender",
     "gestor/avance-rutas": "rutas.ver",

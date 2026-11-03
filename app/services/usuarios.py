@@ -324,3 +324,48 @@ def restablecer_contrasena(usuario, actor=None):
     contrasena = generar_contrasena()
     usuario.establecer_contrasena(contrasena, temporal=True)
     return contrasena
+
+
+def verificar_exigencia(usuario, exigir, actor=None):
+    """Lanza DatosInvalidos si no se puede marcar (o quitar) el cambio de contrasena."""
+    rechazo = rechazo_contrasena(usuario, actor)
+    if rechazo:
+        raise DatosInvalidos([(None, rechazo)])
+    if bool(usuario.debe_cambiar_contrasena) == bool(exigir):
+        raise DatosInvalidos([(None, (f"{usuario.nombre} ya debe cambiar su contraseña." if exigir
+                                      else f"{usuario.nombre} no tiene pendiente cambiar su contraseña."))])
+
+
+def cambiar_exigencia(usuario, exigir, actor=None):
+    """Marca (o quita) que la cuenta debe cambiar su contrasena al entrar.
+
+    Mismas cuentas que `restablecer_contrasena`: gestores y conductores. No
+    toca el hash: la persona entra con la que ya conoce y el sistema le pide
+    reemplazarla, tambien en las sesiones ya abiertas (y en su llamada de voz).
+    """
+    verificar_exigencia(usuario, exigir, actor)
+    usuario.debe_cambiar_contrasena = bool(exigir)
+
+
+def cuentas_contrasena_administrada(ids=None, rol=None):
+    """Ids de las cuentas cuya contrasena administra el admin (gestores y
+    conductores), entre `ids` si se dan y del `rol` si se da."""
+    consulta = db.session.query(Usuario.id).filter(Usuario.rol.in_(Rol.CONTRASENA_ADMINISTRADA))
+    if ids is not None:
+        consulta = consulta.filter(Usuario.id.in_(list(ids)))
+    if rol is not None:
+        consulta = consulta.filter(Usuario.rol == rol)
+    return [id_ for (id_,) in consulta]
+
+
+def exigir_cambio_cuentas(ids):
+    """Obliga a las cuentas `ids` a renovar su contrasena (p. ej. ante una fuga).
+
+    Solo alcanza a gestores y conductores aunque `ids` traiga otras cuentas.
+    Devuelve cuantas quedaron marcadas (las que ya lo estaban no cuentan).
+    """
+    return (
+        db.session.query(Usuario)
+        .filter(Usuario.id.in_(list(ids)), Usuario.debe_cambiar_contrasena.is_(False))
+        .update({Usuario.debe_cambiar_contrasena: True}, synchronize_session=False)
+    )

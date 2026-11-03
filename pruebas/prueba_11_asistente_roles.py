@@ -92,11 +92,14 @@ def mensaje(respuesta):
     return respuesta[1].get("mensaje", "")
 
 TABLAS_SIN_DATOS = {"sesiones_asistente", "mediciones_rendimiento"}
+# Estado de la sesion, no datos de negocio: cada funcion de voz cuenta como actividad.
+COLUMNAS_SIN_DATOS = {"usuarios.sesion_actividad_en"}
 def huella():
     """Todas las filas de todas las tablas de negocio, para comparar antes y despues."""
     with app.app_context():
         db.session.remove()
-        return {t.name: sorted(map(repr, db.session.execute(select(t)).all()))
+        return {t.name: sorted(map(repr, db.session.execute(
+                    select(*[c for c in t.columns if f"{t.name}.{c.name}" not in COLUMNAS_SIN_DATOS])).all()))
                 for t in db.metadata.sorted_tables if t.name not in TABLAS_SIN_DATOS}
 
 
@@ -667,9 +670,12 @@ check(len(stock_bajo) == 1 and stock_bajo[0]["sku"] == "SKU-1001" and stock_bajo
       "al cruzar el minimo envia el mismo aviso stock_bajo que la pantalla")
 
 nombres = [f"{f.espacio}/{f.nombre}" for f in FUNCIONES.values()]
-check([n for n in nombres if re.search(r"usuario|contrasena|cuenta", n)] == ["admin/usuarios"]
-      and FUNCIONES[("admin", "usuarios")].roles == (Rol.ADMIN,),
-      "las cuentas solo se administran por voz con admin/usuarios, solo para el administrador")
+CUENTAS_POR_VOZ = ["admin/usuarios", "admin/roles", "admin/permisos", "admin/contrasenas"]
+check(sorted(n for n in nombres if re.search(r"usuario|contrasena|cuenta|permiso|roles", n))
+      == sorted(CUENTAS_POR_VOZ)
+      and all(FUNCIONES[tuple(n.split("/"))].roles == (Rol.ADMIN,) for n in CUENTAS_POR_VOZ),
+      "las cuentas, roles, permisos y contrasenas solo se administran por voz con las funciones "
+      "del administrador")
 check(not any("contrasena" in p for f in FUNCIONES.values() for p in f.parametros),
       "ninguna funcion recibe una contrasena")
 check(not any(f.espacio == "admin" and Rol.DESPACHADOR in f.roles for f in FUNCIONES.values()),
@@ -972,6 +978,11 @@ with app.app_context():
     check(aplicar(verboso=False) == ["confirmacion_firma", "confirmacion_vence_en"],
           "sobre la tabla de m002 agrega las dos columnas")
     check(aplicar(verboso=False) == [], "volver a ejecutarla no cambia nada")
+    # m013 (migrar-seguridad) agrega despues la huella de la sesion web.
+    from migraciones.m013_huella_sesion_asistente import aplicar as aplicar_m013
+    check(aplicar_m013(verboso=False) == ["sesiones_asistente.huella_sesion"],
+          "m013 agrega huella_sesion a la tabla migrada")
+    check(aplicar_m013(verboso=False) == [], "y volver a ejecutarla no cambia nada")
     c2_id = db.session.query(Usuario).filter_by(correo="conductor2@sgds.com").one().id
     db.session.add(SesionAsistente(call_id="call_migrada", usuario_id=c2_id, rol=Rol.CONDUCTOR,
                                    vence_en=ahora() + timedelta(minutes=10),
