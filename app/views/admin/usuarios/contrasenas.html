@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block titulo %}Contrasenas | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Contrasenas</h1>
+    <p class="subtitulo-pagina">
+      Estado de la contrasena de cada cuenta (RF1 / RNF5). El sistema solo guarda el hash:
+      nadie, ni el administrador, puede ver una contrasena. Usted administra la de gestores
+      logisticos y conductores, y la suya; clientes y otros administradores cambian la propia.
+    </p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-plano" href="{{ url_for('usuarios.lista') }}">Cuentas de acceso</a>
+  </div>
+</div>
+
+<section class="rejilla-kpis">
+  <article class="kpi">
+    <span class="kpi-etiqueta">Cuentas</span>
+    <span class="kpi-valor">{{ total }}</span>
+    <span class="kpi-detalle">Activas e inactivas</span>
+  </article>
+  <article class="kpi {{ 'kpi-alerta' if pendientes else 'kpi-exito' }}">
+    <span class="kpi-etiqueta">Pendientes de cambio</span>
+    <span class="kpi-valor">{{ pendientes }}</span>
+    <span class="kpi-detalle">Contrasena temporal o cambio exigido</span>
+  </article>
+  <article class="kpi {{ 'kpi-exito' if protegidas == total else 'kpi-alerta' }}">
+    <span class="kpi-etiqueta">Con la politica de hash vigente</span>
+    <span class="kpi-valor">{{ protegidas }}<small class="kpi-unidad">de {{ total }}</small></span>
+    <span class="kpi-detalle mono">{{ metodo_hash }}</span>
+  </article>
+</section>
+
+<section class="tarjeta">
+  <form method="get" class="barra-filtros">
+    <input type="search" name="q" value="{{ filtros.q }}" placeholder="Nombre, correo o documento">
+    <select name="rol">
+      <option value="">Todos los roles</option>
+      {% for valor, etiqueta in roles %}
+        <option value="{{ valor }}" {{ 'selected' if filtros.rol == valor }}>{{ etiqueta }}</option>
+      {% endfor %}
+    </select>
+    <select name="estado">
+      <option value="">Todas las contrasenas</option>
+      <option value="pendientes" {{ 'selected' if filtros.estado == 'pendientes' }}>Pendientes de cambio</option>
+      <option value="vigentes" {{ 'selected' if filtros.estado == 'vigentes' }}>Vigentes</option>
+    </select>
+    <button type="submit" class="boton boton-secundario">Filtrar</button>
+    {% if filtros.q or filtros.rol or filtros.estado %}
+      <a class="boton boton-plano" href="{{ url_for('usuarios.contrasenas') }}">Limpiar</a>
+    {% endif %}
+  </form>
+
+  {% if usuarios %}
+  {# Los checkboxes apuntan a este formulario con el atributo `form`: las acciones
+     de cada fila son formularios propios y HTML no permite anidarlos. #}
+  <form id="form-masivo" method="post" action="{{ url_for('usuarios.exigir_cambio_masivo') }}"
+        onsubmit="return confirm('¿Exigir el cambio de contrasena a las cuentas seleccionadas?');">
+    {{ formulario.hidden_tag() }}
+  </form>
+
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="seleccionar-todas" aria-label="Seleccionar todas"></th>
+          <th>Cuenta</th><th>Rol</th><th>Ultimo cambio</th><th>Estado</th><th>Proteccion</th>
+          <th>Intentos fallidos</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for usuario in usuarios %}
+        {% set propia = usuario.id == current_user.id %}
+        <tr class="{{ 'fila-inactiva' if not usuario.activo }}">
+          <td>
+            <input type="checkbox" name="usuarios" value="{{ usuario.id }}" form="form-masivo"
+                   class="seleccion" aria-label="Seleccionar {{ usuario.nombre }}"
+                   {{ 'disabled' if not usuario.contrasena_administrable }}>
+          </td>
+          <td>
+            {{ usuario.nombre }}
+            {% if propia %}<span class="chip">usted</span>{% endif %}
+            {% if not usuario.activo %}<span class="chip">inactiva</span>{% endif %}
+            <br><span class="mono">{{ usuario.correo }}</span>
+          </td>
+          <td>{{ usuario.rol_etiqueta }}</td>
+          <td>
+            {% if usuario.contrasena_actualizada_en %}
+              {{ usuario.contrasena_actualizada_en.strftime('%d/%m/%Y') }}
+              {% set dias = (hoy - usuario.contrasena_actualizada_en).days %}
+              <br><small class="ayuda-campo">
+                {{ 'hoy' if dias == 0 else 'hace ' ~ dias ~ ' dia(s)' }}
+              </small>
+            {% else %}
+              <span class="ayuda-campo">Sin registro</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if usuario.debe_cambiar_contrasena %}
+              <span class="etiqueta etiqueta-en_ruta">Pendiente de cambio</span>
+            {% else %}
+              <span class="etiqueta etiqueta-entregado">Vigente</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if usuario.hash_vigente %}
+              <span class="etiqueta etiqueta-entregado">PBKDF2-SHA256</span>
+            {% else %}
+              <span class="etiqueta etiqueta-fallido" title="{{ usuario.algoritmo_hash }}">Revisar</span>
+            {% endif %}
+          </td>
+          <td>
+            {% set fallidos, espera = intentos.get(usuario.correo, (0, 0)) %}
+            {% if espera %}
+              <span class="etiqueta etiqueta-fallido">Bloqueada</span>
+              <br><small class="ayuda-campo">{{ espera }} s restantes</small>
+            {% elif fallidos %}
+              <span class="etiqueta etiqueta-en_ruta">{{ fallidos }} de {{ maximo_intentos }}</span>
+            {% else %}
+              <span class="ayuda-campo">—</span>
+            {% endif %}
+          </td>
+          <td class="derecha acciones-fila">
+            {% if propia %}
+              <a href="{{ url_for('usuarios.contrasena', usuario_id=usuario.id) }}">Cambiar la mia</a>
+            {% elif usuario.es_cliente %}
+              <span class="ayuda-campo">Solo el cliente la cambia</span>
+            {% elif not usuario.contrasena_administrable %}
+              <span class="ayuda-campo">Solo el la cambia</span>
+            {% else %}
+              <a href="{{ url_for('usuarios.contrasena', usuario_id=usuario.id) }}">Asignar</a>
+              <form method="post" action="{{ url_for('usuarios.restablecer', usuario_id=usuario.id) }}"
+                    onsubmit="return confirm('¿Generar una contrasena temporal para {{ usuario.nombre }}? La actual dejara de servir y se cerraran sus sesiones.');">
+                {{ formulario.hidden_tag() }}
+                <input type="hidden" name="volver" value="{{ request.full_path }}">
+                <button type="submit" class="boton-enlace">Generar temporal</button>
+              </form>
+              <form method="post" action="{{ url_for('usuarios.alternar_exigencia', usuario_id=usuario.id) }}">
+                {{ formulario.hidden_tag() }}
+                <input type="hidden" name="volver" value="{{ request.full_path }}">
+                <button type="submit" class="boton-enlace">
+                  {{ 'Quitar exigencia' if usuario.debe_cambiar_contrasena else 'Exigir cambio' }}
+                </button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="acciones-formulario">
+    <button type="submit" form="form-masivo" class="boton boton-secundario">
+      Exigir cambio a las seleccionadas
+    </button>
+  </div>
+  <p class="nota-pie">
+    <strong>Generar temporal</strong> reemplaza la contrasena y la muestra una sola vez.
+    <strong>Exigir cambio</strong> no la toca: la persona entra con la que ya conoce y el
+    sistema le pide una nueva antes de operar. En ambos casos la exigencia alcanza tambien
+    a las sesiones ya abiertas. Las contrasenas de clientes y de otros administradores no
+    se pueden asignar, restablecer ni exigir desde aqui: cada uno cambia la suya en su perfil.
+    <strong>Intentos fallidos</strong> cuenta las contrasenas equivocadas seguidas: al llegar a
+    {{ maximo_intentos }}, el inicio de sesion de esa cuenta se bloquea durante un minuto.
+  </p>
+  {% else %}
+    <p class="vacio">Ninguna cuenta coincide con el filtro.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const todas = document.getElementById("seleccionar-todas");
+  if (!todas) return;
+  todas.addEventListener("change", function () {
+    document.querySelectorAll("input.seleccion:not(:disabled)").forEach(function (c) {
+      c.checked = todas.checked;
+    });
+  });
+})();
+</script>
+{% endblock %}

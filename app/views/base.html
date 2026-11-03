@@ -5,6 +5,11 @@
   <!-- RNF1 - Interfaz responsiva mobile-first -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block titulo %}{{ nombre_sistema }}{% endblock %}</title>
+  <!-- Fuentes servidas por la propia aplicacion (sin depender de Google Fonts):
+       se precargan las dos que usa toda pagina para evitar el cambio de letra. -->
+  <link rel="preload" href="{{ url_for('static', filename='fonts/libre-franklin-variable-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='fonts/courier-prime-700-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fuentes.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   <script src="{{ url_for('static', filename='js/menu.js') }}" defer></script>
   {% block cabecera %}{% endblock %}
@@ -15,8 +20,8 @@
 <header class="barra-superior">
   <div class="barra-contenido">
     <a class="marca" href="{{ url_for('principal.inicio') }}">
-      <span class="marca-icono">SG</span>
-      <span class="marca-texto">SGDS</span>
+      <span class="marca-icono">R</span>
+      <span class="marca-texto">Rutalytics</span>
     </a>
 
     <nav class="navegacion">
@@ -42,12 +47,17 @@
            menu.js lo cierra con Escape (devolviendo el foco) o al salir de él. #}
         {% set en_administracion = request.blueprint in ('usuarios', 'configuracion', 'bitacora')
                                    or request.endpoint == 'admin.rendimiento' %}
+        {% set en_contrasenas = request.endpoint in ('usuarios.contrasenas', 'usuarios.contrasena') %}
+        {% set en_usuarios = request.blueprint == 'usuarios' and not en_contrasenas %}
         <details class="menu-desplegable" data-menu-desplegable>
           <summary class="{{ 'activo' if en_administracion }}">Administración</summary>
           <div class="menu-desplegable-lista">
             <a href="{{ url_for('usuarios.lista') }}"
-               class="{{ 'activo' if request.blueprint == 'usuarios' }}"
-               {{ 'aria-current=page' if request.blueprint == 'usuarios' }}>Usuarios</a>
+               class="{{ 'activo' if en_usuarios }}"
+               {{ 'aria-current=page' if en_usuarios }}>Usuarios</a>
+            <a href="{{ url_for('usuarios.contrasenas') }}"
+               class="{{ 'activo' if en_contrasenas }}"
+               {{ 'aria-current=page' if en_contrasenas }}>Contraseñas</a>
             <a href="{{ url_for('admin.rendimiento') }}"
                class="{{ 'activo' if request.endpoint == 'admin.rendimiento' }}"
                {{ 'aria-current=page' if request.endpoint == 'admin.rendimiento' }}>Rendimiento</a>
@@ -116,6 +126,18 @@
 </div>
 <script type="module" src="{{ url_for('static', filename='js/asistente.js') }}"></script>
 {% endif %}
+
+<script>
+// RNF5: los campos de correo (`campo_correo` en seguridad.py) descartan al
+// escribir o pegar cualquier caracter fuera de la lista blanca. Es comodidad:
+// el servidor lo vuelve a validar, porque esto se puede saltar.
+document.querySelectorAll("input[data-correo]").forEach(function (campo) {
+  campo.addEventListener("input", function () {
+    var limpio = campo.value.replace(/[^A-Za-z0-9._+@-]/g, "");
+    if (limpio !== campo.value) campo.value = limpio;
+  });
+});
+</script>
 
 {% block scripts %}{% endblock %}
 </body>

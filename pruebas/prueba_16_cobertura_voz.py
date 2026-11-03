@@ -36,7 +36,10 @@ app.config.update(RETELL_API_KEY=CLAVE, MAKE_WEBHOOK_URL="", CORREO_OPERACIONES=
 # Exclusiones aprobadas por el usuario. Agregar otra exige cambiar esta lista
 # a conciencia (y preguntarlo antes).
 EXCLUSIONES_APROBADAS = {"auth.login", "auth.perfil", "asistente.llamada",
-                         "pedidos.importar", "pedidos.confirmar_importacion"}
+                         "pedidos.importar", "pedidos.confirmar_importacion",
+                         # Apartado Contrasenas: aprobadas al integrarlo (22/10/2026).
+                         "usuarios.contrasena", "usuarios.alternar_exigencia",
+                         "usuarios.exigir_cambio_masivo"}
 
 
 print("\n== 1. Mapa de cobertura ==")
@@ -55,7 +58,7 @@ for endpoint, entrada in sorted(cobertura.COBERTURA.items()):
 
 excluidas = {e for e, c in cobertura.COBERTURA.items() if c.excluida}
 check(excluidas == EXCLUSIONES_APROBADAS,
-      f"solo se excluye lo aprobado (login, perfil, iniciar la llamada, importar CSV) {sorted(excluidas)}")
+      f"solo se excluye lo aprobado (login, perfil, iniciar la llamada, importar CSV, contrasenas) {sorted(excluidas)}")
 check(all(len(cobertura.COBERTURA[e].excluida) >= 20 for e in excluidas), "cada exclusion dice por que")
 
 

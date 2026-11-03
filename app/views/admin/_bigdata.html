@@ -152,7 +152,7 @@
           <th scope="row">{{ fila.zona }}</th>
           {% for c in fila.celdas %}
             {% if c %}
-            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.85 }}" style="--i: {{ c.intensidad }}"
+            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.72 }}" style="--i: {{ c.intensidad }}"
                 data-tooltip="{{ fila.zona }} · {{ bd.franjas[loop.index0] }} — {{ c.tasa_fallo }}% de fallo · {{ miles(c.fallidos) }} de {{ miles(c.intentos) }} intentos">{{ c.tasa_fallo | round(1) }}%</td>
             {% else %}
             <td class="celda-vacia">—</td>
@@ -237,7 +237,7 @@
           <tr>
             <th scope="row">{{ 'Fallo real' if loop.first else 'Entrega real' }}</th>
             {% for c in fila %}
-            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.85 }}" style="--i: {{ c.intensidad }}"
+            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.72 }}" style="--i: {{ c.intensidad }}"
                 data-tooltip="{{ c.texto }} — {{ miles(c.valor) }} entregas">
               <strong>{{ miles(c.valor) }}</strong><small>{{ c.texto }}</small>
             </td>

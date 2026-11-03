@@ -275,8 +275,19 @@ r = admin_web.post(f"/admin/usuarios/{lucia_id}/editar", data={
     "contrasena": "OtraClave2026", "activo": "y"})
 r = registros(accion="Editar usuario")
 check(len(r) == 1 and r[0].detalle_dict.get("nombre") == ["Lucia Herrera", "Lucia Herrera Gil"]
-      and r[0].detalle_dict.get("contrasena") == "(no se registra)",
-      f"editar registra el cambio de nombre y que cambio la contrasena, sin ella {r[0].detalle_dict if r else None}")
+      and "contrasena" not in r[0].detalle_dict,
+      f"editar registra el cambio de nombre y no toca la contrasena {r[0].detalle_dict if r else None}")
+with app.app_context():
+    check(db.session.get(Usuario, lucia_id).verificar_contrasena(CLAVE_NUEVA),
+          "aunque el POST la traiga: la contrasena tiene su propio apartado")
+
+r = admin_web.post(f"/admin/usuarios/{lucia_id}/contrasena", data={
+    "csrf_token": token(admin_web, f"/admin/usuarios/{lucia_id}/contrasena"),
+    "contrasena": "OtraClave2026", "confirmacion": "OtraClave2026", "exigir_cambio": "y"})
+r = registros(accion="Asignar contraseña")
+check(len(r) == 1 and r[0].detalle_dict == {"correo": "lucia.herrera@sgds.com", "temporal": True}
+      and "OtraClave2026" not in (r[0].detalle or "") + r[0].resumen,
+      f"asignarla en el apartado de contrasenas queda en la auditoria, sin ella {r[0].detalle_dict if r else None}")
 
 html = admin_web.get("/admin/usuarios/").data.decode()
 r = admin_web.post(f"/admin/usuarios/{lucia_id}/restablecer",
@@ -299,7 +310,7 @@ check(CLAVE_NUEVA not in todo and "OtraClave2026" not in todo
       "ninguna contrasena de pantalla viaja en un evento")
 check(not eventos("credencial_usuario", inicio),
       "en pantalla no se envia credencial_usuario: la contrasena se muestra una vez, como antes")
-check(len(eventos("accion_asistente", inicio)) == 4, "cada accion sobre usuarios envia accion_asistente")
+check(len(eventos("accion_asistente", inicio)) == 5, "cada accion sobre usuarios envia accion_asistente")
 
 
 print("\n== 5. Configuracion en pantalla ==")
@@ -393,8 +404,8 @@ manana = (ahora().date() + timedelta(days=1)).isoformat()
 check(filas(desde=manana) == 0 and "No hay registros con estos filtros" in
       admin_web.get("/admin/bitacora/", query_string={"desde": manana}).data.decode(),
       "un rango sin registros lo dice")
-check("contrasena: (no se registra)" in admin_web.get("/admin/bitacora/",
-      query_string={"accion": "Editar usuario"}).data.decode(), "el detalle se ve en texto plano")
+check("temporal: sí" in admin_web.get("/admin/bitacora/",
+      query_string={"accion": "Asignar contraseña"}).data.decode(), "el detalle se ve en texto plano")
 
 
 

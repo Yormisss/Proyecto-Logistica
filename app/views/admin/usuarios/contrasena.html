@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Mi contrasena' if propia else 'Contrasena de ' ~ usuario.nombre }} | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <a class="enlace-volver" href="{{ url_for('usuarios.contrasenas') }}">&lsaquo; Volver a contrasenas</a>
+  <h1 class="titulo-pagina">{{ 'Mi contrasena' if propia else 'Contrasena de ' ~ usuario.nombre }}</h1>
+  <p class="subtitulo-pagina">{{ usuario.correo }} &middot; {{ usuario.rol_etiqueta }}</p>
+</div>
+
+{% if not usuario.activo %}
+<div class="alerta alerta-advertencia">
+  La cuenta esta inactiva: aunque cambie la contrasena, no podra iniciar sesion hasta
+  que la active desde <a href="{{ url_for('usuarios.editar', usuario_id=usuario.id) }}">la cuenta</a>.
+</div>
+{% endif %}
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Estado actual</h2>
+  <dl class="lista-datos">
+    <dt>Ultimo cambio</dt>
+    <dd>
+      {% if usuario.contrasena_actualizada_en %}
+        {{ usuario.contrasena_actualizada_en.strftime('%d/%m/%Y %H:%M') }}
+        ({{ (hoy - usuario.contrasena_actualizada_en).days }} dia(s))
+      {% else %}Sin registro (anterior a la gestion de contrasenas){% endif %}
+    </dd>
+    <dt>Estado</dt>
+    <dd>
+      {% if usuario.debe_cambiar_contrasena %}
+        <span class="etiqueta etiqueta-en_ruta">Pendiente de cambio</span>
+      {% else %}
+        <span class="etiqueta etiqueta-entregado">Vigente</span>
+      {% endif %}
+    </dd>
+    <dt>Proteccion</dt>
+    <dd class="mono">{{ usuario.algoritmo_hash }}{{ '' if usuario.hash_vigente else ' — revisar' }}</dd>
+  </dl>
+  {% if not propia %}
+  <div class="acciones-formulario">
+    <form method="post" action="{{ url_for('usuarios.alternar_exigencia', usuario_id=usuario.id) }}">
+      {{ accion.hidden_tag() }}
+      <input type="hidden" name="volver" value="{{ request.path }}">
+      <button type="submit" class="boton boton-plano">
+        {{ 'Quitar exigencia de cambio' if usuario.debe_cambiar_contrasena else 'Exigir cambio' }}
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('usuarios.restablecer', usuario_id=usuario.id) }}"
+          onsubmit="return confirm('¿Generar una contrasena temporal para {{ usuario.nombre }}? La actual dejara de servir y se cerraran sus sesiones.');">
+      {{ accion.hidden_tag() }}
+      <input type="hidden" name="volver" value="{{ request.path }}">
+      <button type="submit" class="boton boton-secundario">Generar temporal</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+<form method="post" class="formulario" novalidate>
+  {{ formulario.hidden_tag() }}
+  <section class="tarjeta">
+    <h2 class="tarjeta-titulo">{{ 'Cambiar mi contrasena' if propia else 'Asignar una contrasena' }}</h2>
+    <div class="rejilla-campos">
+      {% if propia %}
+      <div class="campo campo-ancho">
+        {{ formulario.contrasena_actual.label }}
+        {{ formulario.contrasena_actual(autocomplete="current-password") }}
+        {% for e in formulario.contrasena_actual.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      {% endif %}
+      <div class="campo">
+        {{ formulario.contrasena.label }}
+        {{ formulario.contrasena(autocomplete="new-password") }}
+        {% for e in formulario.contrasena.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="campo">
+        {{ formulario.confirmacion.label }}
+        {{ formulario.confirmacion(autocomplete="new-password") }}
+        {% for e in formulario.confirmacion.errors %}<small class="campo-error">{{ e }}</small>{% endfor %}
+      </div>
+      {% if propia %}
+      <small class="ayuda-campo campo-ancho">
+        Minimo {{ longitud_minima }} caracteres y distinta de la actual. Se pide la actual
+        aunque ya haya iniciado sesion: una sesion abierta no basta para cambiarla.
+      </small>
+      {% else %}
+      <div class="campo campo-ancho">
+        <label class="campo-inline">
+          {{ formulario.exigir_cambio() }}
+          <span>{{ formulario.exigir_cambio.label.text }}</span>
+        </label>
+        <small class="ayuda-campo">
+          Recomendado: asi solo la persona conoce su contrasena definitiva.
+          Minimo {{ longitud_minima }} caracteres.
+        </small>
+      </div>
+      {% endif %}
+    </div>
+    <p class="nota-pie">
+      {% if propia %}Al guardar se cierran sus otras sesiones; esta sigue abierta.
+      {% else %}Al guardar se cierran las sesiones que la cuenta tenga abiertas.{% endif %}
+    </p>
+  </section>
+
+  <div class="acciones-formulario">
+    <a class="boton boton-plano" href="{{ url_for('usuarios.contrasenas') }}">Cancelar</a>
+    <button type="submit" class="boton boton-primario">
+      {{ 'Cambiar mi contrasena' if propia else 'Asignar contrasena' }}
+    </button>
+  </div>
+</form>
+{% endblock %}

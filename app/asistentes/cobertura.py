@@ -30,6 +30,8 @@ class Cobertura:
 
 # Exclusiones aprobadas: no se agrega ninguna sin preguntar.
 IMPORTAR_CSV = "Importar pedidos exige subir un archivo CSV; no tiene equivalente hablado."
+APARTADO_CONTRASENAS = ("Apartado Contraseñas: las contraseñas se gestionan solo en pantalla; "
+                        "por voz solo se restablece, con la nueva enviada al correo.")
 
 COBERTURA = {
     # --- Fuera del alcance por voz (aprobado) ---
@@ -38,6 +40,9 @@ COBERTURA = {
     "asistente.llamada": Cobertura(excluida="Es el botón que inicia la propia llamada de voz."),
     "pedidos.importar": Cobertura(excluida=IMPORTAR_CSV),
     "pedidos.confirmar_importacion": Cobertura(excluida=IMPORTAR_CSV),
+    "usuarios.contrasena": Cobertura(excluida=APARTADO_CONTRASENAS),
+    "usuarios.alternar_exigencia": Cobertura(excluida=APARTADO_CONTRASENAS),
+    "usuarios.exigir_cambio_masivo": Cobertura(excluida=APARTADO_CONTRASENAS),
 
     # --- Conductor ---
     "conductor.marcar_en_ruta": Cobertura(voz=("conductor/parada:en-camino",)),

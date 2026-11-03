@@ -399,6 +399,17 @@ with app.app_context():
 check("la anterior deja de servir" in r and "si no le llega, restablécela en pantalla" in r and cambio
       and credencial[0][1]["accion"] == "restablecimiento" and credencial[0][1]["contrasena"] not in final,
       "restablecer genera una nueva que solo viaja por credencial_usuario")
+# Las reglas de contrasenas de la pantalla (RNF5) tambien rigen por voz.
+check(una(Usuario, correo="nora@sgds.com").debe_cambiar_contrasena
+      and una(Usuario, correo="conductor2@sgds.com").debe_cambiar_contrasena,
+      "la contrasena creada o restablecida por voz es temporal: se cambia al iniciar sesion")
+r = dice("admin/usuarios", A, {"operacion": "restablecer-contrasena", "usuario": "cliente@sgds.com"})
+check(r == "Solo el cliente puede cambiar su propia contrasena.",
+      f"la de un cliente no se restablece por voz: {r}")
+r = dice("admin/usuarios", A, {"operacion": "crear", "nombre": "Jose Perez", "correo": "josé@sgds.com",
+                               "rol": "conductor"})
+check("Use solo letras sin tilde" in r and not r.endswith("¿confirmas?") and una(Usuario, nombre="Jose Perez") is None,
+      f"por voz rige la misma lista blanca del correo: {r}")
 r, final = confirma("admin/usuarios", A, {"operacion": "desactivar", "usuario": "nora"})
 check("No podrá iniciar sesión" in r and una(Usuario, correo="nora@sgds.com").activo is False,
       "desactivar una cuenta")

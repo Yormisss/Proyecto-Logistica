@@ -6,9 +6,33 @@ voz arma con lo mismo frases para leer en voz alta ("Me falta el nombre y la
 direccion. El correo no es valido."), de modo que las reglas son unas solas.
 """
 
+import re
 from datetime import time
 
 from email_validator import EmailNotValidError, validate_email
+
+# --------------------------------------------------------------------------
+# Correo electronico: lista blanca de caracteres (RNF5)
+# --------------------------------------------------------------------------
+
+# Validacion por lista blanca (OWASP): en lugar de buscar los caracteres
+# peligrosos, se acepta solo lo que un correo necesita. Parte local con
+# letras sin tilde, numeros y . _ - +; una sola @; dominio con letras,
+# numeros y guiones, separado por puntos y terminado en una extension de
+# letras. Fuera quedan espacios, comillas, < > ; = / \ ( ), tildes y la ñ.
+# Va sin anclas porque tambien es el atributo `pattern` del HTML, que el
+# navegador ancla solo; el `\-` dentro de las clases lo exige el modo `v` con
+# el que los navegadores actuales compilan ese atributo.
+PATRON_CORREO = r"[A-Za-z0-9._+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}"
+_REGEX_CORREO = re.compile(rf"(?:{PATRON_CORREO})\Z")
+MENSAJE_CORREO = "Use solo letras sin tilde, numeros, los simbolos . _ - + y una @."
+# Lo mismo que descarta el filtro del navegador (base.html).
+_CARACTER_PROHIBIDO = re.compile(r"[^A-Za-z0-9._+@-]")
+
+
+def correo_en_lista_blanca(valor):
+    """True si el correo cumple el patron de la lista blanca."""
+    return bool(_REGEX_CORREO.match(valor))
 
 
 class DatosInvalidos(Exception):
@@ -69,7 +93,16 @@ class Validador:
         valor = self.texto(datos, campo, etiqueta, maximo, requerido)
         if not valor:
             return valor
+        # La misma lista blanca del login (`campo_correo`): asi ni la pantalla ni
+        # la voz crean una cuenta con un correo que el login despues rechazaria.
+        # Un caracter fuera de la lista tiene su propio mensaje; con caracteres
+        # permitidos pero sin forma de correo ("no-es-correo"), el generico.
+        if _CARACTER_PROHIBIDO.search(valor):
+            self.invalido(campo, MENSAJE_CORREO)
+            return None
         try:
+            if not correo_en_lista_blanca(valor):
+                raise EmailNotValidError("Fuera del patron de la lista blanca.")
             validate_email(valor, check_deliverability=False)
         except EmailNotValidError:
             self.invalido(campo, f"{etiqueta[0].upper()}{etiqueta[1:]} no es válido.")

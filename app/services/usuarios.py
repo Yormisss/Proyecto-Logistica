@@ -6,6 +6,12 @@ si mismo, y siempre queda al menos un administrador activo. El correo de
 inicio de sesion y la contrasena solo los maneja el admin en pantalla; por voz
 nunca se dicen ni se aceptan (el asistente no los envia a estas funciones).
 
+Contrasenas (RNF5, iguales en pantalla y por voz): la que asigna o genera el
+administrador es temporal y se debe reemplazar al iniciar sesion. Solo
+administra las de gestores y conductores (`rechazo_contrasena`); el cliente y
+cada administrador cambian la suya, con la actual. Editar una cuenta no toca
+la contrasena: tiene su propio apartado (Usuarios > Contrasenas).
+
 Cambio de rol y desactivacion (iguales en pantalla y por voz):
 - Un conductor con rutas sin cerrar (PLANIFICADA o EN_CURSO) no cambia de rol
   ni se desactiva: la ruta quedaria sin quien la cierre.
@@ -193,7 +199,14 @@ def crear_usuario(datos, actor=None):
     usuario = Usuario(nombre=limpios["nombre"], correo=limpios["correo"], documento=limpios["documento"],
                       telefono=limpios["telefono"], rol=limpios["rol"], activo=limpios["activo"])
     generada = None if limpios["contrasena"] else generar_contrasena()
-    usuario.establecer_contrasena(limpios["contrasena"] or generada)
+    # La escrita por el administrador solo es definitiva si el lo pide
+    # (`exigir_cambio` falso) y la cuenta es de un rol cuya contrasena administra.
+    usuario.establecer_contrasena(
+        limpios["contrasena"] or generada,
+        temporal=(generada is not None
+                  or _booleano(datos.get("exigir_cambio"))
+                  or not usuario.contrasena_administrable),
+    )
     db.session.add(usuario)
     db.session.flush()
     cliente = _vincular_cliente(usuario, limpios["cliente_id"])
@@ -228,9 +241,8 @@ def editar_usuario(usuario, datos, actor=None):
         usuario.vehiculo.conductor_id = None
     for campo in CAMPOS_USUARIO:
         setattr(usuario, campo, limpios[campo])
-    if limpios["contrasena"]:
-        usuario.establecer_contrasena(limpios["contrasena"])
-        cambios["contrasena"] = ("(oculta)", "(cambiada)")
+    # La contrasena no se cambia aqui aunque venga en `datos`: tiene su propio
+    # apartado, con las reglas de `rechazo_contrasena`.
     _vincular_cliente(usuario, limpios["cliente_id"])
     return cambios, consecuencias
 
@@ -254,8 +266,31 @@ def cambiar_estado_usuario(usuario, activo, actor=None):
     usuario.activo = activo
 
 
-def restablecer_contrasena(usuario):
-    """Genera y asigna una contrasena nueva; la devuelve para entregarla."""
+def rechazo_contrasena(usuario, actor=None):
+    """Por que el administrador no puede gestionar esta contrasena, o None.
+
+    El cliente es el unico que cambia la suya, y la de un administrador solo
+    la cambia el mismo, con la actual: asi ninguna cuenta con acceso total
+    puede apropiarse de otra.
+    """
+    if actor is not None and usuario.id == actor.id:
+        return "Su propia contrasena se cambia en Contrasenas, con la actual."
+    if usuario.rol == Rol.CLIENTE:
+        return "Solo el cliente puede cambiar su propia contrasena."
+    if not usuario.contrasena_administrable:
+        return "Solo cada administrador puede cambiar su propia contrasena."
+    return None
+
+
+def restablecer_contrasena(usuario, actor=None):
+    """Genera una contrasena temporal nueva y la devuelve para entregarla.
+
+    Lanza DatosInvalidos si la cuenta no es de las que administra el
+    administrador (ver `rechazo_contrasena`). Cierra las sesiones abiertas.
+    """
+    rechazo = rechazo_contrasena(usuario, actor)
+    if rechazo:
+        raise DatosInvalidos([(None, rechazo)])
     contrasena = generar_contrasena()
-    usuario.establecer_contrasena(contrasena)
+    usuario.establecer_contrasena(contrasena, temporal=True)
     return contrasena

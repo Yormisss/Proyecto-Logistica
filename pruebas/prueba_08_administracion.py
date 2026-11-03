@@ -37,6 +37,12 @@ def temporal_de(html, correo):
     return m.group(1) if m else None
 
 
+def definir_propia(cliente, actual, nueva):
+    """El usuario reemplaza la contrasena temporal desde su perfil."""
+    return cliente.post("/auth/perfil", data={"contrasena_actual": actual,
+                                             "contrasena_nueva": nueva})
+
+
 def datos_usuario(**extra):
     base = {"nombre": "Persona Prueba", "correo": "persona@sgds.com",
             "rol": Rol.CONDUCTOR, "cliente_id": "0", "activo": "y", "contrasena": ""}
@@ -76,15 +82,22 @@ clave_generada = temporal_de(html, "nuevo.conductor@sgds.com")
 check(bool(clave_generada), "el sistema emite una contrasena temporal")
 check(clave_generada is not None and len(clave_generada) >= 12, "la temporal tiene longitud suficiente")
 
-nuevo = sesion("nuevo.conductor@sgds.com", clave_generada)
-r = nuevo.get("/conductor/", follow_redirects=True)
-check(b"Mi ruta" in r.data, "el conductor nuevo entra a su vista con la temporal")
-
 with app.app_context():
     creado = db.session.query(Usuario).filter_by(correo="nuevo.conductor@sgds.com").one()
     check(creado.rol == Rol.CONDUCTOR, "queda con el rol indicado")
     check(creado.contrasena_hash != clave_generada, "la contrasena no se guarda en claro (RNF5)")
     check(creado.verificar_contrasena(clave_generada), "el hash valida la temporal emitida")
+
+nuevo = sesion("nuevo.conductor@sgds.com", clave_generada)
+r = nuevo.get("/conductor/")
+check(r.status_code == 302 and "/auth/perfil" in r.headers.get("Location", ""),
+      "con la temporal, el conductor nuevo solo llega a su perfil")
+# La propia que define; desde aqui la temporal ya no sirve.
+clave_nuevo = "ConductorNuevo123*"
+definir_propia(nuevo, clave_generada, clave_nuevo)
+r = nuevo.get("/conductor/")
+check(r.status_code == 200 and b"Mi ruta" in r.data,
+      "tras definir su contrasena entra a su vista")
 
 print("\n== 4. Validaciones del alta ==")
 r = admin.post("/admin/usuarios/nuevo",
@@ -130,6 +143,8 @@ with app.app_context():
     check(vinculado.usuario.correo == "portal.nuevo@empresa.com", "apunta a la cuenta correcta")
 
 portal = sesion("portal.nuevo@empresa.com", clave_portal)
+definir_propia(portal, clave_portal, "PortalNuevo123*")
+clave_portal = "PortalNuevo123*"
 r = portal.get("/", follow_redirects=True)
 check(b"Mis pedidos" in r.data, "el cliente nuevo aterriza en su portal")
 check(nombre_libre in r.data.decode(), "y ve su propia razon social")
@@ -249,8 +264,12 @@ with app.app_context():
     check(objetivo.verificar_contrasena(nueva), "la nueva temporal es valida")
     check(not objetivo.verificar_contrasena("Conductor123*"), "la anterior deja de servir")
 
-r = sesion("conductor2@sgds.com", nueva).get("/conductor/", follow_redirects=True)
-check(b"Mi ruta" in r.data, "el usuario entra con la temporal nueva")
+conductor2 = sesion("conductor2@sgds.com", nueva)
+r = conductor2.get("/conductor/")
+check(r.status_code == 302, "con la temporal nueva solo puede cambiarla")
+definir_propia(conductor2, nueva, "Conductor2Nueva*")
+r = conductor2.get("/conductor/")
+check(r.status_code == 200 and b"Mi ruta" in r.data, "tras cambiarla vuelve a operar")
 
 print("\n== 11. Alta y correccion de clientes ==")
 despachador = sesion("despachador@sgds.com", "Despacho123*")
@@ -361,18 +380,18 @@ with app.app_context():
           "su historico de rutas se conserva intacto (trazabilidad del RF6)")
 
 r = app.test_client().post("/auth/login",
-                           data={"correo": "nuevo.conductor@sgds.com", "contrasena": clave_generada},
+                           data={"correo": "nuevo.conductor@sgds.com", "contrasena": clave_nuevo},
                            follow_redirects=True)
 check(b"inactiva" in r.data, "el login avisa que la cuenta esta inactiva")
 
 r = admin.post(f"/admin/usuarios/{id_conductor}/alternar-estado", follow_redirects=True)
 check(b"activada" in r.data, "se puede reactivar")
-r = sesion("nuevo.conductor@sgds.com", clave_generada).get("/conductor/", follow_redirects=True)
+r = sesion("nuevo.conductor@sgds.com", clave_nuevo).get("/conductor/", follow_redirects=True)
 check(b"Mi ruta" in r.data, "y vuelve a operar con su clave original")
 
 print("\n== 13b. Una sesion abierta pierde acceso al desactivar la cuenta ==")
 id_conductor1 = id_conductor
-sesion_abierta = sesion("nuevo.conductor@sgds.com", clave_generada)
+sesion_abierta = sesion("nuevo.conductor@sgds.com", clave_nuevo)
 r = sesion_abierta.get("/conductor/", follow_redirects=True)
 check(b"Mi ruta" in r.data, "la sesion arranca con acceso normal")
 
@@ -403,6 +422,65 @@ for consulta, descripcion in (
     ("?q=Portal", "busca clientes por texto"),
 ):
     check(admin.get("/admin/clientes/" + consulta).status_code == 200, descripcion)
+
+print("\n== 15. Correo con lista blanca en cuentas y clientes (RNF5) ==")
+from app.controllers.seguridad import MENSAJE_CORREO
+
+# La misma regla que el login: una cuenta creada con un correo que el login
+# rechaza no podria entrar nunca.
+for correo, descripcion in (
+    ("josé@empresa.com", "tildes"),
+    ("ana maria@empresa.com", "espacios"),
+    ("compras'--@empresa.com", "comillas"),
+    ("<b>x</b>@empresa.com", "etiquetas HTML"),
+):
+    r = admin.post("/admin/usuarios/nuevo", data=datos_usuario(correo=correo), follow_redirects=True)
+    check(MENSAJE_CORREO in r.data.decode(), f"el alta de cuenta rechaza {descripcion}")
+    with app.app_context():
+        check(db.session.query(Usuario).filter_by(correo=correo.lower()).first() is None,
+              f"   y no crea la cuenta ({descripcion})")
+
+r = admin.post("/admin/usuarios/nuevo",
+               data=datos_usuario(nombre="Conductor Norte", correo="  Conductor.Norte+2@Empresa.com.co "),
+               follow_redirects=True)
+temporal_norte = temporal_de(r.data.decode(), "conductor.norte+2@empresa.com.co")
+check(bool(temporal_norte), "acepta un correo valido con . + y subdominio, sin los espacios")
+r = app.test_client().post("/auth/login", data={"correo": "conductor.norte+2@empresa.com.co",
+                                                "contrasena": temporal_norte})
+check(r.status_code == 302 and "/auth/perfil" in r.headers.get("Location", ""),
+      "y con ese mismo correo se puede iniciar sesion")
+
+with app.app_context():
+    norte = db.session.query(Usuario).filter_by(correo="conductor.norte+2@empresa.com.co").one()
+    id_norte = norte.id
+r = admin.post(f"/admin/usuarios/{id_norte}/editar",
+               data=datos_usuario(nombre="Conductor Norte", correo="conductor norte@empresa.com"),
+               follow_redirects=True)
+check(MENSAJE_CORREO in r.data.decode(), "la edicion de cuenta tambien aplica la regla")
+with app.app_context():
+    check(db.session.get(Usuario, id_norte).correo == "conductor.norte+2@empresa.com.co",
+          "y el correo anterior queda intacto")
+check(b"data-correo" in admin.get(f"/admin/usuarios/{id_norte}/editar").data,
+      "el formulario de cuenta lleva el filtro del navegador")
+
+despachador = sesion("despachador@sgds.com", "Despacho123*")
+r = despachador.post("/admin/clientes/nuevo", data={
+    "nombre": "Mayorista Oriente", "correo": "compras<1>@oriente.com", "activo": "y",
+}, follow_redirects=True)
+check(MENSAJE_CORREO in r.data.decode(), "el correo de un cliente tambien se valida")
+with app.app_context():
+    check(db.session.query(Cliente).filter_by(nombre="Mayorista Oriente").first() is None,
+          "y el cliente no se registra")
+r = despachador.post("/admin/clientes/nuevo", data={
+    "nombre": "Mayorista Oriente", "correo": "compras_oriente-2@oriente.com.co", "activo": "y",
+}, follow_redirects=True)
+check(b"registrado" in r.data, "acepta un correo de cliente valido")
+r = despachador.post("/admin/clientes/nuevo", data={
+    "nombre": "Mayorista Occidente", "correo": "", "activo": "y",
+}, follow_redirects=True)
+check(b"registrado" in r.data, "el correo del cliente sigue siendo opcional")
+check(b"data-correo" in despachador.get("/admin/clientes/nuevo").data,
+      "el formulario de cliente lleva el filtro del navegador")
 
 print("\n" + "=" * 55)
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS"))

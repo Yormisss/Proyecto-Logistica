@@ -33,7 +33,8 @@ from app.services.notificaciones import (
 )
 from app.services.usuarios import (
     cambiar_estado_usuario, clientes_disponibles, consecuencias_edicion, crear_usuario, editar_usuario,
-    restablecer_contrasena, rutas_abiertas, validar_usuario, verificar_cambio_estado,
+    rechazo_contrasena, restablecer_contrasena, rutas_abiertas, validar_usuario,
+    verificar_cambio_estado,
 )
 from app.services.validacion import DatosInvalidos
 from app.tiempo import hoy
@@ -305,13 +306,20 @@ def restablecer_contrasena_voz():
         return responder(error)
     if usuario.id == g.usuario.id:
         return responder("Tu propia contraseña la cambias en pantalla, en Perfil.")
+    # Las mismas reglas que en pantalla: solo gestores y conductores.
+    rechazo = rechazo_contrasena(usuario, g.usuario)
+    if rechazo:
+        return responder(rechazo)
     pendiente = exigir_confirmacion(
         f"Voy a restablecer la contraseña de {usuario.nombre}; la anterior deja de servir. "
         f"La nueva le llega solo a su correo, {usuario.correo}; si no le llega, restablécela en pantalla."
     )
     if pendiente:
         return pendiente
-    nueva = restablecer_contrasena(usuario)
+    try:
+        nueva = restablecer_contrasena(usuario, actor=g.usuario)
+    except DatosInvalidos as error:
+        return _no_se_pudo(error)
     aviso_credencial_usuario(usuario, nueva, ACCION_RESTABLECIMIENTO, g.usuario)
     db.session.commit()
     return responder(f"Listo, restablecí la contraseña de {usuario.nombre}. La nueva va en camino a su correo.")

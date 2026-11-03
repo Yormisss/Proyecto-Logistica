@@ -223,11 +223,14 @@ def _registrar_contexto(app):
         return {
             "EstadoPedido": EstadoPedido,
             "EstadoRuta": EstadoRuta,
-            "nombre_sistema": "SGDS - Sistema de Gestión de Despachos",
+            "nombre_sistema": "Rutalytics - Sistema de Despachos",
             # El boton del asistente solo aparece si hay API key de Retell y
-            # un agente configurado para el rol de la sesion.
+            # un agente configurado para el rol de la sesion. Con contrasena
+            # temporal se oculta: sus llamadas las bloquearia
+            # `auth.exigir_cambio_contrasena`.
             "asistente_disponible": (
                 current_user.is_authenticated
+                and not current_user.debe_cambiar_contrasena
                 and agente_para(current_user.rol) is not None
             ),
         }

@@ -18,7 +18,7 @@ from sqlalchemy import func, or_
 from wtforms import BooleanField, StringField
 from wtforms.validators import Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import campo_correo, requiere_rol
 from app.extensions import db
 from app.models import Cliente, DireccionCliente, EstadoPedido, Pedido, Rol
 from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
@@ -32,11 +32,12 @@ clientes_admin_bp = Blueprint("clientes_admin", __name__)
 
 class FormularioCliente(FlaskForm):
     # Sin validadores propios: las reglas las aplica app.services.clientes, las
-    # mismas que usa el asistente de voz.
+    # mismas que usa el asistente de voz. El correo lleva ademas `campo_correo`,
+    # que pone la lista blanca en el navegador (la misma del servicio).
     nombre = StringField("Nombre o razón social", validators=[Optional()])
     documento = StringField("NIT o documento", validators=[Optional()])
     telefono = StringField("Teléfono", validators=[Optional()])
-    correo = StringField("Correo", validators=[Optional()])
+    correo = campo_correo("Correo", validar=False)
     activo = BooleanField("Cliente activo", default=True)
 
     def datos(self):

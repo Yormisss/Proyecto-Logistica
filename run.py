@@ -7,6 +7,7 @@ Uso:
     flask --app run migrar-asistente Crea o actualiza las tablas del asistente de voz
     flask --app run migrar-configuracion  Crea la configuracion del negocio (motivos, centro)
     flask --app run migrar-auditoria      Crea la tabla de auditoria
+    flask --app run migrar-contrasenas    Columnas de gestion de contrasenas y tabla de intentos de acceso
     flask --app run sincronizar-asistentes  Crea o actualiza los agentes en Retell
     flask --app run documentar-asistentes   Regenera docs/configuracion_retell.md
     python run.py                    Levanta el servidor de desarrollo
@@ -109,6 +110,15 @@ def migrar_pruebas_entrega():
     from migraciones.m007_pruebas_entrega_historial import aplicar
 
     aplicar()
+
+
+@app.cli.command("migrar-contrasenas")
+def migrar_contrasenas():
+    """Columnas del apartado de contrasenas y tabla del bloqueo por intentos fallidos."""
+    from migraciones import m008_gestion_contrasenas, m009_intentos_acceso
+
+    m008_gestion_contrasenas.aplicar()
+    m009_intentos_acceso.aplicar()
 
 
 @app.cli.command("sincronizar-asistentes")
