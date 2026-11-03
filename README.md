@@ -1,21 +1,58 @@
-# SGDS — Sistema de Gestión de Despachos
+# Fliyt — Sistema de Gestión de Despachos (SGDS)
 
 Implementación del proyecto **"Optimización de la gestión logística en transporte y
 almacenamiento mediante análisis de datos y procesos inteligentes"**
 (Universidad de San Buenaventura, Ingeniería de Sistemas).
 
+**Nombres del proyecto.** *Fliyt* es el nombre del producto (el que ve el usuario en la
+aplicación). *SGDS* es el nombre técnico del sistema en el código y en los documentos del
+curso. *Rutalytics* es el nombre anterior de la marca y se conserva solo en identificadores
+técnicos que no se pueden renombrar sin recrearlos: el proyecto de Azure DevOps
+(`fliyt/Rutalytics`), los recursos de Azure (`rg-rutalytics`, la Container App
+`rutalytics` y su URL) y los escenarios de Make ("Rutalytics Operación" y "Rutalytics
+Privado").
+
+| Enlace | Dirección |
+|---|---|
+| Aplicación en línea | https://rutalytics.yellowplant-1f14b776.eastus2.azurecontainerapps.io |
+| Repositorio principal (GitLab) | https://gitlab.com/Yormisss/fliyt |
+| Azure DevOps (Boards, Repos, Pipelines) | https://dev.azure.com/fliyt/Rutalytics |
+| Manual de usuario | [`docs/Manual_Usuario_Fliyt.md`](docs/Manual_Usuario_Fliyt.md) (y `.docx`) |
+| Despliegue en Azure | [`docs/despliegue_azure.md`](docs/despliegue_azure.md) |
+| Informe de seguridad | [`docs/seguridad/Informe_Seguridad_Fliyt.md`](docs/seguridad/Informe_Seguridad_Fliyt.md) (y `.docx`) |
+
 ## Stack
 
 | Capa | Tecnología | Justificación en el documento |
 |---|---|---|
-| Arquitectura | Flask + patrón MVC | RNF3 — arquitectura web ligera (MVC) |
+| Arquitectura | Flask 3 (Python) + patrón MVC | RNF3 — arquitectura web ligera (MVC) |
 | Modelo | SQLAlchemy ORM | RNF4 — integrabilidad y escalabilidad |
-| Base de datos | SQLite (desarrollo) → MySQL (piloto) | RNF4 — motor relacional intercambiable |
-| Vista | Jinja2 + CSS mobile-first | RNF1 — interfaz responsiva para la flota |
-| Seguridad | Flask-Login + PBKDF2-SHA256 + CSRF | RNF5 — cifrado de contraseñas y sesiones seguras |
+| Base de datos | SQLite (desarrollo) → MySQL 8 (Docker en local, Azure Database for MySQL en producción) | RNF4 — motor relacional intercambiable |
+| Vista | Jinja2 + CSS mobile-first + JavaScript | RNF1 — interfaz responsiva para escritorio, tableta y celular |
+| Seguridad | Flask-Login + PBKDF2-SHA256 + CSRF + Fernet (datos personales) + cabeceras CSP/HSTS | RNF5 — contraseñas, sesiones y datos protegidos |
 | Ruteo | OSRM (servicio público, sin API key) | RF3 — evita programar el algoritmo desde cero |
 | Mapa | Leaflet + OpenStreetMap | RF3 — visualización de la secuencia |
-| Despliegue | Render / Railway | RNF3 — plataformas cloud gratuitas |
+| Agente de IA | Retell AI (voz) con LLM **GPT-4.1** y funciones del servidor | RF4 — operación por voz según el rol |
+| Automatizaciones | Make (webhooks → Outlook y Google Sheets) | RF4/RF6 — avisos por correo y bitácora |
+| Big Data | Apache Spark (PySpark): ingesta, ETL/ELT, MLlib, Structured Streaming | RF6 — análisis de la operación a escala |
+| Contenedores | Docker (imagen de la app y MySQL local) | RNF3 — ejecución reproducible |
+| Nube | Microsoft Azure: Container Apps, Container Registry, MySQL Flexible Server | RNF3 — despliegue en línea |
+| CI/CD y gestión | Azure DevOps: Boards, Repos, Pipelines (pruebas, Bandit, pip-audit, imagen, despliegue) | Gestión ágil e integración continua |
+| Control de versiones | Git: GitLab (principal) con espejo a Azure Repos y copia en GitHub | Colaboración y trazabilidad |
+
+## Diagramas
+
+| Diagrama | Archivo |
+|---|---|
+| Arquitectura general (app, base de datos, IA, Make, OSRM, Big Data) | [`docs/diagramas/01_arquitectura_general.png`](docs/diagramas/01_arquitectura_general.png) |
+| Despliegue en Azure y CI/CD | [`docs/diagramas/02_despliegue_azure.png`](docs/diagramas/02_despliegue_azure.png) |
+| Flujo del componente Big Data | [`docs/diagramas/03_flujo_big_data.png`](docs/diagramas/03_flujo_big_data.png) |
+| Flujo del agente de IA (llamada de voz) | [`docs/diagramas/04_flujo_agente_ia.png`](docs/diagramas/04_flujo_agente_ia.png) |
+
+Las fuentes están en Mermaid (`docs/diagramas/*.mmd`); se regeneran con
+`mmdc -i <archivo>.mmd -o <archivo>.png -b white`.
+
+![Arquitectura general](docs/diagramas/01_arquitectura_general.png)
 
 ## Estructura (MVC explícito)
 
@@ -880,6 +917,12 @@ repositorio (`app/asistentes/`), y un comando los aplica en Retell por API:
      final.
    - `RETELL_VOZ_ID`: una voz en español del panel de Retell (*Voices*). Solo se usa al
      crear agentes nuevos; si se define, también se aplica a los existentes.
+   - `RETELL_MODELO_LLM` (opcional): el modelo de lenguaje de los agentes. Vacío =
+     **`gpt-4.1`**, con temperatura 0.2 para respuestas estables (fijado en
+     `app/asistentes/sincronizacion.py`, `MODELO_LLM_POR_DEFECTO`). Se elige GPT-4.1
+     porque sigue bien las instrucciones largas del prompt, llama a las funciones del
+     servidor con los parámetros correctos y responde con baja latencia en voz. Cada
+     `sincronizar-asistentes` vuelve a aplicar el modelo a los cuatro agentes.
    - `RETELL_AGENTE_CONDUCTOR_ID` y los demás `RETELL_AGENTE_*_ID`, si ya existen.
 2. Ejecute:
 
@@ -1493,6 +1536,7 @@ la raíz del proyecto):
    | `RETELL_API_KEY` | La API key de Retell **con el distintivo de webhook**: firma las funciones |
    | `URL_PUBLICA` | La URL `https://` del paso 2, sin barra final |
    | `RETELL_VOZ_ID` | Una voz en español del panel de Retell |
+   | `RETELL_MODELO_LLM` | Opcional. Modelo de los agentes; vacío = `gpt-4.1` |
    | `RETELL_AGENTE_CONDUCTOR_ID`, `_GESTOR_ID`, `_ADMIN_ID`, `_CLIENTE_ID` | Vacías la primera vez; se llenan en el paso 4 |
    | `MAKE_WEBHOOK_URL` | El webhook del escenario SGDS (paso 5a) |
    | `MAKE_WEBHOOK_KEY` | La API key de los webhooks de Make (opcional, recomendada) |
@@ -1833,3 +1877,29 @@ en producción la aplicación no arranca sin ellas. En otro proveedor, programe 
 comando, `flask --app run enviar-resumen`, con su cron o su *scheduler* a las 23:00 UTC.
 Si prefiere no pagar el cron, el resumen se puede seguir enviando desde el tablero o por
 voz.
+
+## Referencias
+
+Apache Software Foundation. (2026). *Apache Spark documentation*. https://spark.apache.org/docs/latest/
+
+Docker Inc. (2026). *Docker documentation*. https://docs.docker.com/
+
+Microsoft. (2026a). *Azure Container Apps documentation*. https://learn.microsoft.com/azure/container-apps/
+
+Microsoft. (2026b). *Azure Database for MySQL – Flexible Server documentation*. https://learn.microsoft.com/azure/mysql/flexible-server/
+
+Microsoft. (2026c). *Azure Pipelines documentation*. https://learn.microsoft.com/azure/devops/pipelines/
+
+Microsoft. (2026d). *Penetration testing in Azure*. https://learn.microsoft.com/azure/security/fundamentals/pen-testing
+
+OpenStreetMap contributors. (2026). *OpenStreetMap*. https://www.openstreetmap.org/
+
+OWASP Foundation. (2021). *OWASP Top 10: 2021*. https://owasp.org/Top10/
+
+Pallets Projects. (2026). *Flask documentation* (versión 3.1). https://flask.palletsprojects.com/
+
+Project OSRM. (2026). *Open Source Routing Machine*. https://project-osrm.org/
+
+Retell AI. (2026). *Retell AI documentation*. https://docs.retellai.com/
+
+SQLAlchemy. (2026). *SQLAlchemy 2.0 documentation*. https://docs.sqlalchemy.org/en/20/

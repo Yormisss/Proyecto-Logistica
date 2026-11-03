@@ -1,8 +1,11 @@
 # Despliegue en Azure con Azure DevOps
 
-Rutalytics (SGDS) corre en **Azure Container Apps** con **Azure Database for MySQL
-Flexible Server**. Cada push a `main` en **Azure Repos** dispara el pipeline de
-**Azure DevOps**: pruebas → seguridad → imagen Docker → despliegue.
+Fliyt (SGDS; los recursos de Azure conservan el nombre técnico *rutalytics*) corre en
+**Azure Container Apps** con **Azure Database for MySQL Flexible Server**. Cada push a
+`main` en **Azure Repos** dispara el pipeline de **Azure DevOps**: pruebas → seguridad →
+imagen Docker → despliegue.
+
+![Despliegue en Azure y CI/CD](diagramas/02_despliegue_azure.png)
 
 ## Arquitectura
 
