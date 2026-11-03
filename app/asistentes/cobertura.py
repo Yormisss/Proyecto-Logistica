@@ -71,6 +71,7 @@ COBERTURA = {
     "pedidos.nuevo": Cobertura(voz=("gestor/pedidos:crear",)),
     "pedidos.anular": Cobertura(voz=("gestor/pedidos:anular",)),
     "pedidos.editar": Cobertura(voz=("gestor/pedidos:editar",)),
+    "pedidos.reprogramar": Cobertura(voz=("gestor/pedidos:reprogramar",)),
 
     # --- Inventario ---
     "inventario.detalle": Cobertura(voz=("gestor/productos:entrada", "gestor/productos:ajuste")),

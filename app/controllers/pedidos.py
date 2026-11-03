@@ -5,7 +5,7 @@ o mediante importacion masiva de archivos CSV exportados del ERP legado.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 from flask import (
@@ -35,7 +35,7 @@ from app.services.pedidos import (
     AVISO_RECALCULAR, campos_editables, crear_pedido, editar_pedido, validar_pedido,
 )
 from app.services.validacion import DatosInvalidos
-from app.services.despacho import TransicionInvalida, anular_pedido
+from app.services.despacho import TransicionInvalida, anular_pedido, reprogramar_fallido
 from app.services.importador import (
     ErrorImportacion, analizar_csv, generar_plantilla_csv, guardar_pedidos,
 )
@@ -185,7 +185,38 @@ def detalle(pedido_id):
     if pedido is None:
         abort(404)
     return render_template("pedidos/detalle.html", pedido=pedido,
-                           editable=bool(campos_editables(pedido)))
+                           editable=bool(campos_editables(pedido)), hoy=hoy())
+
+
+@pedidos_bp.route("/<int:pedido_id>/reprogramar", methods=["POST"])
+@login_required
+@requiere_permiso("pedidos.gestionar")
+def reprogramar(pedido_id):
+    """Devuelve un pedido fallido a pendientes con una nueva fecha de despacho."""
+    pedido = db.session.get(Pedido, pedido_id)
+    if pedido is None:
+        abort(404)
+    try:
+        fecha = date.fromisoformat((request.form.get("fecha") or "").strip())
+    except ValueError:
+        fecha = None
+    try:
+        ruta_anterior = pedido.ruta.codigo if pedido.ruta else None
+        reprogramar_fallido(pedido, fecha, current_user.id)
+    except TransicionInvalida as error:
+        db.session.rollback()
+        flash(str(error), "error")
+        return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
+
+    auditar_pantalla("Reprogramar pedido", "pedido",
+                     f"Reprogramó el pedido fallido {pedido.codigo} de {pedido.cliente_nombre} "
+                     f"para el {fecha.strftime('%d/%m/%Y')}.",
+                     {"fecha": fecha.isoformat(), "ruta_anterior": ruta_anterior},
+                     entidad_id=pedido.codigo)
+    db.session.commit()
+    flash(f"Pedido {pedido.codigo} reprogramado para el {fecha.strftime('%d/%m/%Y')}: "
+          "ya está en pendientes para planificarlo en una ruta.", "exito")
+    return redirect(url_for("pedidos.detalle", pedido_id=pedido.id))
 
 
 @pedidos_bp.route("/<int:pedido_id>/editar", methods=["GET", "POST"])

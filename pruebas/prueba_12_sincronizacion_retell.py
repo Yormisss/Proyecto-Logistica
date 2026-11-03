@@ -228,10 +228,12 @@ gestor = next(d for d in conf.AGENTES if d.clave == "gestor")
 with app.app_context():
     tool_pedidos = next(t for t in conf.herramientas(gestor, URL) if t["name"] == "pedidos")
 check(tool_pedidos["parameters"]["required"] == ["operacion"]
-      and tool_pedidos["parameters"]["properties"]["operacion"]["enum"] == ["crear", "anular", "reintentar", "editar"],
+      and sorted(tool_pedidos["parameters"]["properties"]["operacion"]["enum"])
+      == sorted(["crear", "anular", "reintentar", "reprogramar", "editar"]),
       "una funcion agrupada exige 'operacion', con sus operaciones en el enum")
-check(all(f"'{op}':" in tool_pedidos["description"] for op in ("crear", "anular", "reintentar", "editar"))
-      and tool_pedidos["description"].count("(modifica datos)") == 4
+check(all(f"'{op}':" in tool_pedidos["description"]
+          for op in ("crear", "anular", "reintentar", "reprogramar", "editar"))
+      and tool_pedidos["description"].count("(modifica datos)") == 5
       and "llamala primero sin 'confirmar'" in tool_pedidos["description"],
       "y su descripcion explica cada operacion y cuales modifican datos")
 cliente = next(d for d in conf.AGENTES if d.clave == "cliente")

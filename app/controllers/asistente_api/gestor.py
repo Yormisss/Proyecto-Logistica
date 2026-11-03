@@ -34,6 +34,7 @@ from app.services.busqueda_voz import (
 from app.services.despacho import (
     PRIORIDADES, TransicionInvalida, anular_pedido, reintentar_entrega, ruta_del_dia,
     ruta_finalizada_del_dia, validar_transicion, verificar_anulacion, verificar_reintento,
+    reprogramar_fallido, verificar_reprogramacion,
 )
 from app.services.inventario import registrar_movimiento
 from app.services.pedidos import (
@@ -507,8 +508,8 @@ def causas_fallo():
 
 pedidos = funcion_agrupada(
     ESPACIO, "pedidos", roles=ROLES, entidad="pedido",
-    descripcion="Pedidos: crear, editar, anular o reintentar uno fallido. Para consultar un "
-                "pedido usa buscar-pedido.",
+    descripcion="Pedidos: crear, editar, anular, reintentar o reprogramar. Para consultar usa "
+                "buscar-pedido.",
     parametros={
         **PARAMETRO_PEDIDO,
         "cliente": {"type": "string", "description": "crear: nombre, NIT o telefono del cliente registrado."},
@@ -529,8 +530,8 @@ pedidos = funcion_agrupada(
             },
         },
         "fecha": {"type": "string",
-                  "description": "crear y editar: fecha de despacho AAAA-MM-DD, no anterior a hoy. "
-                                 "Al crear, por defecto hoy."},
+                  "description": "crear, editar, reprogramar: fecha AAAA-MM-DD, no anterior a "
+                                 "hoy."},
         "prioridad": {"type": "integer",
                       "description": "crear y editar: 1 alta, 2 media, 3 baja (por defecto al "
                                      "crear)."},
@@ -677,6 +678,37 @@ def reintentar_pedido():
         return responder(f"No pude reintentar el pedido {pedido.codigo}. {causa}")
     db.session.commit()
     return responder(f"Listo, el pedido {pedido.codigo} quedó asignado para un nuevo intento.")
+
+
+@pedidos("reprogramar", "Reprogramar pedido",
+         "devuelve un fallido a pendientes con otra fecha (por defecto hoy); requiere pedido")
+def reprogramar_pedido():
+    pedido, error = _pedido()
+    if pedido is None:
+        return responder(error)
+    fecha = fecha_iso(g.argumentos.get("fecha"), hoy())
+    if fecha is None:
+        return responder("No entendí la fecha; dímela como año, mes y día.")
+    try:
+        verificar_reprogramacion(pedido, fecha)
+    except TransicionInvalida as causa:
+        return responder(f"No puedo reprogramar el pedido {pedido.codigo}. {causa}")
+
+    pendiente = exigir_confirmacion(
+        f"Voy a reprogramar el pedido {pedido_texto(pedido)} para el {fecha_larga(fecha)}: sale "
+        + (f"de la ruta {pedido.ruta.codigo} y " if pedido.ruta else "")
+        + "vuelve a pendientes para planificarlo en una ruta."
+    )
+    if pendiente:
+        return pendiente
+
+    try:
+        reprogramar_fallido(pedido, fecha, g.usuario.id, origen=NOTA_ASISTENTE)
+    except TransicionInvalida as causa:
+        db.session.rollback()
+        return responder(f"No pude reprogramar el pedido {pedido.codigo}. {causa}")
+    db.session.commit()
+    return responder(f"Listo, el pedido {pedido.codigo} quedó pendiente para el {fecha_larga(fecha)}.")
 
 
 productos = funcion_agrupada(

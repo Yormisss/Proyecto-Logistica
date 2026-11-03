@@ -385,6 +385,62 @@ def reintentar_entrega(pedido, usuario_id, nota=None):
     return cambiar_estado(pedido, EstadoPedido.ASIGNADO, usuario_id, nota=nota)
 
 
+PREFIJO_REPROGRAMACION = "Reprogramado para el "
+
+
+def verificar_reprogramacion(pedido, fecha):
+    """Lanza TransicionInvalida si el pedido no se puede reprogramar para `fecha`.
+
+    Reprogramar saca un FALLIDO de su ruta y lo devuelve a PENDIENTE con otra
+    fecha de despacho, para planificarlo en una ruta nueva. Es la salida de un
+    fallido de un dia anterior (el reintento solo vale en la ruta de hoy) y la
+    que corresponde al aviso de reprogramacion que recibe el cliente.
+    """
+    if pedido.estado != EstadoPedido.FALLIDO:
+        raise TransicionInvalida(
+            f"Solo se reprograma un pedido fallido; este está "
+            f"{EstadoPedido.ETIQUETAS.get(pedido.estado, pedido.estado).lower()}."
+        )
+    if fecha is None:
+        raise TransicionInvalida("Indique la nueva fecha de despacho.")
+    if fecha < hoy():
+        raise TransicionInvalida("La nueva fecha de despacho no puede ser anterior a hoy.")
+
+
+def reprogramar_fallido(pedido, fecha, usuario_id, origen=None):
+    """FALLIDO -> PENDIENTE, sin ruta y con la nueva fecha de despacho. No hace commit.
+
+    La ruta anterior no se toca: su avance ya quedo registrado y la parada se
+    conserva en la bitacora del pedido, con sus pruebas de entrega.
+    """
+    pedido = (
+        db.session.query(Pedido)
+        .filter_by(id=pedido.id)
+        .populate_existing()
+        .with_for_update()
+        .one()
+    )
+    verificar_reprogramacion(pedido, fecha)
+    ruta_anterior = pedido.ruta.codigo if pedido.ruta else None
+    pedido.estado = EstadoPedido.PENDIENTE
+    pedido.ruta_id = None
+    pedido.orden_en_ruta = None
+    pedido.fecha_despacho = fecha
+    nota = f"{PREFIJO_REPROGRAMACION}{fecha.strftime('%d/%m/%Y')}"
+    if ruta_anterior:
+        nota += f" (sale de la ruta {ruta_anterior})"
+    db.session.add(
+        EventoPedido(
+            pedido_id=pedido.id,
+            usuario_id=usuario_id,
+            estado_anterior=EstadoPedido.FALLIDO,
+            estado_nuevo=EstadoPedido.PENDIENTE,
+            nota=nota + (f". {origen}" if origen else ""),
+        )
+    )
+    return pedido
+
+
 # La prioridad solo ordena la planificacion: una vez en camino ya no influye.
 ESTADOS_REPRIORIZABLES = (EstadoPedido.PENDIENTE, EstadoPedido.ASIGNADO)
 PRIORIDADES = {1: "Alta", 2: "Media", 3: "Baja"}

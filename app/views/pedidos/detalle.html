@@ -15,6 +15,16 @@
     {% if editable and current_user.puede('pedidos.gestionar') %}
     <a class="boton boton-secundario" href="{{ url_for('pedidos.editar', pedido_id=pedido.id) }}">Editar</a>
     {% endif %}
+    {% if pedido.estado == EstadoPedido.FALLIDO and current_user.puede('pedidos.gestionar') %}
+    <form method="post" action="{{ url_for('pedidos.reprogramar', pedido_id=pedido.id) }}"
+          class="formulario-anular"
+          onsubmit="return confirm('¿Reprogramar el pedido {{ pedido.codigo }}? Sale de su ruta y vuelve a pendientes.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="date" name="fecha" aria-label="Nueva fecha de despacho" required min="{{ hoy.isoformat() }}"
+             value="{{ hoy.isoformat() }}">
+      <button type="submit" class="boton boton-secundario">Reprogramar</button>
+    </form>
+    {% endif %}
     {% if pedido.estado in (EstadoPedido.PENDIENTE, EstadoPedido.ASIGNADO, EstadoPedido.FALLIDO)
           and current_user.puede('pedidos.gestionar') %}
     <form method="post" action="{{ url_for('pedidos.anular', pedido_id=pedido.id) }}"
