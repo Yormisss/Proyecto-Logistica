@@ -25,7 +25,19 @@
    que queda debajo del Big Data. #}
 <div class="fila-seccion">
   <h2 class="titulo-seccion" id="operacion-hoy">Operacion de hoy</h2>
-  {{ boton_actualizar() }}
+  <div class="acciones-seccion">
+    {% if current_user.puede('resumen.enviar') %}
+    {# Envia el resumen a Make (escenario privado), que lo manda a operaciones. #}
+    <form method="post" action="{{ url_for('admin.enviar_resumen') }}" class="formulario-en-linea">
+      {{ formulario.hidden_tag() }}
+      <button type="submit" class="boton boton-secundario"
+              title="{{ 'Se envía a ' ~ correo_resumen if correo_resumen else 'Falta configurar CORREO_OPERACIONES' }}">
+        Enviar resumen del día
+      </button>
+    </form>
+    {% endif %}
+    {{ boton_actualizar() }}
+  </div>
 </div>
 
 <!-- RF6 - Tres KPIs fundamentales del prototipo -->

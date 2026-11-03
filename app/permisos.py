@@ -31,6 +31,7 @@ GRUPO_PROPIOS = "Propios del tipo de cuenta"
 # clave: (nombre, grupo). En el orden en que se muestran.
 PERMISOS = {
     "tablero.ver": ("Ver el tablero", GRUPO_OPERACION),
+    "resumen.enviar": ("Enviar el resumen del día", GRUPO_OPERACION),
     "pedidos.ver": ("Ver pedidos", GRUPO_OPERACION),
     "pedidos.gestionar": ("Gestionar pedidos (crear, editar, anular, importar)", GRUPO_OPERACION),
     "rutas.ver": ("Ver rutas", GRUPO_OPERACION),
@@ -103,6 +104,7 @@ PERMISOS_VOZ = {
     "gestor/productos": ("inventario.ver", "inventario.gestionar"),
     "gestor/productos-bajo-minimo": "inventario.ver",
     "gestor/resumen-dia": "tablero.ver",
+    "gestor/resumen-diario": ("tablero.ver", "resumen.enviar"),
     "gestor/rutas": ("rutas.ver", "rutas.gestionar"),
     "gestor/sedes": ("clientes.ver", "clientes.gestionar"),
     "gestor/solicitudes-contacto-pendientes": "solicitudes.ver",

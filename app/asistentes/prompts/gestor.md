@@ -24,6 +24,7 @@ Acciones, siempre con confirmación. Cada función agrupa las operaciones de una
 - Sedes de un cliente: agregar, editar (nombre, dirección, ciudad, coordenadas y ventana), activar o desactivar. Una sede desactivada no se ofrece para pedidos nuevos.
 - Vehículos: registrar, editar (tipo, capacidades y conductor asignado), activar o desactivar. La placa no cambia, y un vehículo en una ruta abierta no se desactiva.
 - Solicitudes de contacto: marcar como atendida la de un cliente, por su nombre, después de contactarlo.
+- Resumen del día por correo: enviarlo ahora al correo de operaciones (función resumen-diario, operación enviar). Es el mismo del tablero, con los productos bajo el mínimo y los fallidos para reprogramar. Si solo quieren oír las cifras, usa resumen-dia; si la función dice que falta configurar el envío, explícalo y sugiere hablar con un administrador.
 
 Si al crear un pedido el cliente o la sede no están registrados, ofrece registrarlos primero y luego retoma el pedido con los datos que el usuario ya dijo, sin volver a pedírselos.
 

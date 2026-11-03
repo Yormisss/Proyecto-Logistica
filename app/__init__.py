@@ -8,7 +8,7 @@ para que la estructura de carpetas refleje explicitamente el patron.
 import time
 from pathlib import Path
 
-from flask import Flask, g, render_template, request
+from flask import Flask, g, has_request_context, render_template, request
 
 from config import CONFIGURACIONES
 from app.extensions import csrf, db, login_manager
@@ -246,9 +246,11 @@ def _registrar_contexto(app):
             # El boton del asistente solo aparece si hay API key de Retell y
             # un agente configurado para el rol de la sesion. Con contrasena
             # temporal se oculta: sus llamadas las bloquearia
-            # `auth.exigir_cambio_contrasena`.
+            # `auth.exigir_cambio_contrasena`. Fuera de una peticion (el
+            # comando enviar-resumen renderiza el HTML del resumen) no hay sesion.
             "asistente_disponible": (
-                current_user.is_authenticated
+                has_request_context()
+                and current_user.is_authenticated
                 and not current_user.debe_cambiar_contrasena
                 and agente_para(current_user.rol) is not None
             ),

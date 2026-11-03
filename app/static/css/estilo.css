@@ -344,6 +344,7 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 /* Titulo de seccion con el boton al lado (Operacion de hoy, en el tablero) */
 .fila-seccion { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 1.2rem 0 .6rem; }
 .fila-seccion .titulo-seccion { margin: 0; }
+.acciones-seccion { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 
 /* Filtros */
 .barra-filtros {

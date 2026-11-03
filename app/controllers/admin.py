@@ -4,8 +4,9 @@ Paso 1: tablero de control con los tres KPIs fundamentales del RF6.
 Los modulos de pedidos, rutas e inventario se incorporan en los pasos siguientes.
 """
 
-from flask import Blueprint, render_template
-from flask_login import login_required
+from flask import Blueprint, flash, redirect, render_template, url_for
+from flask_login import current_user, login_required
+from flask_wtf import FlaskForm
 from sqlalchemy import func
 
 from flask import request
@@ -13,10 +14,14 @@ from flask import request
 from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
 from app.models import Rol, Ruta, Usuario
-from app.services import analitica, bigdata
+from app.services import analitica, bigdata, resumen_diario
 from app.services.configuracion import centro_distribucion
 
 admin_bp = Blueprint("admin", __name__)
+
+
+class FormularioAccion(FlaskForm):
+    """Solo aporta el token CSRF."""
 
 
 @admin_bp.route("/")
@@ -46,7 +51,28 @@ def dashboard():
         productos_criticos=productos_criticos,
         conductores_activos=conductores_activos,
         bd=bigdata.panel(),
+        formulario=FormularioAccion(),
+        correo_resumen=resumen_diario.correo_destino(),
     )
+
+
+@admin_bp.route("/resumen/enviar", methods=["POST"])
+@login_required
+@requiere_permiso("resumen.enviar")
+def enviar_resumen():
+    """Envia el resumen del dia a Make (evento resumen_diario); ver app/services/resumen_diario.py."""
+    if not FormularioAccion().validate_on_submit():
+        flash("Solicitud invalida. Intente nuevamente.", "error")
+        return redirect(url_for("admin.dashboard"))
+    try:
+        datos = resumen_diario.enviar(current_user._get_current_object())
+    except resumen_diario.ResumenNoEnviado as error:
+        flash(str(error), "error")
+        return redirect(url_for("admin.dashboard"))
+    resumen_diario.registrar_envio(datos)
+    db.session.commit()
+    flash(f"Resumen del día enviado a {datos['correo_destino']}.", "exito")
+    return redirect(url_for("admin.dashboard"))
 
 
 @admin_bp.route("/analitica")

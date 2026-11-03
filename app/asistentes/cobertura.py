@@ -60,6 +60,9 @@ COBERTURA = {
     "conductor.entregar": Cobertura(voz=("conductor/parada:entregar",)),
     "conductor.iniciar": Cobertura(voz=("conductor/iniciar-ruta",)),
 
+    # --- Tablero ---
+    "admin.enviar_resumen": Cobertura(voz=("gestor/resumen-diario:enviar",)),
+
     # --- Pedidos ---
     "pedidos.nuevo": Cobertura(voz=("gestor/pedidos:crear",)),
     "pedidos.anular": Cobertura(voz=("gestor/pedidos:anular",)),

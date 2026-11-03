@@ -75,6 +75,11 @@ class ConfiguracionBase:
     # con la que se arma el enlace. Vacio = en produccion no se ofrece la
     # recuperacion; en desarrollo el enlace sale en la consola del servidor.
     MAKE_WEBHOOK_RESTABLECIMIENTO_URL = os.getenv("MAKE_WEBHOOK_RESTABLECIMIENTO_URL", "")
+    # Webhook del evento "resumen_diario" (escenario privado, como los dos
+    # anteriores): la app envia el resumen del dia al pedirlo en el tablero o
+    # por voz, o con `flask --app run enviar-resumen` programado. Vacio = no se
+    # envia, y se le dice a quien lo pidio.
+    MAKE_WEBHOOK_RESUMEN_URL = os.getenv("MAKE_WEBHOOK_RESUMEN_URL", "")
     # Destino de los avisos internos (stock bajo) y del resumen diario. Vacio =
     # no se envian avisos internos; los avisos al cliente no dependen de esto.
     CORREO_OPERACIONES = os.getenv("CORREO_OPERACIONES", "")

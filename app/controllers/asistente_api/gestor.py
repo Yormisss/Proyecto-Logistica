@@ -26,7 +26,7 @@ from app.extensions import db
 from app.models import (
     DireccionCliente, EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, TipoMovimiento, normalizar_texto,
 )
-from app.services import analitica
+from app.services import analitica, resumen_diario
 from app.services.busqueda_voz import (
     buscar_clientes, buscar_conductores, buscar_pedidos, buscar_productos, buscar_rutas, buscar_sedes,
     buscar_vehiculos,
@@ -45,6 +45,7 @@ from app.services.planificacion import (
     recalcular_secuencia, validar_ruta, verificar_agregar_a_ruta, verificar_eliminar_ruta,
     verificar_quitar_parada,
 )
+from app.services.notificaciones import ORIGEN_VOZ
 from app.services.ruteo import ESTRATEGIA_DISTANCIA, ESTRATEGIA_VENTANA, ESTRATEGIAS
 from app.services.validacion import DatosInvalidos
 from app.services.solicitudes import SolicitudInvalida, marcar_atendida, pendiente_de
@@ -148,6 +149,34 @@ def resumen_dia():
         f"{kpis['sin_asignar']} sin asignar y {kpis['en_ruta']} en ruta. "
         f"La tasa de éxito es {porcentaje(kpis['porcentaje_exito'])}."
     )
+
+
+# Resumen del dia que se envia a operaciones (evento resumen_diario de Make). Se
+# agrupa por entidad, como el resto, aunque por ahora solo tiene "enviar";
+# leer las cifras es resumen-dia.
+resumen = funcion_agrupada(
+    ESPACIO, "resumen-diario", roles=ROLES, entidad=resumen_diario.ENTIDAD,
+    descripcion="El resumen del dia por correo a operaciones (el mismo del tablero, con productos bajo "
+                "el minimo y fallidos para reprogramar). Para leer las cifras en voz alta usa resumen-dia.",
+)
+
+
+@resumen("enviar", "Enviar resumen del día",
+         "envia ahora el resumen de hoy al correo de operaciones", avisar=False)
+def enviar_resumen_voz():
+    try:
+        resumen_diario.verificar_envio()
+    except resumen_diario.ResumenNoEnviado as error:
+        return responder(f"{error} Pídele a un administrador que lo configure.")
+    pendiente = exigir_confirmacion(f"Voy a enviar el resumen de hoy a {resumen_diario.correo_destino()}.")
+    if pendiente:
+        return pendiente
+    try:
+        datos = resumen_diario.enviar(g.usuario, ORIGEN_VOZ)
+    except resumen_diario.ResumenNoEnviado as error:
+        return responder(str(error))
+    db.session.commit()
+    return responder(f"Listo, envié el resumen de hoy a {datos['correo_destino']}.")
 
 
 @funcion_asistente(

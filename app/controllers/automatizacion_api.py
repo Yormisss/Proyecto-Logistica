@@ -11,6 +11,10 @@ AUTOMATIZACION_TOKEN:
 Las cifras salen de `app.services.analitica`, las mismas funciones del
 tablero, para que el correo y la pantalla nunca muestren numeros distintos.
 
+`/resumen-diario` queda como respaldo: la app ahora ENVIA el resumen a Make
+(evento `resumen_diario`, ver app/services/resumen_diario.py), con el mismo
+contenido que arma `resumen_diario.contenido` para esta respuesta.
+
 Como todo lo que Make envia, la respuesta lleva quien origino la accion; aqui
 es el sistema ("Sistema SGDS (automático)", origen "automático"), tanto en el
 resumen como en cada correo de reprogramacion.
@@ -22,15 +26,13 @@ Google Sheets sin huecos ni filas repetidas (ver `auditoria`).
 import hmac
 from datetime import timedelta
 
-from flask import Blueprint, abort, current_app, jsonify, render_template, request
-from sqlalchemy.orm import joinedload, selectinload
+from flask import Blueprint, abort, current_app, jsonify, request
 
 from app.extensions import db
-from app.models import Auditoria, Cliente, EstadoPedido, Pedido
-from app.services import analitica
+from app.models import Auditoria
+from app.services import resumen_diario as servicio_resumen
 from app.services.auditoria import COLUMNAS_HOJA, fila_hoja
-from app.services.notificaciones import ORIGEN_AUTOMATICO, datos_actor
-from app.tiempo import ahora, hoy, iso_bogota
+from app.tiempo import ahora, iso_bogota
 
 # Solo se entregan registros con al menos esta antiguedad: para entonces la
 # transaccion que los escribio ya termino (dura milisegundos), y lo entregado
@@ -53,80 +55,9 @@ def autenticar():
         return jsonify(error="Token invalido."), 401
 
 
-def _fallidos_para_reprogramar(fecha):
-    """Pedidos FALLIDOS del dia cuyo cliente tiene correo para coordinar otra visita."""
-    pedidos = (
-        db.session.query(Pedido)
-        .join(Cliente, Pedido.cliente_id == Cliente.id)
-        .options(selectinload(Pedido.pruebas_entrega), joinedload(Pedido.cliente))
-        .filter(
-            Pedido.estado == EstadoPedido.FALLIDO,
-            Pedido.fecha_despacho == fecha,
-            Cliente.correo.isnot(None),
-        )
-        .order_by(Pedido.codigo)
-        .all()
-    )
-    filas = []
-    for pedido in pedidos:
-        correo = (pedido.cliente.correo or "").strip()
-        if not correo:
-            continue
-        filas.append({
-            "codigo": pedido.codigo,
-            "cliente": pedido.cliente_nombre,
-            "correo": correo,
-            "direccion": pedido.direccion_completa,
-            "motivo": pedido.prueba_entrega.motivo_fallo if pedido.prueba_entrega else None,
-            **datos_actor(origen=ORIGEN_AUTOMATICO),
-        })
-    return filas
-
-
 @automatizacion_api_bp.route("/resumen-diario", methods=["GET"])
 def resumen_diario():
-    fecha = hoy()
-    kpis_dia = analitica.kpis_del_dia(fecha)
-    ventana = analitica.cumplimiento_ventana(dias=1, hasta=fecha)
-
-    kpis = {
-        "total": kpis_dia["total_dia"],
-        "entregados": kpis_dia["entregados"],
-        "fallidos": kpis_dia["fallidos"],
-        "cancelados": kpis_dia["cancelados"],
-        "pendientes": kpis_dia["pendientes"],
-        "tasa_exito": kpis_dia["porcentaje_exito"],
-        # None si hoy no hubo entregas con ventana horaria que medir.
-        "cumplimiento_ventana": ventana["porcentaje"],
-    }
-    productos = [
-        {
-            "sku": producto.sku,
-            "producto": producto.nombre,
-            "stock_actual": producto.stock_actual,
-            "stock_minimo": producto.stock_minimo,
-            "negativo": producto.stock_actual < 0,
-        }
-        for producto in analitica.productos_bajo_minimo()
-    ]
-    fallidos = _fallidos_para_reprogramar(fecha)
-
-    return jsonify(
-        fecha=fecha.isoformat(),
-        fecha_hora=iso_bogota(),
-        correo_destino=(current_app.config.get("CORREO_OPERACIONES") or "").strip() or None,
-        kpis=kpis,
-        productos_bajo_minimo=productos,
-        fallidos_para_reprogramar=fallidos,
-        resumen_html=render_template(
-            "automatizacion/resumen_diario.html",
-            fecha=fecha,
-            kpis=kpis,
-            productos=productos,
-            fallidos=fallidos,
-        ),
-        **datos_actor(origen=ORIGEN_AUTOMATICO),
-    )
+    return jsonify(servicio_resumen.contenido())
 
 
 @automatizacion_api_bp.route("/auditoria", methods=["GET"])

@@ -2,7 +2,8 @@
 
 Todo evento se envia como un POST JSON a MAKE_WEBHOOK_URL con un campo `tipo`,
 y el escenario de Make lo enruta segun ese campo (salvo `credencial_usuario`,
-que va solo a MAKE_WEBHOOK_CREDENCIALES_URL):
+`restablecimiento_contrasena` y `resumen_diario`, que van cada uno por su
+variable al escenario privado):
 
 * `pedido_estado`: un pedido paso a EN_RUTA, ENTREGADO, FALLIDO o CANCELADO.
   Va al cliente, asi que solo se envia si el cliente tiene correo. FALLIDO y
@@ -24,6 +25,15 @@ que va solo a MAKE_WEBHOOK_CREDENCIALES_URL):
   correo de inicio de sesion de quien lo pidio. Quien tiene el enlace cambia
   la contrasena, asi que tambien va por su propio webhook,
   MAKE_WEBHOOK_RESTABLECIMIENTO_URL (ver app/services/recuperacion.py).
+* `resumen_diario`: el resumen del dia para operaciones, cuando alguien lo
+  pide (tablero o voz) o lo dispara el comando programado `enviar-resumen`.
+  Va por MAKE_WEBHOOK_RESUMEN_URL y lleva los mismos campos que GET
+  /api/automatizacion/resumen-diario (ver app/services/resumen_diario.py).
+
+MAKE_WEBHOOK_CREDENCIALES_URL, MAKE_WEBHOOK_RESTABLECIMIENTO_URL y
+MAKE_WEBHOOK_RESUMEN_URL apuntan al webhook del escenario privado ("Rutalytics
+Privado", con "Data is confidential"); MAKE_WEBHOOK_URL, al de la operacion
+("SGDS"). Todos llevan la misma API key, MAKE_WEBHOOK_KEY.
 
 Todo evento lleva `hora` ("2026-10-13 14:05") y `fecha_hora` en ISO 8601 con
 segundos y el desplazamiento de Bogota ("2026-10-13T14:05:09-05:00").
@@ -62,6 +72,7 @@ TIPO_SOLICITUD_CONTACTO = "solicitud_contacto"
 TIPO_ACCION_ASISTENTE = "accion_asistente"
 TIPO_CREDENCIAL_USUARIO = "credencial_usuario"
 TIPO_RESTABLECIMIENTO_CONTRASENA = "restablecimiento_contrasena"
+TIPO_RESUMEN_DIARIO = "resumen_diario"
 
 ORIGEN_PANTALLA = "pantalla"
 ORIGEN_VOZ = "voz"

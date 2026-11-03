@@ -10,6 +10,7 @@ Uso:
     flask --app run migrar-contrasenas    Columnas de gestion de contrasenas y tabla de intentos de acceso
     flask --app run migrar-seguridad      Sesion unica, inactividad, errores, cifrado, roles con permisos
                                           y llamadas de voz atadas a la sesion web
+    flask --app run enviar-resumen   Envia el resumen del dia a Make (para programarlo)
     flask --app run sincronizar-asistentes  Crea o actualiza los agentes en Retell
     flask --app run documentar-asistentes   Regenera docs/configuracion_retell.md
     python run.py                    Levanta el servidor de desarrollo
@@ -128,16 +129,40 @@ def migrar_contrasenas():
 @app.cli.command("migrar-seguridad")
 def migrar_seguridad():
     """Sesion unica, inactividad y errores (m010); cifrado (m011); roles y permisos (m012);
-    llamadas de voz atadas a la sesion web (m013)."""
+    llamadas de voz atadas a la sesion web (m013); permiso de enviar el resumen (m014)."""
     from migraciones import (
         m010_sesiones_y_errores, m011_cifrado_datos_personales, m012_roles_y_permisos,
-        m013_huella_sesion_asistente,
+        m013_huella_sesion_asistente, m014_permiso_resumen,
     )
 
     m010_sesiones_y_errores.aplicar()
     m011_cifrado_datos_personales.aplicar()
     m012_roles_y_permisos.aplicar()
     m013_huella_sesion_asistente.aplicar()
+    m014_permiso_resumen.aplicar()
+
+
+@app.cli.command("enviar-resumen")
+def enviar_resumen():
+    """Envia el resumen del dia al escenario privado de Make (MAKE_WEBHOOK_RESUMEN_URL).
+
+    Es lo que se programa: el Programador de tareas de Windows o el cron del
+    servidor lo corren a las 18:00 de Bogota (ver README). Lo origina el
+    sistema ("Sistema SGDS (automático)"). Sin el webhook o sin
+    CORREO_OPERACIONES termina con error (codigo 1), y el programador lo marca.
+    """
+    from app.services import resumen_diario
+
+    try:
+        datos = resumen_diario.enviar()
+    except resumen_diario.ResumenNoEnviado as error:
+        raise click.ClickException(str(error))
+    resumen_diario.registrar_envio(datos)
+    db.session.commit()
+    resumen_diario.esperar()
+    click.echo(f"Resumen del {datos['fecha']} enviado a Make para {datos['correo_destino']}: "
+               f"{datos['kpis']['total']} entregas, {datos['kpis']['entregados']} entregadas, "
+               f"{datos['kpis']['fallidos']} fallidas.")
 
 
 @app.cli.command("sincronizar-asistentes")
