@@ -35,6 +35,12 @@ class SesionAsistente(db.Model):
     # funcion y sus argumentos. Solo hay una a la vez; se consume al ejecutarse.
     confirmacion_firma = db.Column(db.String(64))
     confirmacion_vence_en = db.Column(db.DateTime)
+    # SHA-256 del identificador de la sesion web que abrio la llamada
+    # (`Usuario.get_id`: cuenta, version de la credencial y token de sesion
+    # unica). Si la cuenta entra en otro navegador, cierra sesion o cambia su
+    # contrasena, deja de coincidir y la llamada pierde la autorizacion, como
+    # la pagina que la abrio. NULL en las abiertas antes de la migracion m013.
+    huella_sesion = db.Column(db.String(64))
 
     usuario = db.relationship("Usuario")
 

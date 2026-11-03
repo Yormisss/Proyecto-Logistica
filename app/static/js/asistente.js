@@ -16,11 +16,19 @@
 // un marco que cubre la ventana y esta pagina queda debajo, solo con el boton;
 // la barra de direcciones y el titulo siguen al marco. Si el marco llega al
 // login (Salir o inactividad), la ventana entera va al login y la llamada termina.
+//
+// Mientras dura la llamada, un latido consulta al servidor cada LATIDO_MS: cuenta
+// como actividad, asi que hablar sin tocar la pantalla no cierra la sesion por
+// inactividad. Si la llamada perdio la autorizacion (cuenta desactivada o
+// bloqueada, sesion abierta en otro lugar...), cuelga y muestra el motivo.
 
 const SDK_URL = "https://cdn.jsdelivr.net/npm/retell-client-js-sdk@3.0.2/+esm";
 
 // Tiempo que el estado "Terminado" (o un error) queda visible antes de ocultarse.
 const ESPERA_CIERRE_MS = 4000;
+
+// Menor que el minimo de inactividad configurable (1 minuto).
+const LATIDO_MS = 20000;
 
 const contenedor = document.getElementById("asistente");
 const boton = document.getElementById("asistente-boton");
@@ -30,6 +38,7 @@ let cliente = null;
 let estado = "inactivo";
 let temporizador = null;
 let marco = null;
+let latido = null;
 
 const TEXTOS = {
   conectando: "Conectando...",
@@ -45,6 +54,8 @@ function mostrar(nuevo, mensaje) {
   const texto = mensaje || TEXTOS[nuevo];
   etiqueta.textContent = texto || "";
   etiqueta.hidden = !texto;
+
+  if (nuevo !== "escuchando") detenerLatido();
 
   boton.disabled = nuevo === "conectando";
   boton.setAttribute("aria-pressed", nuevo === "escuchando" ? "true" : "false");
@@ -112,6 +123,38 @@ async function crearLlamada() {
   return datos;
 }
 
+function detenerLatido() {
+  clearInterval(latido);
+  latido = null;
+}
+
+function iniciarLatido(callId) {
+  detenerLatido();
+  const url = `${contenedor.dataset.latido}?call_id=${encodeURIComponent(callId)}`;
+  latido = setInterval(() => revisarLatido(url), LATIDO_MS);
+}
+
+async function revisarLatido(url) {
+  let respuesta;
+  try {
+    respuesta = await fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } });
+  } catch {
+    return; // Sin conexion: se vuelve a intentar en el siguiente latido.
+  }
+  const tipo = respuesta.headers.get("Content-Type") || "";
+  if (!tipo.includes("application/json")) {
+    // La sesion se cerro o debe cambiar la contrasena: el servidor redirigio
+    // al login o al perfil. La ventana va alli y pagehide corta la llamada.
+    detenerLatido();
+    window.location.assign(respuesta.url);
+    return;
+  }
+  const datos = await respuesta.json();
+  if (!datos.vigente && latido !== null) {
+    fallar(datos.mensaje || "La llamada ya no esta autorizada.");
+  }
+}
+
 async function iniciar() {
   mostrar("conectando");
   try {
@@ -131,7 +174,9 @@ async function iniciar() {
     const actual = new RetellWebClient();
     cliente = actual;
     actual.on("call_started", () => {
-      if (cliente === actual) mostrar("escuchando");
+      if (cliente !== actual) return;
+      mostrar("escuchando");
+      iniciarLatido(llamada.call_id);
     });
     actual.on("call_ended", () => {
       if (cliente !== actual) return;

@@ -9,10 +9,17 @@ la misma ruta, /api/asistente/<espacio>/<funcion>, y por un unico
   2. verifica la firma X-Retell-Signature sobre el cuerpo crudo, que prueba
      que la peticion viene de Retell (401 si falta o no es valida);
   3. identifica al usuario por el `call.call_id` del cuerpo en
-     `sesiones_asistente` (403 si no existe, vencio o el usuario fue
-     desactivado o cambio de rol);
+     `sesiones_asistente` (403 si no existe, vencio, el usuario fue
+     desactivado o cambio de rol, su sesion web ya no es la vigente, su login
+     esta bloqueado por intentos o debe cambiar su contrasena; ver
+     `app.services.asistente.motivo_rechazo`, cuyo texto va en `mensaje`);
   4. comprueba que el rol de la sesion este entre los que la funcion declara
-     (403 si no: una sesion de un rol no puede llamar funciones de otro).
+     (403 si no: una sesion de un rol no puede llamar funciones de otro);
+  5. exige el permiso de la pantalla equivalente (app/permisos.py), con el
+     mismo `Usuario.puede` de la pantalla.
+
+Cada peticion valida cuenta como actividad de la sesion web que abrio la
+llamada: hablar con Gaby no la cierra por inactividad.
 
 Toda accion confirmada queda en la auditoria (con origen "voz"), haya salido
 bien o no: `ejecutar` la registra despues de la funcion, en su propio commit.
@@ -37,7 +44,8 @@ from flask import Blueprint, g, jsonify, request
 
 from app.extensions import db
 from app.models import RESULTADO_ERROR, RESULTADO_EXITO, VIGENCIA_CONFIRMACION, SesionAsistente
-from app.services.asistente import firma_valida, sesion_vigente
+from app.services import sesiones
+from app.services.asistente import MOTIVO_VENCIDA, firma_valida, validar_llamada
 from app.services.auditoria import registrar_auditoria
 from app.services.notificaciones import ORIGEN_VOZ
 from app.permisos import nombre as nombre_permiso, permiso_voz
@@ -104,6 +112,11 @@ class FuncionAsistente:
 FUNCIONES = {}
 
 
+def operacion_pedida(argumentos):
+    """La operacion pedida, como la compara el registro ("Crear " -> "crear")."""
+    return str(argumentos.get("operacion") or "").strip().lower()
+
+
 def funcion_asistente(espacio, nombre, *, roles, descripcion, parametros=None,
                       requeridos=(), accion=False, entidad=None, avisar=True):
     """Registra una custom function.
@@ -160,8 +173,7 @@ def funcion_agrupada(espacio, nombre, *, roles, descripcion, entidad, parametros
 
     def despachar():
         funcion = FUNCIONES[(espacio, nombre)]
-        elegida = str(g.argumentos.get("operacion") or "").strip().lower()
-        operacion = funcion.operaciones.get(elegida)
+        operacion = funcion.operaciones.get(operacion_pedida(g.argumentos))
         if operacion is None:
             from app.services.busqueda_voz import enumerar
             return responder(f"¿Qué quieres hacer? Con {nombre} puedo: "
@@ -214,9 +226,9 @@ def autenticar_llamada():
         datos = {}
     llamada = datos.get("call") if isinstance(datos.get("call"), dict) else {}
 
-    sesion = sesion_vigente(llamada.get("call_id"))
+    sesion, motivo = validar_llamada(llamada.get("call_id"))
     if sesion is None:
-        return jsonify(error="Llamada no autorizada."), 403
+        return jsonify(error="Llamada no autorizada.", mensaje=motivo or MOTIVO_VENCIDA), 403
     if sesion.rol not in funcion.roles:
         return jsonify(error="Funcion no permitida para este rol."), 403
 
@@ -225,10 +237,14 @@ def autenticar_llamada():
     g.funcion = funcion
     g.origen_accion = ORIGEN_VOZ
     g.argumentos = datos.get("args") if isinstance(datos.get("args"), dict) else {}
+    sesiones.registrar_actividad(g.usuario)
 
     # Ademas del rol del agente, el permiso de la pantalla equivalente: quitarle
     # un permiso a un rol o a una cuenta tambien lo quita por voz (app/permisos.py).
-    operacion = funcion.operaciones.get(g.argumentos.get("operacion")) if funcion.operaciones else None
+    # La operacion se lee como en `despachar`; una desconocida exige el permiso
+    # de cambiar, el mas estricto.
+    operacion = (funcion.operaciones.get(operacion_pedida(g.argumentos))
+                 if funcion.operaciones else None)
     exigido = permiso_voz(funcion.espacio, funcion.nombre,
                           operacion.modifica if operacion is not None else funcion.accion)
     if exigido and not g.usuario.puede(exigido):
@@ -363,5 +379,5 @@ def exigir_confirmacion(resumen):
 
 # Registro de las funciones de cada rol (importan los decoradores de arriba).
 from app.controllers.asistente_api import (  # noqa: E402,F401
-    admin, administracion, cliente, conductor, gestor, maestros,
+    accesos, admin, administracion, cliente, conductor, gestor, maestros,
 )

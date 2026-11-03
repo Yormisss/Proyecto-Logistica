@@ -126,7 +126,7 @@
 {# Asistente de voz (Retell AI). Solo se muestra si el rol tiene agente configurado. #}
 <div class="asistente" id="asistente"
      data-url="{{ url_for('asistente.llamada') }}" data-csrf="{{ csrf_token() }}"
-     data-login="{{ url_for('auth.login') }}">
+     data-latido="{{ url_for('asistente.latido') }}" data-login="{{ url_for('auth.login') }}">
   <p class="asistente-estado" id="asistente-estado" role="status" aria-live="polite" hidden></p>
   <button type="button" class="asistente-boton" id="asistente-boton"
           aria-label="Hablar con el asistente de voz" aria-pressed="false">

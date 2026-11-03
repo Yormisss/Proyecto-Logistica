@@ -14,6 +14,7 @@ from app.controllers.seguridad import (
 from app.extensions import db
 from app.models import Usuario
 from app.services import acceso, recuperacion, sesiones
+from app.services.asistente import huella_sesion, trasladar_llamadas
 from app.services.auditoria import registrar_auditoria
 from app.services.configuracion import minutos_inactividad, texto_minutos
 
@@ -99,7 +100,7 @@ def cambiar_contrasena_propia(usuario, actual, nueva):
 
     El cambio incrementa la version de la credencial y cierra todas las
     sesiones; la que hizo el cambio se renueva para no expulsar a quien acaba
-    de cambiarla.
+    de cambiarla, y su llamada de voz en curso, si tiene una, la sigue.
     """
     error = _verificar_actual(usuario, actual)
     if error:
@@ -107,7 +108,9 @@ def cambiar_contrasena_propia(usuario, actual, nueva):
     if usuario.verificar_contrasena(nueva):
         return "La nueva contrasena debe ser distinta de la actual."
 
+    huella_anterior = huella_sesion(usuario)
     usuario.establecer_contrasena(nueva)
+    trasladar_llamadas(usuario, huella_anterior)
     db.session.commit()
     login_user(usuario)
     return None
