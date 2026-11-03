@@ -16,7 +16,7 @@ Flexible Server**. Cada push a `main` en **Azure Repos** dispara el pipeline de
  │  4. desplegar.ps1             │                 │ Container App "rutalytics"   │◀── usuarios (HTTPS)
  └───────────────────────────────┘                 │  gunicorn + Flask (puerto 8000)│◀── Retell (funciones de Gaby)
         ▲ git push                                 │ Job "rutalytics-resumen"     │──▶ Make (webhooks)
- Azure Repos (fliyt/Rutalytics) ◀── espejo ── GitLab└──────────────┬───────────────┘
+ Azure Repos (fliyt/Rutalytics) ◀── espejo ── GitLab (Yormisss/fliyt)└──────────────┬───────────────┘
                                                                   │ TLS
                                                    ┌──────────────▼───────────────┐
                                                    │ MySQL Flexible Server B1ms   │
@@ -61,6 +61,19 @@ Flexible Server**. Cada push a `main` en **Azure Repos** dispara el pipeline de
 6. **Retell**: en el `.env` del PC ponga `URL_PUBLICA=<URL de Azure>` y corra
    `.venv\Scripts\flask.exe --app run sincronizar-asistentes`. Ya no hace falta ngrok.
 
+## Control de versiones: GitLab y Azure Repos
+
+El repositorio principal es **GitLab** (`https://gitlab.com/Yormisss/fliyt`). GitLab copia
+cada push a **Azure Repos** con un espejo (*Settings → Repository → Mirroring repositories*,
+dirección *Push*), y el push que llega a `main` en Azure Repos dispara el pipeline. Azure
+Pipelines no tiene disparador nativo para GitLab, por eso el espejo. GitHub
+(`Yormisss/Proyecto-Logistica`) queda como copia del equipo.
+
+```
+git push gitlab main        (GitLab -> espejo -> Azure Repos -> pipeline)
+git push origin main        (opcional: copia en GitHub)
+```
+
 ## Variables
 
 Las de configuración van como variables normales del grupo; las marcadas 🔒 como
@@ -79,7 +92,7 @@ Las de configuración van como variables normales del grupo; las marcadas 🔒 c
 | Sección | Dónde se ve |
 |---|---|
 | 1 y 8. Planeación, Boards | *Boards → Backlogs / Sprints*: Features RF1–RNF5, PBIs con criterios de aceptación, Bugs corregidos, 4 sprints |
-| 7. Control de versiones | Azure Repos (y espejo en GitLab), ramas `integracion-juan` y `despliegue-azure`, commits por bloque |
+| 7. Control de versiones | GitLab (principal) con espejo a Azure Repos; ramas `main`, `integracion-juan` y `despliegue-azure`; commits por bloque |
 | 8. CI/CD | *Pipelines → Rutalytics CI-CD*: 4 etapas; entorno `produccion` con historial de despliegues |
 | 9. Pruebas funcionales | Artefacto `evidencia-pruebas` de cada ejecución (29 suites, ~2500 verificaciones) |
 | 11. SAST / SCA | Artefacto `evidencia-seguridad`: `sast_bandit.txt/.json`, `sca_pip_audit.txt` |
