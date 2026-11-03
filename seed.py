@@ -72,8 +72,24 @@ SEDE_ADICIONAL = ("Supermercado El Portal", "Sede Toberin", "Av. Cra 19 #166-30"
 # Cliente que recibe el correo de SEMILLA_CORREO_CLIENTE (demo de avisos por Make).
 CLIENTE_CORREO_DEMO = "Supermercado El Portal"
 
+# Correo de avisos de las cuentas demo, desde el .env (nunca en el codigo).
+# Sin la variable, la cuenta recibe los avisos en su correo de inicio de sesion.
+CORREOS_AVISOS_DEMO = {
+    "admin@sgds.com": "SEMILLA_CORREO_ADMIN",
+    "despachador@sgds.com": "SEMILLA_CORREO_GESTOR",
+    "conductor1@sgds.com": "SEMILLA_CORREO_CONDUCTOR",
+}
+
 
 def sembrar_datos():
+    """Siembra la demostracion sin enviar avisos a Make, aunque MAKE_WEBHOOK_URL este definido."""
+    from app.services.notificaciones import sin_avisos
+
+    with sin_avisos():
+        return _sembrar_datos()
+
+
+def _sembrar_datos():
     db.create_all()
 
     if db.session.query(Usuario).count():
@@ -86,6 +102,7 @@ def sembrar_datos():
         usuario = Usuario(nombre=nombre, correo=correo, rol=rol, activo=True,
                           documento=documento, telefono=telefono)
         usuario.establecer_contrasena(clave)
+        usuario.correo_avisos = os.getenv(CORREOS_AVISOS_DEMO.get(correo, ""), "").strip().lower() or None
         db.session.add(usuario)
         usuarios[correo] = usuario
     db.session.flush()

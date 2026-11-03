@@ -7,7 +7,7 @@ Al importarse, antes de que la suite cargue la aplicacion:
   "_pruebas": las suites borran la base y no deben tocar la del .env.
 - Vacia MAKE_WEBHOOK_URL, MAKE_WEBHOOK_CREDENCIALES_URL,
   MAKE_WEBHOOK_RESTABLECIMIENTO_URL, MAKE_WEBHOOK_RESUMEN_URL, RETELL_API_KEY y
-  SEMILLA_CORREO_CLIENTE,
+  los SEMILLA_CORREO_* (cliente, admin, gestor y conductor),
   y fija una CLAVE_CIFRADO propia de las pruebas. load_dotenv no pisa una
   variable ya definida, asi que estas ganan sobre el .env del desarrollador.
 - Bloquea la red: solo se permiten conexiones a la propia maquina (MySQL). Los
@@ -72,6 +72,9 @@ VARIABLES_PRUEBAS = {
     "RETELL_API_KEY": "",
     "CLAVE_CIFRADO": "clave-de-cifrado-solo-para-las-pruebas",
     "SEMILLA_CORREO_CLIENTE": "",
+    "SEMILLA_CORREO_ADMIN": "",
+    "SEMILLA_CORREO_GESTOR": "",
+    "SEMILLA_CORREO_CONDUCTOR": "",
 }
 os.environ.update(VARIABLES_PRUEBAS)
 # Entorno para los subprocesos que lancen las suites (flask, seed.py).
