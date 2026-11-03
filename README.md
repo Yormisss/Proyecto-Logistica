@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS, JS, fuentes e imágenes (logo y favicon en img/)
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2432 verificaciones automatizadas en 27 suites (MySQL)
+├── pruebas/               2480 verificaciones automatizadas en 28 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -65,7 +65,7 @@ cp .env.example .env
 .venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
 .venv/bin/flask --app run migrar-pruebas-entrega # Pruebas de entrega de solo agregar (m007, MySQL)
 .venv/bin/flask --app run migrar-contrasenas  # Columnas de gestión de contraseñas y tabla de intentos de acceso
-.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011), roles con permisos (m012), llamadas de voz atadas a la sesión web (m013) y permiso de enviar el resumen (m014)
+.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011), roles con permisos (m012), llamadas de voz atadas a la sesión web (m013), permiso de enviar el resumen (m014) y correo de avisos (m015)
 .venv/bin/flask --app run enviar-resumen   # Enviar el resumen del día a Make (para programarlo)
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
@@ -80,6 +80,11 @@ cp .env.example .env
 | Conductor | conductor1@sgds.com | Conductor123* |
 | Conductor | conductor2@sgds.com | Conductor123* |
 | Cliente | cliente@sgds.com | Cliente123* |
+
+Para recibir sus avisos en correos reales, defina en el `.env` `SEMILLA_CORREO_ADMIN`,
+`SEMILLA_CORREO_GESTOR` y `SEMILLA_CORREO_CONDUCTOR` (a `conductor1`): `seed.py` los pone
+como su correo de avisos. Sin ellas, sus avisos van al correo de inicio de sesión
+(`@sgds.com`, que no existe).
 
 Las cuentas sembradas **no** piden cambiar la contraseña al entrar. Las que se crean o
 restablecen después (en pantalla o por voz) sí, porque su contraseña es temporal.
@@ -773,6 +778,7 @@ sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_rete
 | Todos | *Olvidé mi contraseña* y el enlace para restablecerla | Son para quien no puede iniciar sesión, y la llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
 | Gestor y admin | Subir o revisar archivos: importar pedidos desde CSV | Exige elegir un archivo y revisar su contenido en pantalla; no tiene equivalente hablado |
 | Admin | Escribir una contraseña para otra cuenta (*Asignar* en *Contraseñas*) | Las contraseñas nunca se dicen por voz; por voz, *restablecer-contrasena* genera una temporal y la envía al correo |
+| Todos | Cambiar el propio correo de avisos (*Mi perfil*) | Es un dato de la propia cuenta que se cambia en Perfil, como el propio correo; el administrador lo cambia por voz con `usuarios:editar` |
 | Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
 | Admin | Provocar un error en la pantalla de errores | Es una herramienta de diagnóstico de pantalla; por voz solo ensuciaría el registro |
 | Admin | Desbloquear una cuenta bloqueada por intentos | Tampoco existe en pantalla: el bloqueo se levanta solo al minuto. Por voz se consultan los intentos |
@@ -1021,6 +1027,31 @@ solo cambian las variables de entorno.
 Las dos escriben en la hoja de Google Sheets **"SGDS - Bitacora"**. Los dos webhooks usan la
 misma API key, `MAKE_WEBHOOK_KEY`.
 
+### Aviso → destinatario
+
+Cada aviso llega al correo de cada perfil según su rol. Sale **un evento por
+destinatario**, cada uno con su `correo_destino`, así que los escenarios de Make no
+cambian: cada ejecución manda un correo.
+
+| Aviso | Destinatario |
+|---|---|
+| `pedido_estado` | El correo del cliente (pantalla y voz), como siempre |
+| `stock_bajo`, `solicitud_contacto` | Todos los **gestores logísticos** activos |
+| `resumen_diario` | Los **gestores** y los **administradores** activos |
+| `accion_asistente` | Los **administradores** activos |
+| `ruta_asignada` | El **conductor** de la ruta |
+| `credencial_usuario`, `restablecimiento_contrasena` | El propio usuario, en su correo de **inicio de sesión** |
+
+- **Correo de avisos.** Cada cuenta puede tener uno (`usuarios.correo_avisos`): lo fija el
+  administrador al crearla o editarla en *Usuarios* (o por voz, con `usuarios:crear` y
+  `usuarios:editar`) y la propia persona en *Mi perfil*. Si está vacío, los avisos van a
+  su correo de inicio de sesión. Las contraseñas y el enlace de restablecimiento, en
+  cambio, siempre van al de inicio de sesión: es el que prueba que la cuenta es suya.
+- **`CORREO_OPERACIONES` es solo el respaldo**: recibe un aviso interno cuando no hay
+  ninguna cuenta activa de ese rol con correo. Sin él, en ese caso el aviso no sale.
+- Las cuentas inactivas no reciben avisos, y se respetan las reglas de `avisar=False`
+  (el flujo del conductor y las entradas de mercancía no envían `accion_asistente`).
+
 ### Variables
 
 | Variable | Para qué | Si está vacía |
@@ -1030,8 +1061,9 @@ misma API key, `MAKE_WEBHOOK_KEY`.
 | `MAKE_WEBHOOK_RESUMEN_URL` | Webhook de **Rutalytics Privado**: `resumen_diario` | El resumen no se envía, y el botón, Gaby y el comando dicen por qué |
 | `MAKE_WEBHOOK_CREDENCIALES_URL` | Webhook de **Rutalytics Privado**: `credencial_usuario` | No se envían contraseñas, y crear o restablecer cuentas **por voz** se rechaza en el resumen (en pantalla funciona igual) |
 | `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` | Webhook de **Rutalytics Privado**: `restablecimiento_contrasena` (requiere `URL_PUBLICA`) | En producción no se ofrece *Olvidé mi contraseña*; en desarrollo el enlace sale en la consola del servidor |
-| `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`) y del resumen diario | No se envían avisos internos ni el resumen |
+| `CORREO_OPERACIONES` | **Respaldo** de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`, `resumen_diario`) cuando no hay ninguna cuenta activa del rol con correo | En ese caso el aviso no sale |
 | `URL_PUBLICA` | Dirección de acceso que lleva `credencial_usuario` (`url_acceso`) y con la que se arma el enlace de restablecimiento | `url_acceso` va vacía y el enlace no se envía |
+| `SEMILLA_CORREO_ADMIN`, `SEMILLA_CORREO_GESTOR`, `SEMILLA_CORREO_CONDUCTOR` | Solo la demo: `seed.py` los pone como correo de avisos de `admin@sgds.com`, `despachador@sgds.com` y `conductor1@sgds.com` | Esas cuentas reciben los avisos en su correo de inicio de sesión |
 | `AUTOMATIZACION_TOKEN` | Token de los endpoints de respaldo `GET /api/automatizacion/resumen-diario` y `/auditoria` (ningún escenario los usa) | Ambos endpoints responden **404** |
 
 Genere el token con `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
@@ -1053,11 +1085,12 @@ cada uno a su variable (el webhook de Rutalytics Privado). Todos usan el mismo m
 | `tipo` | Cuándo | Destinatario | Campos |
 |---|---|---|---|
 | `pedido_estado` | Un pedido pasa a **EN_RUTA, ENTREGADO o FALLIDO** desde cualquier origen (vista móvil, "Iniciar ruta" o asistente de voz), o se **anula** (CANCELADO) | El cliente, en `correo`. Si no tiene correo, no se envía | `codigo`, `estado`, `cliente`, `correo`, `direccion`, `ventana`, `hora`, `fecha_hora`; en FALLIDO (motivo de la prueba de entrega) y en CANCELADO (motivo de la anulación), además `motivo` |
-| `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora`, `fecha_hora` |
-| `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `fecha_hora`, `correo_destino` |
-| `accion_asistente` | Se agrega a la **auditoría** un registro con correo: una acción confirmada por voz (con su resultado), salvo el flujo del conductor y las entradas de mercancía, o una acción de *Usuarios* o *Configuración* (ver [Auditoría](#auditoría-y-bitácora)) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `id_auditoria`, `usuario`, `rol`, `accion`, `entidad`, `resumen`, `detalle` (texto plano, una línea por dato), `resultado` (`exito` o `error`), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva contraseñas ni tokens** |
+| `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Cada gestor logístico activo, en `correo_destino` | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora`, `fecha_hora` |
+| `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Cada gestor logístico activo, en `correo_destino` | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `fecha_hora`, `correo_destino` |
+| `accion_asistente` | Se agrega a la **auditoría** un registro con correo: una acción confirmada por voz (con su resultado), salvo el flujo del conductor y las entradas de mercancía, o una acción de *Usuarios* o *Configuración* (ver [Auditoría](#auditoría-y-bitácora)) | Cada administrador activo, en `correo_destino` | `id_auditoria`, `usuario`, `rol`, `accion`, `entidad`, `resumen`, `detalle` (texto plano, una línea por dato), `resultado` (`exito` o `error`), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva contraseñas ni tokens** |
+| `ruta_asignada` | Se **crea** una ruta, se le **agrega o quita** una parada, se **recalcula** o se **elimina**, en pantalla o por voz, si su fecha es hoy o futura. Un evento por operación | El conductor de la ruta, en `correo_destino` (su correo de avisos) | `conductor` (nombre), `correo_destino`, `ruta` (código), `fecha` (`DD/MM/AAAA`), `paradas` (las que tiene la ruta después del cambio; 0 si se eliminó), `accion` (`creada`, `actualizada` o `eliminada`), `detalle_ruta` (una frase: *"Se agregó la parada de Tienda La Esquina"*), `hora`, `fecha_hora` |
 | `credencial_usuario` | Se **crea o restablece por voz** una cuenta: la contraseña se genera en el servidor | El propio usuario, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `contrasena`, `debe_cambiar_contrasena` (siempre `true`: es temporal), `indicaciones` (el texto para el correo), `url_acceso` (`URL_PUBLICA`), `creado_por` (nombre y rol), `accion` (`creación` o `restablecimiento`), `hora`, `fecha_hora`, `correo_destino`. Es el **único** lugar por el que viaja la contraseña: no se guarda en la auditoría ni sale en otro evento, y va **solo** a `MAKE_WEBHOOK_CREDENCIALES_URL`. En pantalla la contraseña se sigue mostrando una vez, como antes, y no se envía |
-| `resumen_diario` | Alguien lo pide con **Enviar resumen del día** en el tablero o por voz, o lo dispara el comando programado `enviar-resumen` (ver [Resumen diario](#resumen-diario-lo-envía-la-app)) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | Exactamente los de `GET /api/automatizacion/resumen-diario`, en la raíz: `fecha`, `fecha_hora`, `correo_destino`, `kpis` (anidado), `productos_bajo_minimo`, `fallidos_para_reprogramar`, `resumen_html`. Va **solo** a `MAKE_WEBHOOK_RESUMEN_URL` |
+| `resumen_diario` | Alguien lo pide con **Enviar resumen del día** en el tablero o por voz, o lo dispara el comando programado `enviar-resumen` (ver [Resumen diario](#resumen-diario-lo-envía-la-app)) | Cada gestor y administrador activo, en `correo_destino` | Exactamente los de `GET /api/automatizacion/resumen-diario`, en la raíz: `fecha`, `fecha_hora`, `correo_destino`, `kpis` (anidado), `productos_bajo_minimo`, `fallidos_para_reprogramar`, `resumen_html`. Va **solo** a `MAKE_WEBHOOK_RESUMEN_URL` |
 | `restablecimiento_contrasena` | Alguien pide *Olvidé mi contraseña* para una cuenta activa (como máximo uno cada 5 minutos) | La propia persona, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `enlace` (armado con `URL_PUBLICA`, de un solo uso), `vence_en_minutos` (30), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva la contraseña**, ni la actual ni una nueva: solo el enlace para definirla. Va **solo** a `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` y no se guarda en la auditoría |
 
 **Todo evento lleva además quién originó la acción:**
@@ -1185,6 +1218,25 @@ movimiento posterior:
 
 ```json
 {
+  "tipo": "ruta_asignada",
+  "conductor": "Andres Molina",
+  "correo_destino": "andres@ejemplo.com",
+  "ruta": "RUT-20261103-01",
+  "fecha": "03/11/2026",
+  "paradas": 3,
+  "accion": "actualizada",
+  "detalle_ruta": "Se agregó la parada de Tienda La Esquina",
+  "hora": "2026-11-03 09:12",
+  "fecha_hora": "2026-11-03T09:12:40-05:00",
+  "realizado_por": "Carlos Rueda",
+  "rol_realizado_por": "Gestor logístico",
+  "origen": "voz",
+  "realizado_por_publico": "Gestor logístico"
+}
+```
+
+```json
+{
   "tipo": "restablecimiento_contrasena",
   "nombre": "Andres Molina",
   "correo": "conductor1@sgds.com",
@@ -1218,6 +1270,8 @@ movimiento posterior:
    - `tipo` = `accion_asistente` → correo para `{{correo_destino}}` con
      `{{realizado_por}}`, `{{rol}}`, `{{origen}}`, `{{resumen}}`, `{{detalle}}` y
      `{{resultado}}`.
+   - `tipo` = `ruta_asignada` → correo para `{{correo_destino}}` (el conductor) con
+     `{{ruta}}`, `{{fecha}}`, `{{paradas}}`, `{{accion}}` y `{{detalle_ruta}}`.
    - En los correos a clientes use `{{realizado_por_publico}}`, nunca `{{realizado_por}}`.
 4. Al final de cada ruta, **Google Sheets → Add a Row** en la pestaña *Notificaciones* de
    la hoja "SGDS - Bitacora": `fecha_hora`, `tipo`, el destinatario (`correo` o
@@ -1353,6 +1407,7 @@ powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps
 |---|---|---|
 | `estructura` | SGDS | Un aviso de tipo `estructura` con todos los campos de la operación |
 | `avisos` | SGDS | `pedido_estado`, `stock_bajo`, `solicitud_contacto` y `accion_asistente` |
+| `ruta` | SGDS | Un `ruta_asignada` de ejemplo (los campos de `estructura` también los traen) |
 | `estructura-privado` | Rutalytics Privado | Un aviso de tipo `estructura` con todos los campos de `resumen_diario`, `credencial_usuario` y `restablecimiento_contrasena` (con `kpis` anidado y un elemento en cada lista), a `MAKE_WEBHOOK_RESUMEN_URL` |
 | `resumen` | Rutalytics Privado | Un `resumen_diario` de ejemplo, a `MAKE_WEBHOOK_RESUMEN_URL` |
 | `credencial` | Rutalytics Privado | `credencial_usuario`, a `MAKE_WEBHOOK_CREDENCIALES_URL` |
@@ -1360,8 +1415,9 @@ powershell -ExecutionPolicy Bypass -File .\ejemplos\make\enviar_ejemplos_make.ps
 
 ### Demo con los datos sembrados
 
-Defina `MAKE_WEBHOOK_URL`, `CORREO_OPERACIONES` y `SEMILLA_CORREO_CLIENTE` en `.env`
-antes de sembrar. `seed.py` asigna ese correo a **Supermercado El Portal**, cuyo pedido
+Defina `MAKE_WEBHOOK_URL`, `SEMILLA_CORREO_CLIENTE` y, para recibir los avisos internos y
+la ruta en correos reales, `SEMILLA_CORREO_ADMIN`, `SEMILLA_CORREO_GESTOR` y
+`SEMILLA_CORREO_CONDUCTOR` en `.env` antes de sembrar. `seed.py` asigna ese correo a **Supermercado El Portal**, cuyo pedido
 de hoy queda **asignado** en la ruta de `conductor1@sgds.com`. Los demás clientes
 sembrados no tienen correo, así que no reciben avisos.
 
@@ -1504,7 +1560,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2432 verificaciones en 27 suites contra MySQL 8.0, todas pasando, en unos cinco
+**2480 verificaciones en 28 suites contra MySQL 8.0, todas pasando, en unos cinco
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1539,7 +1595,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 92 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 383 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 385 |
 | `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración (incluido el tiempo de inactividad) y bitácora (admin); resúmenes, rechazos y auditoría | 104 |
 | `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba, con la observación dictada | 82 |
 | `prueba_19_contrasenas.py` | RF1/RNF5 · apartado de contraseñas: acceso solo del admin, sin hash ni contraseña en la página, asignar, generar temporal, exigir cambio (uno y en bloque), cambio obligatorio en el perfil, cierre de sesiones abiertas, hash fuera de política, reglas por rol (cliente y otros administradores fuera de su alcance, la propia con la actual), migración `m008` | 153 |
@@ -1551,17 +1607,17 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_25_roles_permisos.py` | RF1/RNF5 · roles y permisos: reparto por defecto igual a los roles fijos, un rol nuevo asignado a dos cuentas con dos permisos propios distintos cada una, dos roles en una cuenta con la totalidad de sus permisos invertida, menú y botones según permisos, editar un rol del sistema (también por voz), reglas contra la escalada de privilegios, eliminar un rol, auditoría, migración `m012` | 59 |
 | `prueba_26_voz_seguridad.py` | RF4/RNF5 · voz y seguridad: cada operación de voz con el permiso de su pantalla; roles, permisos de una cuenta, exigencia de cambio de contraseña, intentos de acceso y errores por voz (quitar un permiso lo quita por voz); la llamada atada a la sesión web (otro navegador, contraseña propia o restablecida, bloqueo por intentos, cuenta desactivada) y no cortada por inactividad (voz y latido); búsqueda por documento, teléfono y NIT; avisos y auditoría sin textos cifrados ni contraseñas; exclusiones con su motivo | 91 |
 | `prueba_27_resumen_diario.py` | RF6 · resumen diario enviado por la app: el evento `resumen_diario` con los mismos campos que el GET de respaldo, solo al webhook privado con la API key; sin webhook o sin correo de operaciones no sale y se dice; quién lo originó (pantalla, voz, sistema); botón del tablero con su permiso y CSRF; operación de voz con confirmación; comando `enviar-resumen`; migración `m014` | 41 |
+| `prueba_28_avisos_por_rol.py` | RF4 · avisos al correo de cada perfil: correo de avisos en *Usuarios*, *Mi perfil* y por voz (auditoría, validación, "ninguno"); `stock_bajo` y `solicitud_contacto` a los gestores, `accion_asistente` a los administradores, `resumen_diario` a ambos, credenciales al correo de inicio de sesión; inactivos y respaldo `CORREO_OPERACIONES`; `ruta_asignada` en cada operación, por voz y en pantalla, nunca de una ruta pasada; la siembra sin avisos y con los correos de avisos del `.env` | 46 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
 encabezados, y la de sincronización usa un Retell simulado que valida cada llamada contra
 la firma real del SDK. La de rutas en pantalla usa un OSRM simulado.
 
-**`seed.py` corrido a mano sí avisa a Make.** Fuera de las pruebas, sembrar con
-`MAKE_WEBHOOK_URL` definido en el `.env` envía los avisos que generan los datos de
-demostración al escenario real. Para sembrar sin avisos, comente esa línea del `.env`
-antes de correr `seed.py` (en PowerShell, `$env:MAKE_WEBHOOK_URL = ""` no sirve: borra la
-variable y el `.env` vuelve a aportarla).
+**`seed.py` no avisa a Make.** Aunque `MAKE_WEBHOOK_URL` esté definido en el `.env`, la
+siembra corre dentro de `notificaciones.sin_avisos()` y no envía los avisos que generan
+los datos de demostración. Los avisos empiezan con lo que se haga después en la
+aplicación.
 
 ## Medición del RNF2
 
@@ -1681,7 +1737,8 @@ su índice único y quita el índice único viejo sobre `documento`. Defina ante
 corra la migración con la misma que usará la aplicación: es la única que lee esos datos
 (haga una copia de la base antes). Luego crea las tablas de roles y permisos con los
 cuatro roles del sistema y su reparto de siempre (m012), y agrega a `sesiones_asistente`
-la columna `huella_sesion` que ata cada llamada de voz a su sesión web (m013). Es
+la columna `huella_sesion` que ata cada llamada de voz a su sesión web (m013), da al
+gestor el permiso de enviar el resumen (m014) y agrega `usuarios.correo_avisos` (m015). Es
 idempotente. **Ejecútela antes de levantar esta
 versión sobre una base existente**: sin las columnas nuevas, ninguna página carga.
 
