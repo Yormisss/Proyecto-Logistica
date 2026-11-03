@@ -33,7 +33,7 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   └── static/            CSS, JS, fuentes e imágenes (logo y favicon en img/)
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               2230 verificaciones automatizadas en 25 suites (MySQL)
+├── pruebas/               2384 verificaciones automatizadas en 26 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -65,7 +65,7 @@ cp .env.example .env
 .venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
 .venv/bin/flask --app run migrar-pruebas-entrega # Pruebas de entrega de solo agregar (m007, MySQL)
 .venv/bin/flask --app run migrar-contrasenas  # Columnas de gestión de contraseñas y tabla de intentos de acceso
-.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011) y roles con permisos (m012)
+.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011), roles con permisos (m012) y llamadas de voz atadas a la sesión web (m013)
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -79,6 +79,9 @@ cp .env.example .env
 | Conductor | conductor1@sgds.com | Conductor123* |
 | Conductor | conductor2@sgds.com | Conductor123* |
 | Cliente | cliente@sgds.com | Cliente123* |
+
+Las cuentas sembradas **no** piden cambiar la contraseña al entrar. Las que se crean o
+restablecen después (en pantalla o por voz) sí, porque su contraseña es temporal.
 
 ## Trazabilidad de requisitos
 
@@ -192,10 +195,16 @@ Los permisos de una cuenta (`app/services/permisos.py`) se calculan así:
 - **El menú y los botones siguen a los permisos.** Quien solo puede *ver* pedidos no ve
   *Nuevo pedido* ni *Importar CSV*. Si la cuenta no puede abrir la página de su rol (por
   ejemplo, se le negó el tablero), entra a la primera que sí pueda.
-- **La voz también los respeta.** Cada función del asistente exige el permiso de su
-  pantalla (`PERMISOS_VOZ`): quitarle *Gestionar inventario* al gestor también se lo quita
-  por voz. Los permisos ganados con roles adicionales no amplían el asistente, que sigue
-  siendo uno por tipo de cuenta.
+- **La voz también los respeta.** Cada función del asistente exige el mismo permiso que
+  su pantalla (`PERMISOS_VOZ`), con el mismo `Usuario.puede`: quitarle *Gestionar
+  inventario* al gestor, a su rol o a su cuenta, también se lo quita por voz, y la suite 26
+  verifica que cada operación de voz pida exactamente el permiso de su ruta. Los permisos
+  ganados con roles adicionales no amplían el asistente, que sigue siendo uno por tipo de
+  cuenta.
+- **Y se administran por voz.** El administrador puede consultar, crear, editar y
+  eliminar roles, agregarles o quitarles un permiso, y asignar o quitar roles adicionales
+  y ajustes de una cuenta, con las mismas reglas de esta sección (`admin/roles` y
+  `admin/permisos`).
 - **Contra la escalada de privilegios.** Gestionar usuarios, contraseñas y roles es **solo
   de los administradores**: ningún rol ni ajuste lo da. Quien pudiera hacerlo podría darse
   a sí mismo cualquier otro permiso o el rol de administrador. Tampoco se reparten la ruta
@@ -282,8 +291,15 @@ rechaza repetir la contraseña actual.
 
 Cada cambio de contraseña **cierra las sesiones abiertas** de esa cuenta: el identificador de
 sesión de Flask-Login incluye `version_credencial`, que aumenta con cada cambio. Quien la
-cambia desde su perfil conserva su sesión actual, y cualquier copia de su cookie deja de
-servir.
+cambia desde su perfil conserva su sesión actual (y su llamada de voz en curso), y
+cualquier copia de su cookie deja de servir.
+
+**Por voz** (`admin/contrasenas` y `admin/usuarios`), sin decir nunca una contraseña: se
+consulta el estado de cada cuenta y los intentos fallidos, se exige o retira el cambio
+(una cuenta o todas las de gestores y conductores) y se restablece la contraseña. La de
+una cuenta creada o restablecida por voz es **temporal**: Gaby lo dice en el resumen,
+`credencial_usuario` lo indica (`debe_cambiar_contrasena: true`) y al entrar la persona
+solo puede ir a cambiarla. *Asignar* una contraseña concreta queda solo en pantalla.
 
 ### Correo electrónico: solo caracteres permitidos
 
@@ -333,7 +349,10 @@ Aplica a los cuatro roles, porque todos entran por el mismo login.
   no tiene clave ajena a `usuarios` y aparece suelta en el diagrama EER.
 - **La contraseña actual que pide *Mi perfil* cuenta para el mismo bloqueo.** Si no, una
   sesión abierta permitiría adivinarla sin límite.
-- El bloqueo afecta al inicio de sesión, no a las sesiones ya abiertas.
+- El bloqueo afecta al inicio de sesión, no a las sesiones de pantalla ya abiertas. **Sí
+  detiene una llamada de voz abierta**: mientras dure, sus funciones responden que la
+  cuenta está bloqueada y el navegador cuelga. Por voz, los intentos solo se consultan;
+  el bloqueo se levanta solo al minuto.
 - En **Contraseñas**, la columna *Intentos fallidos* muestra los fallos acumulados de
   cada cuenta y, si está bloqueada, cuánto le falta.
 - El límite y la espera se ajustan en `config.py` (`LOGIN_MAX_INTENTOS`,
@@ -355,6 +374,12 @@ cookie de *Mantener sesión iniciada*, conservan el token anterior y dejan de se
 **Cerrar sesión borra el token**: ninguna copia de la cookie sigue abierta, ni en otra
 pestaña ni en otro navegador. La lógica está en `app/services/sesiones.py`.
 
+**Una llamada de voz vale lo mismo que la sesión que la abrió.** `sesiones_asistente`
+guarda una huella (SHA-256) del identificador de esa sesión (`huella_sesion`, m013). Si la
+cuenta entra en otro navegador, cierra sesión o le restablecen la contraseña, la llamada
+deja de autorizar funciones, igual que la pestaña. Cambiar la propia contraseña en la
+misma ventana no la corta: la llamada sigue a la sesión renovada.
+
 ### Cierre de sesión por inactividad
 
 Una sesión sin peticiones durante el tiempo configurado se cierra. El administrador lo
@@ -368,6 +393,11 @@ queda en la bitácora. Aplica desde la siguiente petición de cada sesión abier
   `/auth/sesion`, que no cuenta como actividad, porque otra pestaña pudo mantener viva la
   sesión. El cierre real lo hace el servidor (`auth.vigilar_sesion`), así que desactivar
   JavaScript no lo evita.
+- **Hablar con Gaby es actividad.** Cada función de voz renueva la actividad de la sesión
+  web, y durante la llamada el navegador consulta `/asistente/latido` cada 20 segundos
+  (menos que el mínimo de 1 minuto). Así una conversación larga sin tocar la pantalla no
+  cierra la sesión ni lleva la ventana al login, que cortaría la llamada. Si el latido
+  responde que la llamada ya no está autorizada, el navegador cuelga y muestra el motivo.
 
 ### Cambiar el correo desde el perfil
 
@@ -428,10 +458,16 @@ comprobarlo.
   pantalla y por voz, quedan enmascarados (`******4567`), y el resumen que lee la voz dice
   *"uno terminado en 4567"*. Los datos de los clientes son de empresas (NIT, teléfono de
   contacto) y siguen visibles en su auditoría.
-- **Clave.** Las claves de cifrado y del índice se derivan con HKDF de `CLAVE_CIFRADO` o,
-  si no se define, de `SECRET_KEY`. **No la cambie una vez cifrados los datos**: con otra
-  clave no se pueden leer, y la aplicación lo dice en el error. En Render, `render.yaml`
-  la genera una sola vez.
+- **Clave.** Las claves de cifrado y del índice se derivan con HKDF de `CLAVE_CIFRADO`.
+  **Es obligatoria**: en producción la aplicación no arranca sin ella, y en desarrollo, si
+  falta, se deriva de `SECRET_KEY` (cambiar esta tendría el mismo efecto). **No la cambie
+  ni la pierda una vez cifrados los datos**: con otra clave los documentos y teléfonos ya
+  guardados no se pueden leer, y la aplicación lo dice en el error. Guarde una copia fuera
+  del repositorio. En Render, `render.yaml` la genera una sola vez.
+- **Por voz, con los valores descifrados.** Gaby encuentra una cuenta por su documento
+  (por el índice ciego, como la pantalla) o su teléfono (comparando el valor ya descifrado),
+  y lee solo sus últimos cuatro dígitos. Ningún texto cifrado llega a la auditoría: si uno
+  apareciera en un detalle o un resumen, se reemplaza por *"(no se registra)"*.
 - El correo **no se cifra**: es el usuario con el que se inicia sesión, y el login, la
   unicidad y la búsqueda dependen de él.
 
@@ -660,13 +696,15 @@ aplicación funciona igual.
 Todo lo que un rol hace en pantalla se puede hacer por voz, salvo las exclusiones de la
 tabla siguiente. Las acciones de una entidad se agrupan en una sola función con el
 parámetro `operacion`; **(M)** marca las operaciones que modifican datos (piden
-confirmación y quedan en la auditoría).
+confirmación y quedan en la auditoría). En total son **41 funciones con 93 operaciones**
+(antes de integrar la seguridad, 37 con 74): conductor 6 funciones (8 operaciones), gestor
+19 (44), administrador 27 (77; antes 23 con 58) y cliente 8 (8).
 
 | Rol | Funciones | Total |
 |---|---|---|
 | **Conductor** | Consultas: `mi-ruta`, `siguiente-parada`, `detalle-parada`, `mi-historial` (últimas 5 rutas). `iniciar-ruta` (M). `parada`: `en-camino` (M, también reintenta una fallida), `fallo` (M, con el catálogo o "Otro"), `entregar` (M, con nombre y documento de quien recibe); `entregar` y `fallo` aceptan una observación dictada | 6 |
 | **Gestor logístico** | Consultas: `resumen-dia`, `pendientes-sin-ruta`, `avance-rutas`, `buscar-pedido`, `stock-producto`, `productos-bajo-minimo`, `fallidos-hoy`, `solicitudes-contacto-pendientes`. Analítica, con los periodos del panel: `tiempo-promedio-entrega`, `cumplimiento-ventana`, `productividad-conductores`, `causas-fallo`. `atender-solicitud` (M). `pedidos`: crear, editar, anular, reintentar (M). `productos`: crear, editar, activar, desactivar, entrada, ajuste (M). `rutas`: consultar, crear, agregar-parada, quitar-parada, recalcular, eliminar (M salvo consultar). `clientes` y `sedes`: consultar, crear, editar, activar, desactivar (M salvo consultar). `vehiculos`: consultar, crear, editar, activar, desactivar (M salvo consultar) | 19 |
-| **Administrador** | Todas las del gestor; `resumen-rendimiento` (el panel de rendimiento, solo suyo como en pantalla); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (últimos registros, con filtros por fecha, usuario y entidad) | 23 |
+| **Administrador** | Todas las del gestor; `resumen-rendimiento` (el panel de rendimiento, solo suyo como en pantalla); `usuarios`: consultar, crear, editar, activar, desactivar, restablecer-contrasena (M salvo consultar); `configuracion`: consultar, editar-centro, editar-inactividad, agregar-motivo, renombrar-motivo, activar-motivo, desactivar-motivo (M salvo consultar); `bitacora` (últimos registros, con filtros por fecha, usuario y entidad); `roles`: consultar, crear, editar, agregar-permiso, quitar-permiso, eliminar (M salvo consultar); `permisos` de una cuenta: consultar, asignar-rol, quitar-rol, conceder, denegar, quitar-ajuste (M salvo consultar); `contrasenas`: consultar, intentos, exigir-cambio, quitar-exigencia, exigir-cambio-masivo (M salvo consultar e intentos); `errores` (los recientes o uno por su número) | 27 |
 | **Cliente** | Consultas: `pedidos-en-curso`, `pedidos-recientes`, `estado-pedido`, `ventana-entrega`, `motivo-fallo`, `mis-sedes`. Acciones: `cancelar-pedido` (M, solo PENDIENTE), `solicitar-contacto` (M, una pendiente a la vez) | 8 |
 
 Reglas que el servidor aplica igual que la pantalla, porque usa los mismos servicios
@@ -688,10 +726,17 @@ Reglas que el servidor aplica igual que la pantalla, porque usa los mismos servi
   código de pedido no cambian; el correo de inicio de sesión solo lo cambia un
   administrador en pantalla.
 - **Usuarios.** Las contraseñas nunca se dicen: al crear o restablecer, el servidor
-  genera una y la envía solo en `credencial_usuario`, por su propio webhook, al correo
-  del usuario. Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, esas dos operaciones se rechazan ya en
-  el resumen. El resumen de editar lee las consecuencias (un vehículo que queda sin
+  genera una **temporal** y la envía solo en `credencial_usuario`, por su propio webhook,
+  al correo del usuario; el resumen y la respuesta de Gaby avisan que deberá cambiarla al
+  iniciar sesión. Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, esas dos operaciones se rechazan ya
+  en el resumen. El resumen de editar lee las consecuencias (un vehículo que queda sin
   conductor, un cliente que pierde el portal); ver [Salvaguardas](#salvaguardas).
+- **Roles, permisos y contraseñas.** Las reglas de [Roles y permisos](#roles-y-permisos) y
+  de [Contraseñas](#contraseñas), con los servicios de la pantalla (`permisos`,
+  `usuarios.cambiar_exigencia`): gestionar usuarios, contraseñas y roles no se reparte;
+  *Administrador* y *Cliente* no se editan; un administrador o un cliente no llevan
+  ajustes, y su contraseña no la exige otro. Los permisos se nombran como en pantalla
+  (*"ver pedidos"*, *"gestionar inventario"*).
 - **Entregas.** El conductor confirma una entrega por voz solo con el nombre y el
   documento de quien recibe; descuenta el inventario igual que la pantalla. La llamada
   no envía la ubicación del teléfono, así que la prueba de la entrega o del fallo queda
@@ -718,13 +763,15 @@ sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_rete
 
 | Rol | Excluido | Por qué |
 |---|---|---|
-| Todos | Iniciar y cerrar sesión, cambiar la propia contraseña, el botón que abre la llamada | La llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
-| Todos | Cambiar el propio correo desde *Mi perfil* | Pide la contraseña actual, que nunca se dice por voz |
-| Todos | *Olvidé mi contraseña* y el enlace para restablecerla | Son para quien no puede iniciar sesión, y la llamada parte de una sesión iniciada |
-| Admin | Crear, editar y eliminar roles; los roles adicionales y ajustes de una cuenta | Se reparten en pantalla, viendo la matriz completa de cada rol y cada cuenta |
-| Gestor y admin | Importar pedidos desde CSV | Exige subir un archivo; no tiene equivalente hablado |
+| Todos | Iniciar y cerrar sesión, el botón que abre la llamada | La llamada parte de una sesión iniciada |
+| Todos | Cambiar la propia contraseña (*Mi perfil*) | Las contraseñas nunca se dicen por voz |
+| Todos | Cambiar el propio correo de inicio de sesión (*Mi perfil*) | Es la identidad de la cuenta, como la contraseña, y pide la contraseña actual |
+| Todos | *Olvidé mi contraseña* y el enlace para restablecerla | Son para quien no puede iniciar sesión, y la llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
+| Gestor y admin | Subir o revisar archivos: importar pedidos desde CSV | Exige elegir un archivo y revisar su contenido en pantalla; no tiene equivalente hablado |
+| Admin | Escribir una contraseña para otra cuenta (*Asignar* en *Contraseñas*) | Las contraseñas nunca se dicen por voz; por voz, *restablecer-contrasena* genera una temporal y la envía al correo |
 | Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
-| Admin | *Provocar un error* en la pantalla de errores | Es una prueba del registro de errores, solo de pantalla |
+| Admin | Provocar un error en la pantalla de errores | Es una herramienta de diagnóstico de pantalla; por voz solo ensuciaría el registro |
+| Admin | Desbloquear una cuenta bloqueada por intentos | Tampoco existe en pantalla: el bloqueo se levanta solo al minuto. Por voz se consultan los intentos |
 | Conductor | La ubicación del teléfono al entregar o registrar un fallo | La llamada no envía la ubicación; la prueba de entrega por voz lo dice en su observación |
 | Cliente | Cancelar un pedido ya programado | Desde ASIGNADO ya hay una ruta planificada: el asistente ofrece solicitar contacto con el gestor |
 | Cliente | Rutas, conductores, stock, datos de otros clientes | El mismo aislamiento del portal: un pedido ajeno se responde igual que uno inexistente |
@@ -753,10 +800,15 @@ si aparece una ruta nueva sin ninguna de las dos (`PENDIENTES_PERMITIDOS = False
      (HMAC con la API key, que además rechaza firmas de más de 5 minutos) → **401** si
      falla;
    - identifica al usuario por `call.call_id` → **403** si no existe, venció, la cuenta
-     fue desactivada o cambió de rol después de abrir la llamada;
+     fue desactivada o cambió de rol, su sesión web ya no es la que abrió la llamada
+     (otro navegador, cierre de sesión, contraseña restablecida), su inicio de sesión
+     está bloqueado por intentos o debe cambiar su contraseña. El 403 trae en `mensaje`
+     el motivo, para que Gaby lo diga y termine la llamada;
    - el rol de la sesión debe estar entre los que la función declara → **403** si no:
      una sesión de un rol no puede llamar las funciones de otro. El administrador usa
-     las del gestor por su misma URL.
+     las del gestor por su misma URL;
+   - la cuenta debe tener el permiso de la pantalla equivalente (`PERMISOS_VOZ`) → si no,
+     200 con *"No tienes el permiso «...»"*.
 5. Cada función responde `{"mensaje": "..."}`: una frase breve en español para leer en
    voz alta. Un error de negocio (pedido inexistente, transición no permitida) responde
    200 con la explicación, para que el agente se la diga al usuario.
@@ -790,8 +842,10 @@ la ruta finalizada se va a reabrir.
 `app/services/busqueda_voz.py` resuelve lo que el usuario dice, con la misma
 normalización que deduplica clientes: un pedido por su código dictado (con o sin guiones),
 por su número del día (*"el pedido 5 de hoy"*) o por el nombre del cliente; un producto
-por SKU o por nombre aproximado (*"arros"*, *"detergente dos kilos"*); un cliente, una
-sede o un conductor por nombre. Si hay varias coincidencias, la respuesta lista hasta
+por SKU o por nombre aproximado (*"arros"*, *"detergente dos kilos"*); un cliente por
+nombre, NIT (con o sin dígito de verificación) o teléfono; una cuenta por nombre, correo,
+documento o teléfono (descifrados, ver [Datos personales cifrados](#datos-personales-cifrados));
+una sede o un conductor por nombre. Si hay varias coincidencias, la respuesta lista hasta
 cinco y termina en *"¿Cuál?"*, para que el agente pregunte.
 
 ### Solicitudes de contacto
@@ -990,7 +1044,8 @@ mecanismo:
 | `stock_bajo` | Una entrega o un movimiento manual **cruza** un umbral del stock de un producto activo (ver abajo) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `sku`, `producto`, `stock_actual`, `stock_minimo`, `negativo`, `pedido` (código del pedido entregado, o `null` si fue manual), `correo_destino`, `hora`, `fecha_hora` |
 | `solicitud_contacto` | Un cliente pide por el asistente de voz que el gestor lo contacte (una pendiente a la vez por cliente) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `cliente`, `correo`, `telefono`, `motivo`, `hora`, `fecha_hora`, `correo_destino` |
 | `accion_asistente` | Se agrega a la **auditoría** un registro con correo: una acción confirmada por voz (con su resultado), salvo el flujo del conductor y las entradas de mercancía, o una acción de *Usuarios* o *Configuración* (ver [Auditoría](#auditoría-y-bitácora)) | Operaciones, en `correo_destino` (`CORREO_OPERACIONES`) | `id_auditoria`, `usuario`, `rol`, `accion`, `entidad`, `resumen`, `detalle` (texto plano, una línea por dato), `resultado` (`exito` o `error`), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva contraseñas ni tokens** |
-| `credencial_usuario` | Se **crea o restablece por voz** una cuenta: la contraseña se genera en el servidor | El propio usuario, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `contrasena`, `url_acceso` (`URL_PUBLICA`), `creado_por` (nombre y rol), `accion` (`creación` o `restablecimiento`), `hora`, `fecha_hora`, `correo_destino`. Es el **único** lugar por el que viaja la contraseña: no se guarda en la auditoría ni sale en otro evento, y va **solo** a `MAKE_WEBHOOK_CREDENCIALES_URL`. En pantalla la contraseña se sigue mostrando una vez, como antes, y no se envía |
+| `credencial_usuario` | Se **crea o restablece por voz** una cuenta: la contraseña se genera en el servidor | El propio usuario, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `contrasena`, `debe_cambiar_contrasena` (siempre `true`: es temporal), `indicaciones` (el texto para el correo), `url_acceso` (`URL_PUBLICA`), `creado_por` (nombre y rol), `accion` (`creación` o `restablecimiento`), `hora`, `fecha_hora`, `correo_destino`. Es el **único** lugar por el que viaja la contraseña: no se guarda en la auditoría ni sale en otro evento, y va **solo** a `MAKE_WEBHOOK_CREDENCIALES_URL`. En pantalla la contraseña se sigue mostrando una vez, como antes, y no se envía |
+| `restablecimiento_contrasena` | Alguien pide *Olvidé mi contraseña* para una cuenta activa (como máximo uno cada 5 minutos) | La propia persona, en `correo_destino` (su correo de inicio de sesión) | `nombre`, `correo`, `enlace` (armado con `URL_PUBLICA`, de un solo uso), `vence_en_minutos` (30), `hora`, `fecha_hora`, `correo_destino`. **Nunca lleva la contraseña**, ni la actual ni una nueva: solo el enlace para definirla. Va **solo** a `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` y no se guarda en la auditoría |
 
 **Todo evento lleva además quién originó la acción:**
 
@@ -1098,6 +1153,8 @@ movimiento posterior:
   "nombre": "Lucia Herrera",
   "correo": "lucia.herrera@ejemplo.com",
   "contrasena": "q7RmT2xKp9Wd",
+  "debe_cambiar_contrasena": true,
+  "indicaciones": "Esta contraseña es temporal: al iniciar sesión el sistema le pedirá cambiarla por una propia antes de continuar.",
   "url_acceso": "https://sgds.ejemplo.com",
   "creado_por": "Laura Gomez (Administrador)",
   "accion": "creación",
@@ -1108,6 +1165,23 @@ movimiento posterior:
   "rol_realizado_por": "Administrador",
   "origen": "voz",
   "realizado_por_publico": "Administrador"
+}
+```
+
+```json
+{
+  "tipo": "restablecimiento_contrasena",
+  "nombre": "Andres Molina",
+  "correo": "conductor1@sgds.com",
+  "enlace": "https://sgds.ejemplo.com/auth/restablecer/eyJ1IjozLCJ2IjoxfQ.ZyX9Qw.k3J...",
+  "vence_en_minutos": 30,
+  "hora": "2026-11-02 08:15",
+  "fecha_hora": "2026-11-02T08:15:42-05:00",
+  "correo_destino": "conductor1@sgds.com",
+  "realizado_por": "Andres Molina",
+  "rol_realizado_por": "Conductor",
+  "origen": "pantalla",
+  "realizado_por_publico": "Conductor"
 }
 ```
 
@@ -1145,8 +1219,9 @@ acceso restringido y sin historial del contenido:
 2. En *Scenario settings* active **"Data is confidential"**: Make deja de guardar el
    contenido de cada ejecución, y la contraseña no queda en el historial del escenario.
 3. Un único módulo de correo para `{{correo_destino}}` (el propio usuario) con
-   `{{url_acceso}}`, `{{correo}}` y `{{contrasena}}`, y un texto que le sugiera cambiarla
-   en *Perfil*. No agregue otros destinatarios, hojas ni registros.
+   `{{url_acceso}}`, `{{correo}}`, `{{contrasena}}` e `{{indicaciones}}`, que le dice que
+   es temporal y que la cambiará al entrar. No agregue otros destinatarios, hojas ni
+   registros.
 4. Compártalo solo con quien administre las cuentas.
 
 Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, Gaby no ofrece crear ni restablecer cuentas por voz:
@@ -1430,7 +1505,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**2230 verificaciones en 25 suites contra MySQL 8.0, todas pasando, en unos dos
+**2384 verificaciones en 26 suites contra MySQL 8.0, todas pasando, en unos cinco
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1442,8 +1517,9 @@ cada suite restaura esos datos al arrancar, por lo que los resultados son reprod
 corrida sola, la suite siembra por su cuenta.
 
 **Ninguna suite contacta servicios externos.** `pruebas/_preparar.py`, que cada suite
-importa primero, vacía `MAKE_WEBHOOK_URL`, `MAKE_WEBHOOK_CREDENCIALES_URL` y
-`RETELL_API_KEY` aunque el `.env` las defina, y limita la red a la propia máquina: Make,
+importa primero, vacía `MAKE_WEBHOOK_URL`, `MAKE_WEBHOOK_CREDENCIALES_URL`,
+`MAKE_WEBHOOK_RESTABLECIMIENTO_URL` y `RETELL_API_KEY` aunque el `.env` las defina, fija
+una `CLAVE_CIFRADO` propia de las pruebas, y limita la red a la propia máquina: Make,
 Retell y OSRM se simulan o caen a su respaldo. La única excepción es la parte de OSRM en
 vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 
@@ -1459,13 +1535,13 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes, lista blanca del correo en ambos formularios, política de contraseñas en el alta | 107 |
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 100 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 79 |
-| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 215 |
+| `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 217 |
 | `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 95 |
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
-| `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 91 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 318 |
-| `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración (incluido el tiempo de inactividad) y bitácora (admin); resúmenes, rechazos y auditoría | 102 |
+| `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 92 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 376 |
+| `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración (incluido el tiempo de inactividad) y bitácora (admin); resúmenes, rechazos y auditoría | 104 |
 | `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba, con la observación dictada | 82 |
 | `prueba_19_contrasenas.py` | RF1/RNF5 · apartado de contraseñas: acceso solo del admin, sin hash ni contraseña en la página, asignar, generar temporal, exigir cambio (uno y en bloque), cambio obligatorio en el perfil, cierre de sesiones abiertas, hash fuera de política, reglas por rol (cliente y otros administradores fuera de su alcance, la propia con la actual), migración `m008` | 153 |
 | `prueba_20_bloqueo_acceso.py` | RNF5 · bloqueo tras 5 intentos fallidos en los cuatro roles: contador visible, un minuto de espera aun con la contraseña correcta, reinicio del contador, mismos mensajes para correos inexistentes, contraseña actual del perfil, columna en el apartado del admin, configuración, migración `m009` | 67 |
@@ -1474,6 +1550,7 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 | `prueba_23_cifrado.py` | RNF5 · datos personales: en la base la contraseña como hash y el documento y el teléfono cifrados (IV aleatorio), lectura en claro, índice ciego (unicidad en el formulario y en la base, búsqueda exacta), columnas cifradas que rechazan comparaciones SQL, auditoría enmascarada en pantalla y por voz, otra clave, migración `m011` sobre datos en claro | 46 |
 | `prueba_24_archivos.py` | RNF5 · archivos subidos por su contenido: un ejecutable renombrado a `.pdf` y a `.csv` (Windows, Linux, macOS, script), PDF, comprimidos, imágenes, UTF-16 y binarios rechazados sin guardarse, cada rechazo en la bitácora, sin falsos positivos con CSV reales, límite de 2 MB y de 5 MB por petición (413) | 28 |
 | `prueba_25_roles_permisos.py` | RF1/RNF5 · roles y permisos: reparto por defecto igual a los roles fijos, un rol nuevo asignado a dos cuentas con dos permisos propios distintos cada una, dos roles en una cuenta con la totalidad de sus permisos invertida, menú y botones según permisos, editar un rol del sistema (también por voz), reglas contra la escalada de privilegios, eliminar un rol, auditoría, migración `m012` | 59 |
+| `prueba_26_voz_seguridad.py` | RF4/RNF5 · voz y seguridad: cada operación de voz con el permiso de su pantalla; roles, permisos de una cuenta, exigencia de cambio de contraseña, intentos de acceso y errores por voz (quitar un permiso lo quita por voz); la llamada atada a la sesión web (otro navegador, contraseña propia o restablecida, bloqueo por intentos, cuenta desactivada) y no cortada por inactividad (voz y latido); búsqueda por documento, teléfono y NIT; avisos y auditoría sin textos cifrados ni contraseñas; exclusiones con su motivo | 91 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
@@ -1583,7 +1660,7 @@ con datos ejecútelas en este orden:
 .venv/bin/flask --app run migrar-auditoria      # tabla de auditoría (bitácora)
 .venv/bin/flask --app run migrar-pruebas-entrega # pruebas de entrega de solo agregar (m007)
 .venv/bin/flask --app run migrar-contrasenas   # apartado de contraseñas y bloqueo (m008, m009)
-.venv/bin/flask --app run migrar-seguridad     # sesión única, inactividad y registro de errores (m010)
+.venv/bin/flask --app run migrar-seguridad     # sesión única, errores, cifrado, roles y voz (m010 a m013)
 ```
 
 `migrar-configuracion` además pasa a `DOUBLE` las coordenadas del centro de distribución
@@ -1600,9 +1677,11 @@ sesión una vez más.
 a `configuracion_negocio` la columna `minutos_inactividad` (30 en las filas existentes) y
 crea la tabla `errores_sistema` (m010). Después **cifra el documento y el teléfono** que
 estén en claro (m011): amplía las columnas a `VARCHAR(300)`, agrega `documento_indice` con
-su índice único y quita el índice único viejo sobre `documento`. Corra la migración con la
-misma `CLAVE_CIFRADO` (o `SECRET_KEY`) que usará la aplicación. Por último crea las tablas
-de roles y permisos con los cuatro roles del sistema y su reparto de siempre (m012). Es
+su índice único y quita el índice único viejo sobre `documento`. Defina antes `CLAVE_CIFRADO` en el `.env` y
+corra la migración con la misma que usará la aplicación: es la única que lee esos datos
+(haga una copia de la base antes). Luego crea las tablas de roles y permisos con los
+cuatro roles del sistema y su reparto de siempre (m012), y agrega a `sesiones_asistente`
+la columna `huella_sesion` que ata cada llamada de voz a su sesión web (m013). Es
 idempotente. **Ejecútela antes de levantar esta
 versión sobre una base existente**: sin las columnas nuevas, ninguna página carga.
 
