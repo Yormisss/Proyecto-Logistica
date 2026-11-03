@@ -90,6 +90,41 @@ a:not([class]):hover { color: var(--enlace-hover); }
 }
 
 .usuario-caja { display: flex; align-items: center; gap: .8rem; }
+
+/* RNF1 - Tableta y movil: el menu completo no cabe en una linea (el del
+   administrador tiene ocho entradas y un desplegable) y empujaba la pagina mas
+   ancha que la pantalla. Por debajo de 960 px se pliega detras de "Menu" y,
+   abierto, ocupa todo el ancho en una columna. */
+.boton-menu {
+  display: none; align-items: center; gap: .45rem; margin-left: auto;
+  background: none; color: var(--blanco); font: inherit; font-size: .85rem; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.25); border-radius: 6px; padding: .35rem .7rem;
+}
+.boton-menu:hover { border-color: var(--amarillo); }
+.boton-menu-icono, .boton-menu-icono::before, .boton-menu-icono::after {
+  display: block; width: 16px; height: 2px; background: currentColor; border-radius: 1px;
+}
+.boton-menu-icono { position: relative; }
+.boton-menu-icono::before, .boton-menu-icono::after { content: ""; position: absolute; left: 0; }
+.boton-menu-icono::before { top: -5px; }
+.boton-menu-icono::after { top: 5px; }
+@media (max-width: 959px) {
+  .boton-menu { display: inline-flex; }
+  .usuario-caja { order: 2; }
+  .navegacion {
+    display: none; order: 3; width: 100%; margin-left: 0;
+    flex-direction: column; gap: .15rem; padding-top: .5rem;
+    border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .barra-superior.menu-abierto .navegacion { display: flex; }
+  .navegacion a, .menu-desplegable summary { padding: .65rem .7rem; font-size: .95rem; }
+  .menu-desplegable-lista {
+    position: static; min-width: 0; box-shadow: none; padding: .15rem 0 .15rem .9rem;
+  }
+}
+@media (max-width: 479px) {
+  .usuario-info { display: none; }
+}
 .usuario-info { display: flex; flex-direction: column; line-height: 1.2; text-align: right; }
 .usuario-nombre { font-size: .85rem; font-weight: 600; }
 .usuario-rol { font-size: .72rem; color: var(--menu); }
@@ -124,7 +159,7 @@ a:not([class]):hover { color: var(--enlace-hover); }
 .tarjeta-titulo { font-size: 1rem; margin: 0 0 .9rem; padding-bottom: .6rem; border-bottom: 1px solid var(--gris-200); }
 
 /* ---------- KPIs (RF6) ---------- */
-.rejilla-kpis { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1.2rem; }
+.rejilla-kpis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin-bottom: 1.2rem; }
 .kpi {
   background: var(--blanco); border: 1px solid var(--gris-200); border-top: 3px solid var(--amarillo);
   border-radius: var(--radio); padding: 1rem 1.1rem; box-shadow: var(--sombra);
@@ -138,7 +173,7 @@ a:not([class]):hover { color: var(--enlace-hover); }
 }
 .kpi-detalle { font-size: .82rem; color: var(--gris-600); }
 
-.rejilla-dos { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.rejilla-dos { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 
 /* ---------- Tablas ---------- */
 .tabla { width: 100%; border-collapse: collapse; font-size: .88rem; }
@@ -180,7 +215,7 @@ a:not([class]):hover { color: var(--enlace-hover); }
 .alerta-stock { font-weight: 700; color: var(--gris-900); }
 .nota-pie { margin: .9rem 0 0; font-size: .84rem; color: var(--gris-600); }
 
-.lista-datos { display: grid; grid-template-columns: 130px 1fr; gap: .5rem 1rem; margin: 0; font-size: .9rem; }
+.lista-datos { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: .5rem 1rem; margin: 0; font-size: .9rem; }
 .lista-datos dt { color: var(--gris-600); }
 .lista-datos dd { margin: 0; font-weight: 500; }
 
@@ -189,8 +224,8 @@ a:not([class]):hover { color: var(--enlace-hover); }
 .codigo-error { font-size: 3rem; margin: 0; color: var(--gris-600); }
 
 /* ---------- Formularios ---------- */
-.formulario { display: grid; gap: .9rem; }
-.campo { display: grid; gap: .3rem; }
+.formulario { display: grid; grid-template-columns: minmax(0, 1fr); gap: .9rem; }
+.campo { display: grid; grid-template-columns: minmax(0, 1fr); gap: .3rem; }
 .campo label { font-size: .85rem; font-weight: 600; color: var(--gris-900); }
 .campo input[type=text], .campo input[type=email], .campo input[type=password],
 .campo input[type=number], .campo input[type=date], .campo input[type=time],
@@ -278,7 +313,7 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 
 /* ---------- Vista movil del conductor (RNF1) ---------- */
 .resumen-ruta .resumen-fila { display: flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }
-.resumen-metricas { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; gap: .5rem; }
+.resumen-metricas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center; gap: .5rem; }
 .resumen-metricas div { display: flex; flex-direction: column; }
 .resumen-metricas strong { font-size: 1.3rem; }
 .resumen-metricas span { font-size: .75rem; color: var(--gris-600); }
@@ -303,8 +338,8 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 
 /* ---------- Escritorio ---------- */
 @media (min-width: 720px) {
-  .rejilla-kpis { grid-template-columns: repeat(3, 1fr); }
-  .rejilla-dos { grid-template-columns: 3fr 2fr; }
+  .rejilla-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rejilla-dos { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
   .contenedor { padding: 1.8rem 1.5rem 3rem; }
   .titulo-pagina { font-size: 1.7rem; }
 }
@@ -360,7 +395,12 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 .barra-filtros .boton { padding: .5rem .9rem; font-size: .88rem; }
 
 /* Tablas */
-.tabla-scroll { overflow-x: auto; }
+.tabla-scroll { overflow-x: auto; max-width: 100%; }
+/* RNF1 - En el movil, una tabla con mas columnas de las que caben se desplaza
+   dentro de su tarjeta en lugar de ensanchar toda la pagina. */
+@media (max-width: 719px) {
+  .tabla { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
 .tabla .derecha { text-align: right; }
 .fila-clicable { cursor: pointer; }
 .celda-direccion { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -383,7 +423,9 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 .paginacion a:hover { color: var(--enlace-hover); }
 
 /* Formularios extensos */
-.rejilla-campos { display: grid; grid-template-columns: 1fr; gap: .9rem; }
+.rejilla-campos { display: grid; grid-template-columns: minmax(0, 1fr); gap: .9rem; }
+/* Un select con opciones largas no debe ensanchar la columna ni la pagina. */
+.campo select, .campo input, .campo textarea { max-width: 100%; min-width: 0; }
 .campo-ancho { grid-column: 1 / -1; }
 .acciones-formulario { display: flex; gap: .6rem; justify-content: flex-end; align-items: center; margin-bottom: 1rem; }
 .ayuda-campo { color: var(--gris-600); font-size: .78rem; }
@@ -437,7 +479,7 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 .etiqueta-mov-reversion { background: var(--blanco); color: var(--gris-900); box-shadow: inset 0 0 0 1px var(--borde-control); }
 
 @media (min-width: 720px) {
-  .rejilla-campos { grid-template-columns: repeat(2, 1fr); }
+  .rejilla-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ==========================================================================
@@ -625,7 +667,7 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 .grafica-latencia .fila-barra { grid-template-columns: 170px 1fr 68px; }
 
 /* Tabla alterna: la vista accesible de los mismos datos */
-.tabla-alterna { margin-top: 1rem; border-top: 1px solid var(--gris-200); padding-top: .7rem; }
+.tabla-alterna { min-width: 0; max-width: 100%; margin-top: 1rem; border-top: 1px solid var(--gris-200); padding-top: .7rem; }
 .tabla-alterna summary { cursor: pointer; font-size: .84rem; font-weight: 600; color: var(--enlace); }
 .tabla-alterna summary:hover { color: var(--enlace-hover); text-decoration: underline; }
 .tabla-alterna table { margin-top: .7rem; }

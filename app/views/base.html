@@ -36,7 +36,13 @@
       <img src="{{ url_for('static', filename='img/logo-negativo.svg') }}" alt="Fliyt" width="136" height="22">
     </a>
 
-    <nav class="navegacion">
+    {# Tableta y movil: el menu se pliega detras de este boton (menu.js). #}
+    <button type="button" class="boton-menu" aria-expanded="false" aria-controls="navegacion-principal"
+            data-boton-menu>
+      <span class="boton-menu-icono" aria-hidden="true"></span>Menú
+    </button>
+
+    <nav class="navegacion" id="navegacion-principal" aria-label="Navegación principal">
       {# Un enlace por permiso de la cuenta (app/permisos.py), no por su rol. #}
       {% set puede = current_user.puede %}
       {% if puede('tablero.ver') %}

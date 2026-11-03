@@ -3,6 +3,23 @@
 // <details> no hace solo: cerrar con Escape devolviendo el foco, y cerrar al hacer
 // clic fuera o al salir con Tab.
 document.addEventListener("DOMContentLoaded", function () {
+  // Boton "Menu" (tableta y movil): abre y cierra la navegacion plegada.
+  var botonMenu = document.querySelector("[data-boton-menu]");
+  if (botonMenu) {
+    var barra = botonMenu.closest(".barra-superior");
+    botonMenu.addEventListener("click", function () {
+      var abierto = barra.classList.toggle("menu-abierto");
+      botonMenu.setAttribute("aria-expanded", abierto ? "true" : "false");
+    });
+    document.addEventListener("keydown", function (evento) {
+      if (evento.key === "Escape" && barra.classList.contains("menu-abierto")) {
+        barra.classList.remove("menu-abierto");
+        botonMenu.setAttribute("aria-expanded", "false");
+        botonMenu.focus();
+      }
+    });
+  }
+
   document.querySelectorAll("[data-menu-desplegable]").forEach(function (menu) {
     var resumen = menu.querySelector("summary");
 
