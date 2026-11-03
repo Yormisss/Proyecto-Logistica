@@ -31,8 +31,19 @@ function Valor([string]$nombre) {
 # No se llama "Az": PowerShell no distingue mayusculas y la funcion taparia al comando az.
 function Invocar-Az {
     & az @args
-    if ($LASTEXITCODE -ne 0) { throw "Fallo: az $($args -join ' ')" }
+    # Solo el comando, no los argumentos: llevan secretos y la clave del registro.
+    if ($LASTEXITCODE -ne 0) { throw "Fallo: az $($args[0]) $($args[1]) (codigo $LASTEXITCODE)" }
 }
+
+# PowerShell 5.1 no siempre negocia TLS 1.2, que exige Azure Container Apps.
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# La tarea AzureCLI@2 usa una configuracion temporal de az (AZURE_CONFIG_DIR):
+# las extensiones instaladas en el PC no se ven, y sin terminal az no puede
+# preguntar si instala "containerapp". Se instala aqui, sin preguntar.
+Write-Host "==> Extension containerapp de Azure CLI"
+& az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors 2>$null | Out-Null
+Invocar-Az extension add --name containerapp --upgrade --only-show-errors --yes
 
 $grupo = Valor "GRUPO"; $app = Valor "APP"; $job = Valor "JOB"; $entorno = Valor "ENTORNO_CA"
 $acr = Valor "ACR"
