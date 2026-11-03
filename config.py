@@ -39,6 +39,11 @@ class ConfiguracionBase:
     # cifrados los datos: con otra clave ya no se pueden leer.
     CLAVE_CIFRADO = os.getenv("CLAVE_CIFRADO", "")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # RNF5 - Cookie de sesion: no accesible desde JavaScript (HttpOnly) y sin
+    # envio en peticiones de otro sitio (SameSite, mitiga el hallazgo de ZAP y
+    # refuerza la proteccion CSRF). Secure se activa aparte en produccion (HTTPS).
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
     # RNF5 - Tamano maximo de una peticion. El CSV de pedidos admite 2 MB; esto
     # corta un archivo mucho mayor antes de leerlo en memoria (pagina 413).
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024
@@ -116,8 +121,7 @@ class ConfiguracionProduccion(ConfiguracionBase):
     DEBUG = False
     # Ej: mysql+pymysql://usuario:clave@servidor:3306/logistica
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "")
-    SESSION_COOKIE_SECURE = True
-    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SECURE = True  # la cookie solo viaja por HTTPS (produccion)
 
     # RNF3 - Despliegue: evita servir con una conexion que el motor (o un
     # proxy intermedio, comun en el plan gratuito de las plataformas cloud)

@@ -56,6 +56,7 @@ SUITES = [
     ("prueba_27_resumen_diario.py", "RF6 · Resumen diario enviado a Make"),
     ("prueba_28_avisos_por_rol.py", "RF4 · Avisos al correo de cada perfil"),
     ("prueba_29_reglas_despliegue.py", "RF2/RF3/RNF5 · Reglas corregidas antes del despliegue"),
+    ("prueba_30_cabeceras_seguridad.py", "RNF5 · Cabeceras de seguridad (ZAP/Nikto)"),
 ]
 
 

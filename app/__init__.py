@@ -56,8 +56,59 @@ def crear_app(nombre_configuracion="desarrollo"):
     _registrar_errores(app)
     _registrar_contexto(app)
     _registrar_medicion(app)
+    _registrar_cabeceras_seguridad(app)
 
     return app
+
+
+# Orígenes externos que la aplicación necesita y que la CSP debe permitir para no
+# romper el mapa (Leaflet + OpenStreetMap) ni el asistente de voz (SDK de Retell).
+_CSP = (
+    "default-src 'self'; "
+    # 'unsafe-inline': la aplicación usa <script> en línea y atributos onsubmit de
+    # confirmación; migrarlos a archivos con nonce es una mejora pendiente.
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+    "style-src 'self' 'unsafe-inline' https://unpkg.com; "
+    "img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; "
+    "font-src 'self'; "
+    # Retell abre una conexión en tiempo real para la llamada de voz (HTTPS/WebSocket).
+    "connect-src 'self' https: wss:; "
+    "media-src 'self' blob:; "
+    "frame-ancestors 'self'; "   # anti-clickjacking (reemplaza a X-Frame-Options)
+    "form-action 'self'; "
+    "base-uri 'self'; "
+    "object-src 'none'"
+)
+
+
+def _registrar_cabeceras_seguridad(app):
+    """RNF5 - Cabeceras de seguridad en cada respuesta (hallazgos de ZAP/Nikto).
+
+    Corrige: falta de Content-Security-Policy y de protección anti-clickjacking,
+    cookie sin SameSite, ausencia de X-Content-Type-Options, Referrer-Policy y
+    Permissions-Policy, y la fuga de la versión del servidor en la cabecera Server.
+    HSTS solo cuando la conexión es segura (producción, tras el proxy HTTPS de
+    Azure); en el desarrollo local por HTTP no se envía.
+    """
+
+    @app.after_request
+    def cabeceras_seguridad(respuesta):
+        respuesta.headers["Content-Security-Policy"] = _CSP
+        respuesta.headers["X-Content-Type-Options"] = "nosniff"
+        respuesta.headers["X-Frame-Options"] = "DENY"  # navegadores sin soporte de CSP
+        # setdefault: una vista puede fijar una politica mas estricta (la pagina
+        # de restablecer usa "no-referrer" para no filtrar el token de la URL).
+        respuesta.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        respuesta.headers["Permissions-Policy"] = (
+            "geolocation=(self), microphone=(self), camera=(), payment=()"
+        )
+        # No revelar "Werkzeug/x Python/y" (reconocimiento de versiones).
+        respuesta.headers["Server"] = "Fliyt"
+        if request.is_secure:
+            respuesta.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return respuesta
 
 
 # Cada cuantas peticiones se purgan las mediciones antiguas.
