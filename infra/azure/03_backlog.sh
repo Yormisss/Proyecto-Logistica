@@ -35,15 +35,19 @@ SPRINTS=(
 )
 for s in "${SPRINTS[@]}"; do
     IFS='|' read -r nombre inicio fin <<< "$s"
-    ruta="\\$PROYECTO\\Iteration\\$nombre"
-    if az boards iteration project show --path "$ruta" -o none 2>/dev/null; then
-        az boards iteration project update --path "$ruta" --start-date "$inicio" --finish-date "$fin" -o none
-    else
+    # El proceso Scrum ya trae "Sprint 1..N": se buscan por nombre y solo se fijan las fechas.
+    ruta=$(az boards iteration project list --depth 1 \
+        --query "children[?name=='$nombre'].path | [0]" -o tsv 2>/dev/null || true)
+    if [[ -z "$ruta" ]]; then
         az boards iteration project create --name "$nombre" --start-date "$inicio" --finish-date "$fin" -o none
+        ruta=$(az boards iteration project list --depth 1 --query "children[?name=='$nombre'].path | [0]" -o tsv)
+    else
+        az boards iteration project update --path "$ruta" --start-date "$inicio" --finish-date "$fin" -o none \
+            || echo "    (no se pudieron fijar las fechas de $nombre)"
     fi
-    id=$(az boards iteration project show --path "$ruta" --query identifier -o tsv)
+    id=$(az boards iteration project list --depth 1 --query "children[?name=='$nombre'].identifier | [0]" -o tsv)
     az boards iteration team add --id "$id" --team "$EQUIPO" -o none 2>/dev/null || true
-    echo "  $nombre: $inicio a $fin"
+    echo "  $nombre: $inicio a $fin ($ruta)"
 done
 
 # tipo | clave | clave del padre | sprint | estado | titulo | criterios de aceptacion
