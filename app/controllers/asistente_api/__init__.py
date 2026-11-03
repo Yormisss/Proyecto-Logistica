@@ -40,6 +40,7 @@ from app.models import RESULTADO_ERROR, RESULTADO_EXITO, VIGENCIA_CONFIRMACION, 
 from app.services.asistente import firma_valida, sesion_vigente
 from app.services.auditoria import registrar_auditoria
 from app.services.notificaciones import ORIGEN_VOZ
+from app.permisos import nombre as nombre_permiso, permiso_voz
 from app.services.despacho import NOTA_ASISTENTE  # noqa: F401 (la usan los modulos de cada rol)
 from app.tiempo import ahora
 
@@ -224,6 +225,15 @@ def autenticar_llamada():
     g.funcion = funcion
     g.origen_accion = ORIGEN_VOZ
     g.argumentos = datos.get("args") if isinstance(datos.get("args"), dict) else {}
+
+    # Ademas del rol del agente, el permiso de la pantalla equivalente: quitarle
+    # un permiso a un rol o a una cuenta tambien lo quita por voz (app/permisos.py).
+    operacion = funcion.operaciones.get(g.argumentos.get("operacion")) if funcion.operaciones else None
+    exigido = permiso_voz(funcion.espacio, funcion.nombre,
+                          operacion.modifica if operacion is not None else funcion.accion)
+    if exigido and not g.usuario.puede(exigido):
+        return responder(f"No tienes el permiso «{nombre_permiso(exigido)}», así que no puedo hacerlo. "
+                         "Pídeselo a un administrador.")
 
 
 @asistente_api_bp.route("/<espacio>/<nombre>", methods=["POST"])

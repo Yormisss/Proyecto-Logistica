@@ -21,18 +21,22 @@ from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
 from sqlalchemy import case, func, or_
 from wtforms import BooleanField, PasswordField, SelectField, StringField
-from wtforms.validators import DataRequired, EqualTo, Length, Optional
+from wtforms.validators import DataRequired, EqualTo, Optional
 
+from app.cifrado import indice_ciego
 from app.controllers.auth import cambiar_contrasena_propia
-from app.controllers.seguridad import campo_correo, es_redireccion_segura, requiere_rol
+from app.controllers.seguridad import (
+    campo_correo, es_redireccion_segura, politica_contrasena, requiere_permiso,
+)
 from app.extensions import db
 from app.models import Cliente, Rol, Usuario
 from app.models.usuario import METODO_HASH
 from app.services import acceso
+from app.services import permisos as servicio_permisos
 from app.services.auditoria import cambios_legibles, registrar_auditoria
 from app.services.usuarios import (
-    LONGITUD_MINIMA, cambiar_estado_usuario, clientes_disponibles, crear_usuario,
-    editar_usuario, rechazo_contrasena, restablecer_contrasena, rutas_abiertas,
+    cambiar_estado_usuario, clientes_disponibles, crear_usuario, editar_usuario,
+    rechazo_contrasena, restablecer_contrasena, rutas_abiertas,
 )
 from app.services.validacion import DatosInvalidos
 from app.tiempo import ahora
@@ -96,9 +100,7 @@ class FormularioAccion(FlaskForm):
 class FormularioAsignarContrasena(FlaskForm):
     contrasena = PasswordField(
         "Nueva contrasena",
-        validators=[DataRequired("Indique la contrasena."),
-                    Length(min=LONGITUD_MINIMA,
-                           message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
+        validators=[DataRequired("Indique la contrasena."), politica_contrasena],
     )
     confirmacion = PasswordField(
         "Confirmar contrasena",
@@ -114,9 +116,7 @@ class FormularioContrasenaPropia(FlaskForm):
     )
     contrasena = PasswordField(
         "Nueva contrasena",
-        validators=[DataRequired("Indique la contrasena."),
-                    Length(min=LONGITUD_MINIMA,
-                           message=f"Minimo {LONGITUD_MINIMA} caracteres.")],
+        validators=[DataRequired("Indique la contrasena."), politica_contrasena],
     )
     confirmacion = PasswordField(
         "Confirmar contrasena",
@@ -165,7 +165,9 @@ def _filtrar_rol_y_texto(consulta):
             or_(
                 Usuario.nombre.ilike(patron),
                 Usuario.correo.ilike(patron),
-                Usuario.documento.ilike(patron),
+                # El documento esta cifrado: solo se encuentra completo, por su
+                # indice ciego (ver app/cifrado.py).
+                Usuario.documento_indice == indice_ciego(busqueda),
             )
         )
     return consulta, rol, busqueda
@@ -183,7 +185,7 @@ def _volver(por_defecto):
 
 @usuarios_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("usuarios.gestionar")
 def lista():
     consulta, rol, busqueda = _filtrar_rol_y_texto(db.session.query(Usuario))
 
@@ -227,7 +229,7 @@ def lista():
 
 @usuarios_bp.route("/nuevo", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("usuarios.gestionar")
 def nuevo():
     formulario = FormularioUsuario()
 
@@ -270,7 +272,6 @@ def nuevo():
 
     return render_template(
         "admin/usuarios/formulario.html", formulario=formulario, usuario=None,
-        longitud_minima=LONGITUD_MINIMA,
     )
 
 
@@ -280,7 +281,7 @@ def nuevo():
 
 @usuarios_bp.route("/<int:usuario_id>/editar", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("usuarios.gestionar")
 def editar(usuario_id):
     usuario = _usuario(usuario_id)
     es_propia = usuario.id == current_user.id
@@ -312,7 +313,54 @@ def editar(usuario_id):
     return render_template(
         "admin/usuarios/formulario.html", formulario=formulario, usuario=usuario,
         es_propia=es_propia, rutas_abiertas=rutas_abiertas(usuario),
-        longitud_minima=LONGITUD_MINIMA,
+    )
+
+
+# --------------------------------------------------------------------------
+# Roles adicionales y permisos
+# --------------------------------------------------------------------------
+
+@usuarios_bp.route("/<int:usuario_id>/permisos", methods=["GET", "POST"])
+@login_required
+@requiere_permiso("usuarios.gestionar")
+def permisos(usuario_id):
+    """Roles adicionales de la cuenta y sus ajustes, permiso por permiso.
+
+    Las reglas (que se puede asignar a quien) viven en app/services/permisos.py.
+    """
+    usuario = _usuario(usuario_id)
+    formulario = FormularioAccion()
+    if formulario.validate_on_submit():
+        rol_ids = request.form.getlist("roles", type=int)
+        ajustes = {clave[len("ajuste-"):]: valor for clave, valor in request.form.items()
+                   if clave.startswith("ajuste-")}
+        try:
+            cambios = servicio_permisos.guardar_permisos_usuario(usuario, rol_ids, ajustes)
+        except DatosInvalidos as error:
+            db.session.rollback()
+            for _, mensaje in error.errores:
+                flash(mensaje, "error")
+            return redirect(url_for("usuarios.permisos", usuario_id=usuario.id))
+        if cambios:
+            registrar_auditoria(
+                "Editar permisos de usuario", "usuario",
+                f"Editó los roles y permisos de {usuario.nombre}: " + ", ".join(cambios) + ".",
+                cambios_legibles(cambios), entidad_id=usuario.id,
+            )
+        db.session.commit()
+        flash(f"Permisos de {usuario.nombre} actualizados. Aplican desde su siguiente accion."
+              if cambios else "No hubo cambios.", "exito")
+        return redirect(url_for("usuarios.permisos", usuario_id=usuario.id))
+
+    filas = servicio_permisos.detalle_permisos(usuario)
+    grupos = {}
+    for fila in filas:   # en el orden del catalogo, que ya viene por grupo
+        grupos.setdefault(fila["grupo"], []).append(fila)
+    return render_template(
+        "admin/usuarios/permisos.html", usuario=usuario, formulario=formulario,
+        rechazo=servicio_permisos.rechazo_permisos(usuario),
+        roles_disponibles=servicio_permisos.roles_asignables(usuario),
+        filas=filas, grupos=list(grupos.items()),
     )
 
 
@@ -322,7 +370,7 @@ def editar(usuario_id):
 
 @usuarios_bp.route("/<int:usuario_id>/alternar-estado", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("usuarios.gestionar")
 def alternar_estado(usuario_id):
     """Activa o desactiva la cuenta. Sustituye al borrado (ver cabecera)."""
     usuario = _usuario(usuario_id)
@@ -354,7 +402,7 @@ def alternar_estado(usuario_id):
 
 @usuarios_bp.route("/<int:usuario_id>/restablecer", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("usuarios.gestionar")
 def restablecer(usuario_id):
     """Emite una contrasena temporal nueva y la muestra una sola vez."""
     usuario = _usuario(usuario_id)
@@ -394,7 +442,7 @@ def restablecer(usuario_id):
 
 @usuarios_bp.route("/contrasenas")
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("contrasenas.gestionar")
 def contrasenas():
     """Estado de la contrasena de cada cuenta. Nunca la contrasena misma.
 
@@ -441,7 +489,7 @@ def contrasenas():
 
 @usuarios_bp.route("/<int:usuario_id>/contrasena", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("contrasenas.gestionar")
 def contrasena(usuario_id):
     """Ficha de la contrasena de una cuenta: la propia o la de un gestor o conductor."""
     usuario = _usuario(usuario_id)
@@ -477,8 +525,7 @@ def contrasena(usuario_id):
 
     return render_template(
         "admin/usuarios/contrasena.html", usuario=usuario, formulario=formulario,
-        accion=FormularioAccion(), longitud_minima=LONGITUD_MINIMA, hoy=ahora(),
-        propia=False,
+        accion=FormularioAccion(), hoy=ahora(), propia=False,
     )
 
 
@@ -497,13 +544,13 @@ def _contrasena_propia(usuario):
 
     return render_template(
         "admin/usuarios/contrasena.html", usuario=usuario, formulario=formulario,
-        longitud_minima=LONGITUD_MINIMA, hoy=ahora(), propia=True,
+        hoy=ahora(), propia=True,
     )
 
 
 @usuarios_bp.route("/<int:usuario_id>/alternar-exigencia", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("contrasenas.gestionar")
 def alternar_exigencia(usuario_id):
     """Marca o desmarca que la cuenta debe cambiar su contrasena."""
     usuario = _usuario(usuario_id)
@@ -539,7 +586,7 @@ def alternar_exigencia(usuario_id):
 
 @usuarios_bp.route("/contrasenas/exigir-cambio", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("contrasenas.gestionar")
 def exigir_cambio_masivo():
     """Obliga a varias cuentas a renovar su contrasena (p. ej. ante una fuga).
 

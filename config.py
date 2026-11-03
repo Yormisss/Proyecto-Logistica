@@ -17,11 +17,18 @@ load_dotenv(BASE_DIR / ".env")
 
 class ConfiguracionBase:
     SECRET_KEY = os.getenv("SECRET_KEY", "clave-de-desarrollo-cambiar-en-produccion")
+    # RNF5 - Clave del cifrado del documento y el telefono de las cuentas (ver
+    # app/cifrado.py). Vacia = se deriva de SECRET_KEY. No se cambia una vez
+    # cifrados los datos: con otra clave ya no se pueden leer.
+    CLAVE_CIFRADO = os.getenv("CLAVE_CIFRADO", "")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # RNF5 - Tamano maximo de una peticion. El CSV de pedidos admite 2 MB; esto
+    # corta un archivo mucho mayor antes de leerlo en memoria (pagina 413).
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024
 
     # RNF5 - Tras este numero de contrasenas equivocadas seguidas, el login de
     # ese correo se rechaza durante LOGIN_BLOQUEO_SEGUNDOS (ver services/acceso.py).
-    LOGIN_MAX_INTENTOS = 6
+    LOGIN_MAX_INTENTOS = 5
     LOGIN_BLOQUEO_SEGUNDOS = 60
 
     # RF3 - Generacion de rutas: proveedor de geolocalizacion y su clave.
@@ -63,6 +70,11 @@ class ConfiguracionBase:
     # creada o restablecida por voz). Su escenario debe tener activado "Data is
     # confidential" en Make. Vacio = esas acciones no se ofrecen por voz.
     MAKE_WEBHOOK_CREDENCIALES_URL = os.getenv("MAKE_WEBHOOK_CREDENCIALES_URL", "")
+    # Webhook aparte para "restablecimiento_contrasena" (el enlace de "Olvide
+    # mi contrasena"). Tambien con "Data is confidential". Necesita URL_PUBLICA,
+    # con la que se arma el enlace. Vacio = en produccion no se ofrece la
+    # recuperacion; en desarrollo el enlace sale en la consola del servidor.
+    MAKE_WEBHOOK_RESTABLECIMIENTO_URL = os.getenv("MAKE_WEBHOOK_RESTABLECIMIENTO_URL", "")
     # Destino de los avisos internos (stock bajo) y del resumen diario. Vacio =
     # no se envian avisos internos; los avisos al cliente no dependen de esto.
     CORREO_OPERACIONES = os.getenv("CORREO_OPERACIONES", "")

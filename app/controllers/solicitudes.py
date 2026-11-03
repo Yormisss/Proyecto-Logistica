@@ -4,9 +4,9 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
-from app.models import Rol, SolicitudContacto
+from app.models import SolicitudContacto
 from app.services.auditoria import auditar_pantalla
 from app.services.solicitudes import SolicitudInvalida, marcar_atendida
 
@@ -21,7 +21,7 @@ class FormularioAtender(FlaskForm):
 
 @solicitudes_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("solicitudes.ver")
 def lista():
     filtro = request.args.get("estado", "pendientes")
     filtro = filtro if filtro in FILTROS else "pendientes"
@@ -48,7 +48,7 @@ def lista():
 
 @solicitudes_bp.route("/<int:solicitud_id>/atender", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("solicitudes.atender")
 def atender(solicitud_id):
     solicitud = db.session.get(SolicitudContacto, solicitud_id)
     if solicitud is None:

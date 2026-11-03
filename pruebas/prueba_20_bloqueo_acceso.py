@@ -135,6 +135,8 @@ vencer_bloqueo("conductor2@sgds.com")
 intentar("conductor2@sgds.com", "Conductor123*")
 
 print("\n== 5. El contador es por correo, sin distinguir mayusculas ni espacios ==")
+# La sesion del inicio la cerro el login correcto del punto 1 (sesion unica).
+admin = sesion("admin@sgds.com", "Admin123*")
 intentar("  CONDUCTOR1@SGDS.com ", "Equivocada9*")
 check(contador("conductor1@sgds.com") == (1, False),
       "un fallo con mayusculas y espacios cuenta para el mismo correo")
@@ -160,7 +162,7 @@ fila_desp = re.search(r"despachador@sgds\.com.*?</tr>", html, re.S).group(0)
 check("Bloqueada" in fila_desp and "s restantes" in fila_desp,
       "muestra la cuenta bloqueada y cuanto le falta")
 fila_admin = re.search(r"admin@sgds\.com.*?</tr>", html, re.S).group(0)
-check("Bloqueada" not in fila_admin and " de 6" not in fila_admin,
+check("Bloqueada" not in fila_admin and f" de {MAXIMO}" not in fila_admin,
       "una cuenta sin fallos no muestra contador")
 vencer_bloqueo("despachador@sgds.com")
 html = admin.get("/admin/usuarios/contrasenas").data.decode()

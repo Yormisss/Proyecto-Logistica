@@ -10,7 +10,7 @@ from sqlalchemy import func
 
 from flask import request
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
 from app.models import Rol, Ruta, Usuario
 from app.services import analitica, bigdata
@@ -21,7 +21,7 @@ admin_bp = Blueprint("admin", __name__)
 
 @admin_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("tablero.ver")
 def dashboard():
     kpis = analitica.kpis_del_dia()
 
@@ -51,7 +51,7 @@ def dashboard():
 
 @admin_bp.route("/analitica")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("analitica.ver")
 def analitica_operacion():
     """Indicadores de apoyo a la toma de decisiones estrategicas."""
     dias = request.args.get("dias", 14, type=int)
@@ -79,7 +79,7 @@ def analitica_operacion():
 
 @admin_bp.route("/rendimiento")
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("rendimiento.ver")
 def rendimiento():
     """RNF2 - Evidencia medida de los tiempos de respuesta del sistema."""
     horas = request.args.get("horas", 24, type=int)

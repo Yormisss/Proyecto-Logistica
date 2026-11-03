@@ -10,6 +10,12 @@
 // llamada desde el navegador con la API key. Ver README, "Asistente de voz".
 // El SDK se carga al primer toque y no en cada pagina: pesa y casi ninguna
 // visita lo usa.
+//
+// La llamada vive en esta pagina, asi que cambiar de pagina la cortaria. Con
+// una llamada en curso, los enlaces y formularios de la aplicacion se abren en
+// un marco que cubre la ventana y esta pagina queda debajo, solo con el boton;
+// la barra de direcciones y el titulo siguen al marco. Si el marco llega al
+// login (Salir o inactividad), la ventana entera va al login y la llamada termina.
 
 const SDK_URL = "https://cdn.jsdelivr.net/npm/retell-client-js-sdk@3.0.2/+esm";
 
@@ -23,6 +29,7 @@ const etiqueta = document.getElementById("asistente-estado");
 let cliente = null;
 let estado = "inactivo";
 let temporizador = null;
+let marco = null;
 
 const TEXTOS = {
   conectando: "Conectando...",
@@ -157,15 +164,94 @@ function colgar() {
   mostrar("terminado");
 }
 
-boton.addEventListener("click", () => {
-  if (estado === "escuchando") {
-    colgar();
-  } else if (estado !== "conectando") {
-    iniciar();
-  }
-});
+function llamadaEnCurso() {
+  return estado === "conectando" || estado === "escuchando";
+}
 
-// Cerrar o salir de la pagina corta la llamada y libera el microfono.
-window.addEventListener("pagehide", () => {
-  if (cliente) cliente.stopCall();
-});
+function abrirMarco() {
+  if (!marco) {
+    marco = document.createElement("iframe");
+    marco.name = "asistente-marco";
+    marco.className = "asistente-marco";
+    marco.title = "Contenido de la aplicación";
+    // Oculto hasta que cargue la primera pagina: mientras tanto sigue a la
+    // vista la actual.
+    marco.hidden = true;
+    marco.addEventListener("load", alCargarMarco);
+    document.body.appendChild(marco);
+  }
+  return marco;
+}
+
+function alCargarMarco() {
+  let ubicacion;
+  try {
+    ubicacion = marco.contentWindow.location;
+    if (ubicacion.href === "about:blank") return;
+  } catch {
+    return; // Otro origen: no hay direccion ni titulo que reflejar.
+  }
+  if (ubicacion.pathname === contenedor.dataset.login) {
+    window.location.assign(ubicacion.href); // pagehide corta la llamada
+    return;
+  }
+  history.replaceState(null, "", ubicacion.href);
+  document.title = marco.contentDocument.title;
+  if (marco.hidden) {
+    marco.hidden = false;
+    document.body.classList.add("en-marco");
+    marco.focus();
+  }
+}
+
+function desviarEnlace(evento) {
+  if (!llamadaEnCurso() || evento.defaultPrevented || evento.button !== 0
+      || evento.metaKey || evento.ctrlKey || evento.shiftKey || evento.altKey) {
+    return;
+  }
+  const enlace = evento.target.closest("a[href]");
+  if (!enlace || (enlace.target && enlace.target !== "_self") || enlace.hasAttribute("download")) {
+    return;
+  }
+  const destino = new URL(enlace.href);
+  if (destino.origin !== location.origin) return;
+  // Un ancla de esta misma pagina solo desplaza: no corta la llamada.
+  if (destino.hash && destino.pathname === location.pathname && destino.search === location.search) {
+    return;
+  }
+  evento.preventDefault();
+  abrirMarco().src = destino.href;
+}
+
+// El destino del envio se lee despues del evento submit, asi que basta con
+// apuntar el formulario al marco.
+function desviarFormulario(evento) {
+  const formulario = evento.target;
+  if (!llamadaEnCurso() || evento.defaultPrevented || formulario.method === "dialog"
+      || formulario.getAttribute("target") || evento.submitter?.getAttribute("formtarget")) {
+    return;
+  }
+  formulario.target = abrirMarco().name;
+}
+
+if (window.self !== window.top) {
+  // Pagina dentro del marco de una llamada: el boton que se ve es el de la
+  // ventana de arriba, que es la que tiene la llamada.
+  contenedor.remove();
+} else {
+  boton.addEventListener("click", () => {
+    if (estado === "escuchando") {
+      colgar();
+    } else if (estado !== "conectando") {
+      iniciar();
+    }
+  });
+
+  // Cerrar o salir de la pagina corta la llamada y libera el microfono.
+  window.addEventListener("pagehide", () => {
+    if (cliente) cliente.stopCall();
+  });
+
+  document.addEventListener("click", desviarEnlace);
+  document.addEventListener("submit", desviarFormulario);
+}

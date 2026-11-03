@@ -18,7 +18,7 @@ Y, con confirmación:
   - Nadie se desactiva ni se quita el rol de administrador a sí mismo, y siempre queda un administrador activo.
   - Un conductor con rutas sin cerrar no cambia de rol ni se desactiva. Una cuenta de cliente no pasa a un rol interno ni al revés: se crea otra cuenta.
   - Lee al usuario todo lo que diga el resumen, incluidas sus consecuencias (por ejemplo, que un vehículo queda sin conductor).
-- Configuración del negocio: consultar, cambiar el centro de distribución (nombre o coordenadas; afecta a las rutas nuevas o recalculadas) y el catálogo de motivos de fallo (agregar, renombrar, activar o desactivar; "Otro" no se renombra ni se desactiva).
+- Configuración del negocio: consultar, cambiar el centro de distribución (nombre o coordenadas; afecta a las rutas nuevas o recalculadas), el catálogo de motivos de fallo (agregar, renombrar, activar o desactivar; "Otro" no se renombra ni se desactiva) y los minutos sin actividad tras los que se cierra una sesión (de 1 a 480).
 - Bitácora: los últimos registros de la auditoría, con filtros opcionales por fecha, usuario y entidad.
 
 ## Lo que no puedes hacer por voz

@@ -282,6 +282,52 @@ with app.test_client() as c:
     check(b"Credenciales invalidas" in r.data,
           "un correo valido que no existe recibe el mensaje generico (no revela cuentas)")
 
+print("\n== 13. Contrasena: enmascarada y visible solo mientras se presiona (RNF5) ==")
+js = (pathlib.Path(app.static_folder) / "js" / "contrasena.js").read_text(encoding="utf-8")
+
+with app.test_client() as c:
+    html = c.get("/auth/login").data.decode()
+    check('type="password"' in html and "js/contrasena.js" in html,
+          "el login la envia enmascarada y carga el boton del ojo")
+    c.post("/auth/login", data={"correo": "admin@sgds.com", "contrasena": "Admin123*"})
+    for ruta in ("/auth/perfil", "/admin/usuarios/nuevo"):
+        html = c.get(ruta).data.decode()
+        check('type="password"' in html and "js/contrasena.js" in html, f"   y {ruta} tambien")
+
+check(all(f'"{e}"' in js for e in ("pointerdown", "pointerup", "pointerleave", "pointercancel",
+                                    "keyup", "blur", "submit")),
+      "se ve al presionar y se oculta al soltar, salir del boton, perder el foco o enviar")
+check('"copy", "cut"' in js, "aun visible no deja copiar ni cortar")
+
+print("\n== 14. Boton Actualizar en las vistas de consulta (asistente de voz) ==")
+estaticos = pathlib.Path(app.static_folder) / "js"
+js = (estaticos / "actualizar.js").read_text(encoding="utf-8")
+graficas = (estaticos / "graficas.js").read_text(encoding="utf-8")
+VISTAS_CON_ACTUALIZAR = ("/pedidos/", "/rutas/", "/inventario/", "/admin/clientes/",
+                         "/admin/analitica", "/admin/")
+
+with app.test_client() as c:
+    c.post("/auth/login", data={"correo": "admin@sgds.com", "contrasena": "Admin123*"})
+    for ruta in VISTAS_CON_ACTUALIZAR:
+        html = c.get(ruta).data.decode()
+        check(html.count("data-actualizar") == 1 and 'aria-label="Actualizar"' in html
+              and "js/actualizar.js" in html, f"{ruta} muestra un boton Actualizar")
+    html = c.get("/admin/").data.decode()
+    check(re.search(r'id="operacion-hoy">[^<]+</h2>\s*<button[^>]*data-actualizar', html) is not None,
+          "en el tablero va junto a Operacion de hoy, la seccion que cambia por voz")
+    html = c.get("/pedidos/nuevo").data.decode()
+    check("data-actualizar" not in html, "los formularios no lo llevan (perderian lo escrito)")
+
+check("fetch(location.href" in js and 'querySelector("main.contenedor")' in js
+      and "location.reload" not in js,
+      "trae la pagina y cambia solo <main>: no recarga, que cortaria la llamada")
+check("pagina.title" in js and "replaceState" in js and "pushState" not in js,
+      "actualiza el titulo y no suma entradas al historial")
+check("boton.dataset.login" in js and "!respuesta.ok" in js and "alerta-error" in js,
+      "con la sesion vencida va al login; si falla, conserva lo que se ve y lo avisa")
+check('"contenido-actualizado"' in js and 'addEventListener("contenido-actualizado", preparar)' in graficas,
+      "las graficas vuelven a enlazar sus tooltips tras actualizar")
+
 print("\n" + ("="*50))
 print("RESULTADO: " + ("TODAS LAS PRUEBAS PASARON" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))
 sys.exit(1 if fallos else 0)

@@ -9,11 +9,14 @@ Configuracion. El resto de lo que se hace en pantalla queda en la auditoria
 sin correo; llega a Google Sheets por /api/automatizacion/auditoria.
 
 Las contrasenas y los tokens nunca llegan a la auditoria: cualquier dato cuya
-clave los nombre se reemplaza por "(no se registra)" antes de guardar.
+clave los nombre se reemplaza por "(no se registra)" antes de guardar. El
+documento y el telefono de una cuenta, que en `usuarios` estan cifrados, se
+guardan enmascarados ("******4567").
 """
 
 import json
 
+from app.cifrado import CAMPOS_PERSONALES, enmascarar
 from app.extensions import db
 from app.models import RESULTADO_ERROR, RESULTADO_EXITO, Auditoria
 from app.services.notificaciones import (
@@ -34,10 +37,13 @@ COLUMNAS_HOJA = ("id_auditoria", "fecha_hora", "usuario", "rol", "origen", "acci
 CLAVES_SENSIBLES = ("contrasena", "contraseña", "password", "clave", "token", "secret",
                     "api_key", "apikey", "firma", "signature")
 OCULTO = "(no se registra)"
+# Entidad de las cuentas de acceso: sus datos personales van enmascarados.
+ENTIDAD_USUARIO = "usuario"
 LARGO_RESUMEN = 500
 
 __all__ = ["COLUMNAS_HOJA", "RESULTADO_ERROR", "RESULTADO_EXITO", "auditar_pantalla",
-           "campos_cambiados", "fila_hoja", "limpiar", "registrar_auditoria"]
+           "campos_cambiados", "enmascarar_personales", "fila_hoja", "limpiar",
+           "registrar_auditoria"]
 
 
 def _sensible(clave):
@@ -55,6 +61,24 @@ def limpiar(datos):
     return datos
 
 
+def enmascarar_personales(datos):
+    """Copia de `datos` con el documento y el telefono enmascarados (recorre dicts y listas)."""
+    if isinstance(datos, dict):
+        return {clave: (_enmascarar_valor(valor) if clave in CAMPOS_PERSONALES
+                        else enmascarar_personales(valor))
+                for clave, valor in datos.items()}
+    if isinstance(datos, (list, tuple)):
+        return [enmascarar_personales(valor) for valor in datos]
+    return datos
+
+
+def _enmascarar_valor(valor):
+    # Un cambio llega como [antes, despues].
+    if isinstance(valor, (list, tuple)):
+        return [enmascarar(v) for v in valor]
+    return enmascarar(valor)
+
+
 def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RESULTADO_EXITO,
                         entidad_id=None, usuario=None, origen=None, call_id=None, avisar=True,
                         registrado_en=None):
@@ -67,6 +91,8 @@ def registrar_auditoria(accion, entidad, resumen, detalle=None, *, resultado=RES
     """
     usuario = usuario if usuario is not None else usuario_actual()
     origen = origen or origen_actual() or ORIGEN_AUTOMATICO
+    if entidad == ENTIDAD_USUARIO:
+        detalle = enmascarar_personales(detalle)
     registro = Auditoria(
         usuario_id=usuario.id if usuario else None,
         usuario_nombre=usuario.nombre if usuario else "Sistema SGDS",

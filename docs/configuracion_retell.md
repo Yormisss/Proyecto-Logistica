@@ -917,7 +917,7 @@ Y, con confirmación:
   - Nadie se desactiva ni se quita el rol de administrador a sí mismo, y siempre queda un administrador activo.
   - Un conductor con rutas sin cerrar no cambia de rol ni se desactiva. Una cuenta de cliente no pasa a un rol interno ni al revés: se crea otra cuenta.
   - Lee al usuario todo lo que diga el resumen, incluidas sus consecuencias (por ejemplo, que un vehículo queda sin conductor).
-- Configuración del negocio: consultar, cambiar el centro de distribución (nombre o coordenadas; afecta a las rutas nuevas o recalculadas) y el catálogo de motivos de fallo (agregar, renombrar, activar o desactivar; "Otro" no se renombra ni se desactiva).
+- Configuración del negocio: consultar, cambiar el centro de distribución (nombre o coordenadas; afecta a las rutas nuevas o recalculadas), el catálogo de motivos de fallo (agregar, renombrar, activar o desactivar; "Otro" no se renombra ni se desactiva) y los minutos sin actividad tras los que se cierra una sesión (de 1 a 480).
 - Bitácora: los últimos registros de la auditoría, con filtros opcionales por fecha, usuario y entidad.
 
 ## Lo que no puedes hacer por voz
@@ -979,7 +979,7 @@ Nunca envíes "confirmar": true sin haberle leído antes el resumen al usuario y
 |---|---|---|
 | `resumen-rendimiento` | `/api/asistente/admin/resumen-rendimiento` | Resumen del panel de rendimiento: tiempos de respuesta de las transacciones criticas y su cumplimiento del limite. |
 | `usuarios` | `/api/asistente/admin/usuarios` | Cuentas de acceso. Las contrasenas nunca se dicen por voz: al crear o restablecer, llegan al correo del usuario. El correo de una cuenta existente solo se cambia en pantalla. Operaciones: 'consultar': datos de una cuenta (rol, correo, estado, portal o vehiculo); sin usuario, cuantas hay por rol; 'crear': crea una cuenta; requiere nombre, correo y rol (y cliente si el rol es cliente); la contrasena le llega al usuario por correo (modifica datos); 'editar': cambia nombre, documento, telefono, rol o el cliente del portal; el correo no; requiere usuario (modifica datos); 'activar': reactiva una cuenta; requiere usuario (modifica datos); 'desactivar': desactiva una cuenta; no la propia, ni el ultimo administrador, ni un conductor con rutas sin cerrar; requiere usuario (modifica datos); 'restablecer-contrasena': genera una contrasena nueva que le llega al usuario por correo; requiere usuario (modifica datos). Las que modifican datos: llamala primero sin 'confirmar' para obtener el resumen. |
-| `configuracion` | `/api/asistente/admin/configuracion` | Configuracion del negocio: el centro de distribucion (origen de las rutas) y el catalogo de motivos de entrega fallida. 'Otro' no se renombra ni se desactiva. Operaciones: 'consultar': el centro de distribucion y los motivos de fallo activos y desactivados; 'editar-centro': cambia nombre o coordenadas del centro; afecta solo a las rutas nuevas o recalculadas (modifica datos); 'agregar-motivo': agrega un motivo al catalogo; requiere motivo (modifica datos); 'renombrar-motivo': cambia el nombre de un motivo; las entregas ya registradas conservan su texto; requiere motivo y nuevo_nombre (modifica datos); 'activar-motivo': reactiva un motivo; requiere motivo (modifica datos); 'desactivar-motivo': desactiva un motivo; requiere motivo (modifica datos). Las que modifican datos: llamala primero sin 'confirmar' para obtener el resumen. |
+| `configuracion` | `/api/asistente/admin/configuracion` | Configuracion del negocio: el centro de distribucion (origen de las rutas), el catalogo de motivos de entrega fallida y la inactividad de las sesiones. 'Otro' no se renombra ni se desactiva. Operaciones: 'consultar': el centro, los motivos de fallo activos y desactivados y la inactividad de las sesiones; 'editar-centro': cambia nombre o coordenadas del centro; afecta solo a las rutas nuevas o recalculadas (modifica datos); 'editar-inactividad': minutos sin actividad para cerrar una sesion; requiere minutos (modifica datos); 'agregar-motivo': agrega un motivo al catalogo; requiere motivo (modifica datos); 'renombrar-motivo': cambia el nombre de un motivo; las entregas ya registradas conservan su texto; requiere motivo y nuevo_nombre (modifica datos); 'activar-motivo': reactiva un motivo; requiere motivo (modifica datos); 'desactivar-motivo': desactiva un motivo; requiere motivo (modifica datos). Las que modifican datos: llamala primero sin 'confirmar' para obtener el resumen. |
 | `bitacora` | `/api/asistente/admin/bitacora` | Ultimos registros de la auditoria (quien hizo que, desde pantalla o voz), del mas reciente al mas antiguo, con filtros opcionales por fecha, usuario y entidad. |
 | `resumen-dia` | `/api/asistente/gestor/resumen-dia` | Indicadores de hoy: pedidos totales, entregados, fallidos, cancelados, pendientes (sin asignar y en ruta) y tasa de exito. |
 | `pendientes-sin-ruta` | `/api/asistente/gestor/pendientes-sin-ruta` | Pedidos pendientes que aun no tienen ruta: los de hoy por prioridad y cuantos hay de otras fechas. |
@@ -1091,6 +1091,7 @@ Parámetros (JSON schema) de cada función:
       "enum": [
         "consultar",
         "editar-centro",
+        "editar-inactividad",
         "agregar-motivo",
         "renombrar-motivo",
         "activar-motivo",
@@ -1117,6 +1118,10 @@ Parámetros (JSON schema) de cada función:
     "nuevo_nombre": {
       "type": "string",
       "description": "renombrar-motivo: el nombre nuevo."
+    },
+    "minutos": {
+      "type": "integer",
+      "description": "editar-inactividad: minutos sin actividad, de 1 a 480."
     },
     "confirmar": {
       "type": "boolean",

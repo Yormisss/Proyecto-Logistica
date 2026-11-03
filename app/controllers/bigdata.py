@@ -7,14 +7,13 @@ Los resultados del pipeline de Spark se muestran en el tablero de control
 from flask import Blueprint, redirect, url_for
 from flask_login import login_required
 
-from app.controllers.seguridad import requiere_rol
-from app.models import Rol
+from app.controllers.seguridad import requiere_permiso
 
 bigdata_bp = Blueprint("bigdata", __name__)
 
 
 @bigdata_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("bigdata.ver")
 def panel():
     return redirect(url_for("admin.dashboard") + "#big-data")

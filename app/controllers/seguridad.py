@@ -1,17 +1,23 @@
-"""Decoradores de autorizacion por rol (RF1 / RNF5).
+"""Autorizacion por permisos (RF1 / RNF5).
 
-Evitan que personal no autorizado acceda a las rutas de entrega o altere el inventario.
+Cada pantalla exige un permiso (`requiere_permiso`); los permisos de cada
+cuenta salen de sus roles y ajustes (app/services/permisos.py). Evitan que
+personal no autorizado acceda a las rutas de entrega o altere el inventario.
 """
 
 from functools import wraps
 from urllib.parse import urlsplit
 
-from flask import abort, url_for
+from flask import abort, request, url_for
 from flask_login import current_user
 from wtforms import StringField
-from wtforms.validators import DataRequired, Email, Length, Optional, StopValidation
+from wtforms.validators import (
+    DataRequired, Email, Length, Optional, StopValidation, ValidationError,
+)
 
 from app.models import Rol
+from app.permisos import roles_por_defecto
+from app.services.usuarios import error_politica
 from app.services.validacion import MENSAJE_CORREO, PATRON_CORREO, correo_en_lista_blanca
 
 # Pagina de inicio de cada rol. Es la unica fuente de verdad del aterrizaje tras
@@ -24,14 +30,48 @@ INICIO_POR_ROL = {
     Rol.CLIENTE: "cliente.mis_pedidos",
 }
 
-# Destino de reserva para un rol sin pagina propia: el perfil es accesible a
-# cualquier sesion autenticada, asi que nunca produce un bucle de redirecciones.
+# Si los permisos de la cuenta no le dan la pagina de su rol, la primera de
+# estas que si pueda abrir.
+INICIOS_ALTERNATIVOS = (
+    ("tablero.ver", "admin.dashboard"),
+    ("conductor.ruta", "conductor.mi_ruta"),
+    ("portal.cliente", "cliente.mis_pedidos"),
+    ("pedidos.ver", "pedidos.lista"),
+    ("rutas.ver", "rutas.lista"),
+    ("inventario.ver", "inventario.lista"),
+    ("clientes.ver", "clientes_admin.lista"),
+    ("vehiculos.ver", "vehiculos.lista"),
+    ("solicitudes.ver", "solicitudes.lista"),
+    ("analitica.ver", "admin.analitica_operacion"),
+    ("bigdata.ver", "bigdata.panel"),
+    ("bitacora.ver", "bitacora.lista"),
+    ("errores.ver", "errores.lista"),
+    ("rendimiento.ver", "admin.rendimiento"),
+    ("configuracion.gestionar", "configuracion.inicio"),
+)
+
+# Destino de reserva para una cuenta sin ninguna pagina: el perfil es accesible
+# a cualquier sesion autenticada, asi que nunca produce un bucle de redirecciones.
 INICIO_POR_DEFECTO = "auth.perfil"
 
 
 def destino_por_rol(usuario):
-    """URL de aterrizaje del usuario segun su rol: tablero, ruta del dia o portal."""
-    return url_for(INICIO_POR_ROL.get(usuario.rol, INICIO_POR_DEFECTO))
+    """URL de aterrizaje: la de su rol (tablero, ruta del dia o portal) si sus
+    permisos se la dan; si no, la primera pagina que puede abrir."""
+    inicio = INICIO_POR_ROL.get(usuario.rol)
+    permiso = getattr(_vista(inicio), "permiso", None) if inicio else None
+    if inicio and permiso and usuario.puede(permiso):
+        return url_for(inicio)
+    for permiso, endpoint in INICIOS_ALTERNATIVOS:
+        if usuario.puede(permiso):
+            return url_for(endpoint)
+    return url_for(INICIO_POR_DEFECTO)
+
+
+def _vista(endpoint):
+    from flask import current_app
+
+    return current_app.view_functions.get(endpoint)
 
 
 def es_redireccion_segura(destino):
@@ -55,19 +95,30 @@ def es_redireccion_segura(destino):
     return not partes.scheme and not partes.netloc
 
 
-def requiere_rol(*roles):
+def requiere_permiso(permiso, *, post=None):
+    """La vista exige `permiso`; con `post`, un POST exige ese otro.
+
+    `post` es para las pantallas que muestran (ver) y en la misma ruta
+    guardan (gestionar), como el detalle de un producto con su formulario de
+    movimiento.
+    """
     def decorador(vista):
         @wraps(vista)
         def envoltura(*args, **kwargs):
             if not current_user.is_authenticated:
                 abort(401)
-            if current_user.rol not in roles:
+            exigido = post if post and request.method == "POST" else permiso
+            if not current_user.puede(exigido):
                 abort(403)
             return vista(*args, **kwargs)
 
         # Para inspeccionar quien puede usar cada pantalla (prueba de cobertura
-        # por voz). `login_required` lo conserva: functools.wraps copia __dict__.
-        envoltura.roles_permitidos = tuple(roles)
+        # por voz y pagina de inicio). `login_required` los conserva:
+        # functools.wraps copia __dict__. `roles_permitidos` son los roles del
+        # sistema que, en una base nueva, pueden guardar en ella.
+        envoltura.permiso = permiso
+        envoltura.permiso_post = post or permiso
+        envoltura.roles_permitidos = roles_por_defecto(post or permiso)
         return envoltura
 
     return decorador
@@ -131,3 +182,14 @@ def campo_correo(etiqueta="Correo electrónico", obligatorio=None, validar=True)
             "data-correo": True,
         },
     )
+
+
+# --------------------------------------------------------------------------
+# Contrasena: politica de complejidad (RNF5)
+# --------------------------------------------------------------------------
+
+def politica_contrasena(formulario, campo):
+    """Validador de WTForms con la politica de `app.services.usuarios`, la misma
+    que aplica el alta de cuentas."""
+    if campo.data and (error := error_politica(campo.data)):
+        raise ValidationError(error)

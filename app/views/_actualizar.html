@@ -1,0 +1,13 @@
+{# Boton "Actualizar" de las vistas de consulta: vuelve a traer la pagina sin
+   recargarla (ver actualizar.js), para ver lo que cambio el asistente de voz
+   sin cortar la llamada ni cambiar de apartado. #}
+{% macro boton_actualizar() %}
+<button type="button" class="boton boton-secundario boton-actualizar" data-actualizar
+        data-login="{{ url_for('auth.login') }}"
+        aria-label="Actualizar" title="Actualizar">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5"/>
+    <path d="M20 3.5v5h-5"/>
+  </svg>
+</button>
+{% endmacro %}

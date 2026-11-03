@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Restablecer contraseña | {{ nombre_sistema }}{% endblock %}
+{% block clase_body %}pagina-acceso{% endblock %}
+
+{% block contenido %}
+<div class="acceso-panel">
+  <div class="acceso-encabezado">
+    <img class="acceso-icono" src="{{ url_for('static', filename='img/icono.svg') }}" alt="" width="56" height="56">
+    <h1>Nueva contraseña</h1>
+  </div>
+
+  {% if formulario %}
+  <form method="post" class="formulario" novalidate>
+    {{ formulario.hidden_tag() }}
+    <div class="campo">
+      {{ formulario.contrasena.label }}
+      {{ formulario.contrasena(autocomplete="new-password", autofocus=true) }}
+      {% for error in formulario.contrasena.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
+      <small class="ayuda-campo">{{ politica_contrasena }}</small>
+    </div>
+    <div class="campo">
+      {{ formulario.confirmacion.label }}
+      {{ formulario.confirmacion(autocomplete="new-password") }}
+      {% for error in formulario.confirmacion.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
+    </div>
+    <button type="submit" class="boton boton-primario boton-bloque">Guardar contraseña</button>
+  </form>
+  {% else %}
+  <div class="alerta alerta-error">
+    El enlace no es válido, ya venció o ya se usó. Pida uno nuevo.
+  </div>
+  <p class="acceso-enlace"><a href="{{ url_for('auth.recuperar') }}">Pedir otro enlace</a></p>
+  {% endif %}
+
+  <p class="acceso-enlace"><a href="{{ url_for('auth.login') }}">Volver a iniciar sesión</a></p>
+</div>
+{% endblock %}

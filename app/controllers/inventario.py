@@ -11,9 +11,9 @@ from sqlalchemy import or_
 from wtforms import BooleanField, IntegerField, SelectField, StringField, TextAreaField
 from wtforms.validators import InputRequired, Length, NumberRange, Optional, ValidationError
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
-from app.models import MovimientoInventario, Producto, Rol, TipoMovimiento
+from app.models import MovimientoInventario, Producto, TipoMovimiento
 from app.services.inventario import (
     MOTIVO_AJUSTE_OBLIGATORIO, crear_producto, editar_producto, registrar_movimiento, sku_fijo,
 )
@@ -76,7 +76,7 @@ class FormularioMovimiento(FlaskForm):
 
 @inventario_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("inventario.ver")
 def lista():
     consulta = db.session.query(Producto)
 
@@ -100,7 +100,7 @@ def lista():
 
 @inventario_bp.route("/nuevo", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("inventario.gestionar")
 def nuevo():
     formulario = FormularioProducto()
 
@@ -127,7 +127,7 @@ def nuevo():
 
 @inventario_bp.route("/<int:producto_id>/editar", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("inventario.gestionar")
 def editar(producto_id):
     producto = db.session.get(Producto, producto_id)
     if producto is None:
@@ -156,7 +156,7 @@ def editar(producto_id):
 
 @inventario_bp.route("/<int:producto_id>", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("inventario.ver", post="inventario.gestionar")
 def detalle(producto_id):
     producto = db.session.get(Producto, producto_id)
     if producto is None:

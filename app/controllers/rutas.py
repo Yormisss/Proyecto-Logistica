@@ -17,7 +17,7 @@ from sqlalchemy.orm import joinedload
 from wtforms import DateField, SelectField
 from wtforms.validators import DataRequired, Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
 from app.models import (
     EstadoPedido, EstadoRuta, Pedido, Rol, Ruta, Usuario, Vehiculo,
@@ -72,7 +72,7 @@ class FormularioRuta(FlaskForm):
 
 @rutas_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("rutas.ver")
 def lista():
     consulta = db.session.query(Ruta).options(
         joinedload(Ruta.conductor), joinedload(Ruta.vehiculo)
@@ -105,7 +105,7 @@ def lista():
 
 @rutas_bp.route("/nueva", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("rutas.gestionar")
 def nueva():
     formulario = FormularioRuta()
     formulario.cargar_opciones()
@@ -183,7 +183,7 @@ def nueva():
 
 @rutas_bp.route("/<int:ruta_id>")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("rutas.ver")
 def detalle(ruta_id):
     ruta = db.session.get(Ruta, ruta_id)
     if ruta is None:
@@ -228,7 +228,7 @@ def detalle(ruta_id):
 
 @rutas_bp.route("/<int:ruta_id>/recalcular", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("rutas.gestionar")
 def recalcular(ruta_id):
     ruta = db.session.get(Ruta, ruta_id)
     if ruta is None:
@@ -271,7 +271,7 @@ def recalcular(ruta_id):
 
 @rutas_bp.route("/<int:ruta_id>/quitar/<int:pedido_id>", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("rutas.gestionar")
 def quitar_parada(ruta_id, pedido_id):
     ruta = db.session.get(Ruta, ruta_id)
     pedido = db.session.get(Pedido, pedido_id)
@@ -295,7 +295,7 @@ def quitar_parada(ruta_id, pedido_id):
 
 @rutas_bp.route("/<int:ruta_id>/eliminar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("rutas.gestionar")
 def eliminar(ruta_id):
     ruta = db.session.get(Ruta, ruta_id)
     if ruta is None:

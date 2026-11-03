@@ -79,7 +79,7 @@
       </div>
       {% if propia %}
       <small class="ayuda-campo campo-ancho">
-        Minimo {{ longitud_minima }} caracteres y distinta de la actual. Se pide la actual
+        {{ politica_contrasena }} Distinta de la actual. Se pide la actual
         aunque ya haya iniciado sesion: una sesion abierta no basta para cambiarla.
       </small>
       {% else %}
@@ -90,7 +90,7 @@
         </label>
         <small class="ayuda-campo">
           Recomendado: asi solo la persona conoce su contrasena definitiva.
-          Minimo {{ longitud_minima }} caracteres.
+          {{ politica_contrasena }}
         </small>
       </div>
       {% endif %}

@@ -256,6 +256,11 @@ check("Crear pedidos: todavía no está disponible" in conf.prompt(cliente) and 
       "el cliente explica que no crea pedidos ni ve datos de otros")
 check({d.variable for d in conf.AGENTES} == set(VARIABLES), "un agente por variable de entorno")
 with app.app_context():
+    largas = [f"{d.clave}/{t['name']} ({len(t['description'])})"
+              for d in conf.AGENTES for t in conf.herramientas(d, URL) if len(t["description"]) > 1024]
+check(not largas, "ninguna descripcion de funcion pasa de 1024 caracteres, el limite de Retell"
+      + (f": {', '.join(largas)}" if largas else ""))
+with app.app_context():
     documento = conf.generar_documento()
 check((RAIZ / "docs" / "configuracion_retell.md").read_text(encoding="utf-8") == documento,
       "docs/configuracion_retell.md esta al dia (flask --app run documentar-asistentes)")

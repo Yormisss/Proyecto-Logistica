@@ -9,7 +9,9 @@
   </div>
   <div class="acciones-encabezado">
     <a class="boton boton-plano" href="{{ url_for('inventario.lista') }}">Volver</a>
+    {% if current_user.puede('inventario.gestionar') %}
     <a class="boton boton-secundario" href="{{ url_for('inventario.editar', producto_id=producto.id) }}">Editar</a>
+    {% endif %}
   </div>
 </div>
 
@@ -59,6 +61,7 @@
     {% endif %}
   </section>
 
+  {% if current_user.puede('inventario.gestionar') %}
   <section class="tarjeta">
     <h2 class="tarjeta-titulo">Registrar movimiento</h2>
     <form method="post" class="formulario" novalidate>
@@ -82,5 +85,6 @@
       <button type="submit" class="boton boton-primario">Registrar</button>
     </form>
   </section>
+  {% endif %}
 </div>
 {% endblock %}

@@ -5,6 +5,9 @@
   <h1 class="codigo-error">500</h1>
   <h2>Error del servidor</h2>
   <p>Ocurrió un error interno. Intente nuevamente.</p>
+  {% if g.error_id %}
+  <p>Quedó en el registro de errores con la referencia <strong class="mono">#{{ g.error_id }}</strong>.</p>
+  {% endif %}
   <a class="boton boton-primario" href="{{ url_for('principal.inicio') }}">Volver al inicio</a>
 </div>
 {% endblock %}

@@ -30,6 +30,8 @@ class Cobertura:
 
 # Exclusiones aprobadas: no se agrega ninguna sin preguntar.
 IMPORTAR_CSV = "Importar pedidos exige subir un archivo CSV; no tiene equivalente hablado."
+ROLES_Y_PERMISOS = ("Roles y permisos: se reparten solo en pantalla, viendo la matriz completa "
+                    "de cada rol y cada cuenta.")
 APARTADO_CONTRASENAS = ("Apartado Contraseñas: las contraseñas se gestionan solo en pantalla; "
                         "por voz solo se restablece, con la nueva enviada al correo.")
 
@@ -37,6 +39,20 @@ COBERTURA = {
     # --- Fuera del alcance por voz (aprobado) ---
     "auth.login": Cobertura(excluida="Iniciar sesión: la llamada de voz parte de una sesión ya iniciada."),
     "auth.perfil": Cobertura(excluida="Cambiar la propia contraseña: las contraseñas nunca se dicen por voz."),
+    "auth.recuperar": Cobertura(excluida="Olvidé mi contraseña: es para quien no puede iniciar sesión, "
+                                         "y la llamada de voz parte de una sesión ya iniciada."),
+    "auth.restablecer": Cobertura(excluida="Definir la contraseña con el enlace del correo: las "
+                                           "contraseñas nunca se dicen por voz."),
+    # Roles y permisos configurables (30/10/2026): se reparten en pantalla, viendo la matriz.
+    "roles.nuevo": Cobertura(excluida=ROLES_Y_PERMISOS),
+    "roles.editar": Cobertura(excluida=ROLES_Y_PERMISOS),
+    "roles.eliminar": Cobertura(excluida=ROLES_Y_PERMISOS),
+    "usuarios.permisos": Cobertura(excluida=ROLES_Y_PERMISOS),
+    # Aprobadas al agregar sesion unica, inactividad y registro de errores (30/10/2026).
+    "auth.cambiar_correo": Cobertura(excluida="Cambiar el propio correo pide la contraseña actual, "
+                                              "y las contraseñas nunca se dicen por voz."),
+    "errores.probar": Cobertura(excluida="Provocar un error a propósito es una prueba del registro "
+                                         "de errores, solo de pantalla."),
     "asistente.llamada": Cobertura(excluida="Es el botón que inicia la propia llamada de voz."),
     "pedidos.importar": Cobertura(excluida=IMPORTAR_CSV),
     "pedidos.confirmar_importacion": Cobertura(excluida=IMPORTAR_CSV),
@@ -94,6 +110,7 @@ COBERTURA = {
 
     # --- Configuracion del negocio (administrador) ---
     "configuracion.centro": Cobertura(voz=("admin/configuracion:editar-centro",)),
+    "configuracion.sesion": Cobertura(voz=("admin/configuracion:editar-inactividad",)),
     "configuracion.agregar_motivo": Cobertura(voz=("admin/configuracion:agregar-motivo",)),
     "configuracion.renombrar_motivo": Cobertura(voz=("admin/configuracion:renombrar-motivo",)),
     "configuracion.alternar_motivo": Cobertura(voz=("admin/configuracion:activar-motivo",

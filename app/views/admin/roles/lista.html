@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}Roles | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina fila-encabezado">
+  <div>
+    <h1 class="titulo-pagina">Roles y permisos</h1>
+    <p class="subtitulo-pagina">
+      {{ filas|length }} rol(es). Cada cuenta tiene su rol principal y puede sumar roles adicionales
+      y ajustes propios en Usuarios &rsaquo; Permisos.
+    </p>
+  </div>
+  <div class="acciones-encabezado">
+    <a class="boton boton-primario" href="{{ url_for('roles.nuevo') }}">Nuevo rol</a>
+  </div>
+</div>
+
+<section class="tarjeta">
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr><th>Rol</th><th>Tipo</th><th>Permisos</th><th class="derecha">Cuentas</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for rol, permisos, usuarios in filas %}
+        <tr>
+          <td>
+            <strong>{{ rol.nombre }}</strong>
+            {% if rol.descripcion %}<br><small>{{ rol.descripcion }}</small>{% endif %}
+          </td>
+          <td>{{ 'Del sistema' if rol.es_sistema else 'Creado por el administrador' }}</td>
+          <td>
+            {% if rol.clave_sistema == 'ADMIN' %}
+              <span class="chip">Todos los permisos</span>
+            {% else %}
+              {% for permiso in permisos %}<span class="chip">{{ nombre_permiso(permiso) }}</span> {% endfor %}
+              {% if not permisos %}<span class="aviso-inline">Sin permisos</span>{% endif %}
+            {% endif %}
+          </td>
+          <td class="derecha">{{ usuarios|length }}</td>
+          <td class="derecha acciones-fila">
+            <a href="{{ url_for('roles.editar', rol_id=rol.id) }}">{{ 'Editar' if es_editable(rol) else 'Ver' }}</a>
+            {% if not rol.es_sistema %}
+            <form method="post" action="{{ url_for('roles.eliminar', rol_id=rol.id) }}"
+                  onsubmit="return confirm('¿Eliminar el rol {{ rol.nombre }}? {{ usuarios|length }} cuenta(s) dejarán de tenerlo.');">
+              {{ formulario.hidden_tag() }}
+              <button type="submit" class="boton-enlace texto-alerta">Eliminar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="nota-pie">
+    Gestionar usuarios, contraseñas y roles es solo de los administradores: no se reparte, porque
+    quien lo tuviera podría darse cualquier otro permiso. La ruta del conductor y el portal del
+    cliente dependen del tipo de cuenta.
+  </p>
+</section>
+{% endblock %}

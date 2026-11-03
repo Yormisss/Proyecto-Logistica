@@ -30,10 +30,10 @@ almacenamiento mediante análisis de datos y procesos inteligentes"**
 │   ├── services/          Lógica de negocio — despacho, pedidos, inventario, planificación, ruteo, analítica, importador, seguimiento, solicitudes, búsqueda para voz, asistente, avisos
 │   ├── asistentes/        Prompts de los agentes de Retell y su sincronización
 │   ├── views/             VISTA    — plantillas Jinja2
-│   └── static/            CSS y JS
+│   └── static/            CSS, JS, fuentes e imágenes (logo y favicon en img/)
 ├── migraciones/           Cambios de esquema aplicables sobre una base con datos
 ├── docs/                  Configuración generada de los agentes de Retell
-├── pruebas/               1925 verificaciones automatizadas en 20 suites (MySQL)
+├── pruebas/               2230 verificaciones automatizadas en 25 suites (MySQL)
 ├── ejemplos/              CSV de ejemplo para probar la importación
 ├── config.py              Configuración por entorno
 ├── run.py                 Punto de entrada y comandos CLI
@@ -65,6 +65,7 @@ cp .env.example .env
 .venv/bin/flask --app run migrar-auditoria  # Crear la tabla de auditoría
 .venv/bin/flask --app run migrar-pruebas-entrega # Pruebas de entrega de solo agregar (m007, MySQL)
 .venv/bin/flask --app run migrar-contrasenas  # Columnas de gestión de contraseñas y tabla de intentos de acceso
+.venv/bin/flask --app run migrar-seguridad    # Sesión única, inactividad, errores (m010), cifrado (m011) y roles con permisos (m012)
 .venv/bin/flask --app run sincronizar-asistentes # Crear o actualizar los agentes en Retell
 .venv/bin/flask --app run documentar-asistentes  # Regenerar docs/configuracion_retell.md
 ```
@@ -165,6 +166,46 @@ base de datos a mano.
 | `/admin/usuarios` | Administrador | Crear, editar, activar/desactivar cuentas y restablecer contraseñas |
 | `/admin/clientes` | Administrador y gestor logístico | Directorio de clientes, sedes, y quién tiene portal |
 
+### Roles y permisos
+
+Cada pantalla exige un **permiso** (`requiere_permiso` en `app/controllers/seguridad.py`), y
+cada cuenta tiene los suyos según sus roles. El catálogo está en `app/permisos.py`: una
+sección con dos niveles, *ver* y *gestionar* (por ejemplo *Ver pedidos* y *Gestionar
+pedidos*). Una pantalla que muestra y guarda en la misma ruta, como el detalle de un
+producto con su formulario de movimiento, exige *ver* para abrirla y *gestionar* para
+guardar.
+
+Los permisos de una cuenta (`app/services/permisos.py`) se calculan así:
+
+1. Los de su **rol principal**, que es el tipo de cuenta y se elige en *Editar*.
+2. Más los de sus **roles adicionales**.
+3. Con sus **ajustes propios**, permiso por permiso: *según sus roles*, *conceder* (lo da
+   aunque ningún rol lo dé) o *denegar* (lo quita aunque un rol lo dé).
+
+| Pantalla | Qué se hace |
+|---|---|
+| **Administración > Roles** | Crear roles con sus permisos, editar el reparto de *Gestor logístico* y *Conductor*, eliminar los creados. *Administrador* (todos los permisos) y *Cliente* (solo su portal) no se editan |
+| **Usuarios > Permisos** (en cada cuenta) | Sumar roles adicionales y ajustar cada permiso. Muestra de qué roles viene cada uno y si la cuenta lo tiene |
+
+- **Una base nueva tiene el reparto de siempre.** Los cuatro roles del sistema quedan con
+  los permisos que tenían cuando eran fijos: nadie gana ni pierde acceso al migrar.
+- **El menú y los botones siguen a los permisos.** Quien solo puede *ver* pedidos no ve
+  *Nuevo pedido* ni *Importar CSV*. Si la cuenta no puede abrir la página de su rol (por
+  ejemplo, se le negó el tablero), entra a la primera que sí pueda.
+- **La voz también los respeta.** Cada función del asistente exige el permiso de su
+  pantalla (`PERMISOS_VOZ`): quitarle *Gestionar inventario* al gestor también se lo quita
+  por voz. Los permisos ganados con roles adicionales no amplían el asistente, que sigue
+  siendo uno por tipo de cuenta.
+- **Contra la escalada de privilegios.** Gestionar usuarios, contraseñas y roles es **solo
+  de los administradores**: ningún rol ni ajuste lo da. Quien pudiera hacerlo podría darse
+  a sí mismo cualquier otro permiso o el rol de administrador. Tampoco se reparten la ruta
+  del conductor ni el portal del cliente, que dependen del tipo de cuenta. Una cuenta de
+  cliente no lleva roles adicionales ni ajustes, y al administrador no se le quita nada.
+  Las reglas se validan en el servidor, también ante un POST fabricado.
+- Los cambios aplican desde la siguiente acción de cada cuenta, sin cerrar su sesión, y
+  quedan en la bitácora (*Crear rol*, *Editar rol*, *Eliminar rol*, *Editar permisos de
+  usuario*).
+
 ### Habilitar el portal de un cliente
 
 En **Clientes**, los que no tienen acceso muestran "Sin acceso" y un enlace *Crear cuenta*
@@ -183,6 +224,18 @@ ya no representa.
 Al crear una cuenta, si el administrador deja el campo en blanco, el sistema genera una
 contraseña temporal con `secrets` y **la muestra una sola vez** para que se entregue por un
 canal aparte. *Restablecer clave* hace lo mismo sobre una cuenta existente.
+
+Toda contraseña que se escribe (alta, *Asignar*, *Cambiar la mía* y *Mi perfil*) debe
+tener **mínimo 8 caracteres, con al menos una mayúscula, una minúscula, un número y un
+símbolo**. Así no pasan secuencias como `123456789101112131415` ni palabras sueltas, y el
+mensaje dice qué le falta. La regla es una sola (`error_politica` en
+`app/services/usuarios.py`), y las contraseñas generadas también la cumplen.
+
+Todo campo de contraseña lleva un botón con un ojo: **la contraseña se ve solo mientras se
+mantiene presionado** (ratón, dedo, o Espacio o Enter con el teclado). Vuelve a ocultarse al
+soltarlo, al sacar el puntero del botón, al cambiar de ventana y al enviar el formulario.
+Aun visible, el campo no deja copiar ni cortar su contenido. El ojo propio de Edge, que la
+deja a la vista con un clic, queda oculto. Ver `app/static/js/contrasena.js`.
 
 El apartado **Contraseñas** (menú del administrador, `/admin/usuarios/contrasenas`) muestra
 el estado de la contraseña de todas las cuentas. Como solo se guarda el hash (RNF5),
@@ -229,7 +282,8 @@ rechaza repetir la contraseña actual.
 
 Cada cambio de contraseña **cierra las sesiones abiertas** de esa cuenta: el identificador de
 sesión de Flask-Login incluye `version_credencial`, que aumenta con cada cambio. Quien la
-cambia desde su perfil conserva su sesión actual y pierde las demás.
+cambia desde su perfil conserva su sesión actual, y cualquier copia de su cookie deja de
+servir.
 
 ### Correo electrónico: solo caracteres permitidos
 
@@ -267,8 +321,8 @@ Aplica a los cuatro roles, porque todos entran por el mismo login.
 
 | Situación | Qué ve la persona |
 |---|---|
-| Fallos 1 a 5 | *Credenciales invalidas. Verifique sus datos. Intento fallido N de 6.* |
-| Fallo 6 | *Acceso no valido: se superaron los 6 intentos permitidos. Espere 1 minuto para volver a intentar iniciar sesion.* |
+| Fallos 1 a 4 | *Credenciales invalidas. Verifique sus datos. Intento fallido N de 5.* |
+| Fallo 5 | *Acceso no valido: se superaron los 5 intentos permitidos. Espere 1 minuto para volver a intentar iniciar sesion.* |
 | Cualquier intento durante ese minuto | El mismo mensaje, con los segundos que faltan. **Ni la contraseña correcta entra**, y ni siquiera se verifica |
 
 - **El contador vuelve a cero** al entrar con la contraseña correcta, al cumplirse el
@@ -284,6 +338,102 @@ Aplica a los cuatro roles, porque todos entran por el mismo login.
   cada cuenta y, si está bloqueada, cuánto le falta.
 - El límite y la espera se ajustan en `config.py` (`LOGIN_MAX_INTENTOS`,
   `LOGIN_BLOQUEO_SEGUNDOS`). La lógica está en `app/services/acceso.py`.
+- *Cambiar correo* en *Mi perfil* también pide la contraseña actual y cuenta para el
+  mismo bloqueo.
+
+### Sesión única
+
+Una cuenta tiene **una sola sesión abierta**. Si la misma persona inicia sesión en otro
+navegador o dispositivo, la sesión anterior se cierra, y en su siguiente clic ese
+navegador vuelve al login con el aviso *Su sesion se cerro porque la cuenta inicio sesion
+en otro navegador o dispositivo.* Gana la sesión más reciente: así un navegador que se
+cerró sin salir no deja la cuenta bloqueada.
+
+Cada inicio de sesión genera un `token_sesion` nuevo, que va en el identificador de sesión
+de Flask-Login junto a `version_credencial`. La cookie del otro navegador, y también su
+cookie de *Mantener sesión iniciada*, conservan el token anterior y dejan de servir.
+**Cerrar sesión borra el token**: ninguna copia de la cookie sigue abierta, ni en otra
+pestaña ni en otro navegador. La lógica está en `app/services/sesiones.py`.
+
+### Cierre de sesión por inactividad
+
+Una sesión sin peticiones durante el tiempo configurado se cierra. El administrador lo
+ajusta en **Configuración > Sesión**, entre 1 y 480 minutos (30 por defecto), y el cambio
+queda en la bitácora. Aplica desde la siguiente petición de cada sesión abierta.
+
+- La última actividad se guarda en la base (`usuarios.sesion_actividad_en`), no en la
+  cookie: *Mantener sesión iniciada* tampoco salta el límite al reabrir el navegador.
+- Cumplido el tiempo, la pantalla pasa sola al login con el aviso *Su sesion se cerro tras
+  N minutos sin actividad* (`static/js/sesion.js`). Antes de hacerlo consulta
+  `/auth/sesion`, que no cuenta como actividad, porque otra pestaña pudo mantener viva la
+  sesión. El cierre real lo hace el servidor (`auth.vigilar_sesion`), así que desactivar
+  JavaScript no lo evita.
+
+### Cambiar el correo desde el perfil
+
+*Mi perfil* permite cambiar la contraseña y el **correo de inicio de sesión**. El correo
+pasa por la misma lista blanca del login, no puede ser el de otra cuenta y exige la
+contraseña actual. La sesión sigue abierta, y el cambio queda en la bitácora como
+*Cambiar correo propio*. Una cuenta con contraseña temporal primero debe definir la suya.
+
+### Olvidé mi contraseña
+
+El login ofrece **¿Olvidó su contraseña?** (`/auth/recuperar`). La persona escribe su
+correo y recibe un enlace para definir una contraseña nueva, con la misma política de
+siempre. La lógica está en `app/services/recuperacion.py`.
+
+- **Pedir el enlace no cambia nada.** Solo quien abre el correo cambia la contraseña: nadie
+  deja a otro sin acceso con solo escribir su correo.
+- **No revela qué cuentas existen.** La pantalla responde lo mismo para un correo real, uno
+  inexistente o una cuenta inactiva, y solo la cuenta activa recibe el enlace.
+- **El enlace vence a los 30 minutos y es de un solo uso.** Es un token firmado con
+  `SECRET_KEY` que lleva la `version_credencial` de la cuenta: al restablecer la contraseña
+  la versión aumenta y el mismo enlace deja de servir. También caduca si la contraseña
+  cambió por otra vía después de pedirlo. No se guarda en ninguna tabla.
+- Se envía como máximo **un enlace por cuenta cada 5 minutos**.
+- Al restablecerla se **cierran las sesiones abiertas** de la cuenta y se **levanta el
+  bloqueo** por intentos fallidos: quien abrió el correo demostró ser el dueño.
+- La solicitud y el cambio quedan en la bitácora (*Solicitar restablecimiento de
+  contraseña*, *Restablecer contraseña por correo*), nunca con el enlace.
+
+**Entrega del enlace.** Va al correo de la cuenta por su propio webhook de Make,
+`MAKE_WEBHOOK_RESTABLECIMIENTO_URL` (ver el [escenario de restablecimiento](#escenario-de-restablecimiento-de-contraseña)),
+y se arma con `URL_PUBLICA`, **nunca con el `Host` de la petición**: ese lo escribe el
+cliente, y un atacante podría hacer llegar a la víctima un enlace válido hacia su propio
+dominio. Sin ese webhook y `URL_PUBLICA`:
+
+| Entorno | Comportamiento |
+|---|---|
+| Desarrollo | El enlace se escribe en la **consola del servidor** (`Desarrollo, sin MAKE_WEBHOOK_RESTABLECIMIENTO_URL: enlace para restablecer...`) |
+| Producción | El login no ofrece la opción y `/auth/recuperar` pide acudir al administrador |
+
+### Datos personales cifrados
+
+En `usuarios`, la **contraseña** se guarda como hash PBKDF2-SHA256 (no se puede revertir), y
+el **documento** y el **teléfono** se guardan **cifrados** con Fernet (AES-128 con
+HMAC-SHA256, de la librería `cryptography`). El ORM cifra al guardar y descifra al leer
+(`TextoCifrado` en `app/cifrado.py`), así que la aplicación los muestra en claro y la base
+no. La guía `docs/seguridad/Seguridad_Contrasenas_SGDS.md` trae las consultas SQL para
+comprobarlo.
+
+- Cada valor lleva un IV aleatorio: el mismo dato cifrado dos veces da textos distintos, y
+  la base no revela ni siquiera que dos cuentas comparten un dato.
+- **Índice ciego del documento.** El texto cifrado no se puede comparar en SQL, así que
+  `documento_indice` guarda un HMAC-SHA256 del documento con otra clave. Con él se exige
+  que no se repita (también con un índice único en la base) y se busca por igualdad: en
+  *Usuarios* el documento se encuentra **completo**, no por un fragmento.
+- Una columna cifrada **rechaza toda comparación en SQL** salvo `IS NULL`: una consulta que
+  la compare por error falla con un mensaje claro, en vez de no encontrar nada en silencio.
+- **La bitácora no guarda estos datos completos**: en las acciones sobre cuentas, en
+  pantalla y por voz, quedan enmascarados (`******4567`), y el resumen que lee la voz dice
+  *"uno terminado en 4567"*. Los datos de los clientes son de empresas (NIT, teléfono de
+  contacto) y siguen visibles en su auditoría.
+- **Clave.** Las claves de cifrado y del índice se derivan con HKDF de `CLAVE_CIFRADO` o,
+  si no se define, de `SECRET_KEY`. **No la cambie una vez cifrados los datos**: con otra
+  clave no se pueden leer, y la aplicación lo dice en el error. En Render, `render.yaml`
+  la genera una sola vez.
+- El correo **no se cifra**: es el usuario con el que se inicia sesión, y el login, la
+  unicidad y la búsqueda dependen de él.
 
 ### Las cuentas no se eliminan
 
@@ -362,6 +512,32 @@ Descargue la plantilla desde **Pedidos → Importar CSV → Descargar plantilla*
 Se aceptan separadores por coma, punto y coma o tabulación, y codificación UTF-8 o Latin-1.
 El sistema muestra una vista previa antes de confirmar y reporta las filas inválidas
 línea por línea, sin bloquear la carga de las filas correctas.
+
+### Archivos que no son CSV
+
+**Manda el contenido, no la extensión.** El nombre y el tipo MIME los escribe quien sube
+el archivo: renombrar un ejecutable a `.pdf` o a `.csv` no lo convierte en eso. Antes de
+guardar o procesar nada, `app/services/archivos.py` revisa la **firma** del archivo (los
+primeros bytes de cada formato) y rechaza todo lo que no sea texto:
+
+| Contenido detectado | Mensaje |
+|---|---|
+| Programa de Windows (`MZ`), Linux (ELF), macOS (Mach-O) o un script (`#!/`) | *Archivo rechazado por seguridad: «factura.pdf» no es un CSV, es un programa ejecutable de Windows (.exe o .dll). No se guardó ni se procesó.* |
+| PDF, ZIP o Excel/Word (`.xlsx`, `.docx`, `.xls`, `.doc`), RAR, 7z, gzip, PNG, JPEG, GIF | *Archivo rechazado: … es un documento PDF …* |
+| Texto en UTF-16 | Pide guardarlo como CSV UTF-8 |
+| Cualquier otro archivo con bytes nulos | *… es un archivo binario, no de texto …* |
+
+- El archivo rechazado **no se guarda** en el servidor ni llega al lector de CSV. Antes, un
+  binario se decodificaba como Latin-1 (que acepta cualquier byte) y fallaba después,
+  por las columnas.
+- Cada rechazo queda en la **Bitácora** como *Rechazar archivo*, con resultado *Error*,
+  el nombre del archivo, su tamaño, lo que se detectó y quién lo subió.
+- Sin falsos positivos con un CSV real: UTF-8 (con o sin BOM de Excel), Latin-1, o un
+  texto que empiece por `MZ` siguen entrando.
+- La revisión va **antes** de la extensión: un `.exe` renombrado a `.pdf` se rechaza por ser
+  un ejecutable, no solo por no terminar en `.csv`.
+- **Tamaño:** el CSV admite 2 MB, y toda petición está limitada a 5 MB
+  (`MAX_CONTENT_LENGTH`). Un envío mayor se corta antes de leerlo, con una página 413.
 
 ## Generación de rutas (RF3)
 
@@ -543,8 +719,12 @@ sus parámetros, está en [docs/configuracion_retell.md](docs/configuracion_rete
 | Rol | Excluido | Por qué |
 |---|---|---|
 | Todos | Iniciar y cerrar sesión, cambiar la propia contraseña, el botón que abre la llamada | La llamada parte de una sesión iniciada; las contraseñas nunca se dicen por voz |
+| Todos | Cambiar el propio correo desde *Mi perfil* | Pide la contraseña actual, que nunca se dice por voz |
+| Todos | *Olvidé mi contraseña* y el enlace para restablecerla | Son para quien no puede iniciar sesión, y la llamada parte de una sesión iniciada |
+| Admin | Crear, editar y eliminar roles; los roles adicionales y ajustes de una cuenta | Se reparten en pantalla, viendo la matriz completa de cada rol y cada cuenta |
 | Gestor y admin | Importar pedidos desde CSV | Exige subir un archivo; no tiene equivalente hablado |
 | Admin | Cambiar el correo de inicio de sesión de una cuenta | Es la identidad de la cuenta: solo en pantalla |
+| Admin | *Provocar un error* en la pantalla de errores | Es una prueba del registro de errores, solo de pantalla |
 | Conductor | La ubicación del teléfono al entregar o registrar un fallo | La llamada no envía la ubicación; la prueba de entrega por voz lo dice en su observación |
 | Cliente | Cancelar un pedido ya programado | Desde ASIGNADO ya hay una ruta planificada: el asistente ofrece solicitar contacto con el gestor |
 | Cliente | Rutas, conductores, stock, datos de otros clientes | El mismo aislamiento del portal: un pedido ajeno se responde igual que uno inexistente |
@@ -715,8 +895,20 @@ El fin de `/v2/create-web-call` (18 de octubre de 2026) no afecta: `retell-sdk` 
 llama a `/v3/create-web-call`, y el SDK web acepta su token si se le indica el
 transporte `gateway` con el `call_id`.
 
-Cambiar de página corta la llamada; el asistente está pensado para usarse desde una
-misma pantalla sin navegar.
+La llamada vive en la página donde se inició, así que el navegador la cortaría al cambiar
+de página. Para seguir hablando mientras se navega, con una llamada en curso los enlaces
+y formularios de la aplicación se abren en un marco que cubre la ventana: la página de la
+llamada queda debajo con solo el botón, y la barra de direcciones y el título siguen al
+marco. Recargar o cerrar la pestaña corta la llamada, y si el marco llega al login (*Salir*
+o inactividad), la ventana entera va al login y la llamada termina.
+
+Para ver lo que el asistente acaba de cambiar sin salir del apartado, **Pedidos, Rutas,
+Inventario, Clientes y Analítica** llevan un botón **Actualizar** (el icono de la flecha
+circular) junto al título; en el **Tablero** va junto a *Operación de hoy*, que es lo que
+cambia por voz. El botón vuelve a pedir la página y reemplaza solo el contenido, sin
+recargarla: la llamada sigue, se conservan los filtros y el desplazamiento, y no se suman
+entradas al historial. Si la sesión venció lleva al login; si falla la conexión, deja lo
+que se ve y lo avisa. Ver `app/static/js/actualizar.js`.
 
 ## Auditoría y bitácora
 
@@ -738,6 +930,23 @@ guardar sin cambios no deja registro. El administrador consulta todo en **Bitác
 Google Sheets, el [escenario 3](#escenario-3-auditoría-en-google-sheets) la lee por lotes
 sin perder ni repetir registros.
 
+### Registro de errores
+
+Cada excepción no controlada de una petición queda en la tabla `errores_sistema` con
+fecha, usuario, IP, método y ruta, clase, mensaje y traza. También queda en
+`instance/logs/errores.log`, que rota a 1 MB y es el respaldo si la falla es justamente de la
+base. El administrador lo consulta en **Errores** (`/admin/errores/`, en el menú
+*Administración*), del más reciente al más antiguo.
+
+- La página 500 muestra el número del registro (*referencia #N*) para encontrarlo en la
+  pantalla.
+- **Provocar un error**, en la misma pantalla, lanza un error a propósito para comprobar
+  que el registro lo captura.
+- Se registra también en modo desarrollo, donde el depurador muestra la traza en lugar de
+  la página 500 (la señal `got_request_exception` de Flask se emite en ambos casos).
+- No guarda los datos del formulario ni la consulta de la URL, que pueden traer
+  contraseñas o tokens. La lógica está en `app/services/errores.py`.
+
 ## Automatizaciones con Make
 
 La aplicación se integra con [Make](https://www.make.com) en ambos sentidos, todo
@@ -754,6 +963,7 @@ correspondientes, la aplicación funciona igual y no sale nada.
 | `MAKE_WEBHOOK_URL` | URL del *Custom webhook* que recibe los avisos | No se envía ningún aviso |
 | `MAKE_WEBHOOK_KEY` | API key de los webhooks; viaja en el encabezado `x-make-apikey` | Los avisos salen sin el encabezado |
 | `MAKE_WEBHOOK_CREDENCIALES_URL` | URL del webhook **aparte** que recibe solo `credencial_usuario` | No se envían contraseñas, y crear o restablecer cuentas **por voz** se rechaza en el resumen (en pantalla funciona igual) |
+| `MAKE_WEBHOOK_RESTABLECIMIENTO_URL` | URL del webhook **aparte** que recibe solo `restablecimiento_contrasena` (requiere `URL_PUBLICA`) | En producción no se ofrece *Olvidé mi contraseña*; en desarrollo el enlace sale en la consola del servidor |
 | `CORREO_OPERACIONES` | Destino de los avisos internos (`stock_bajo`, `solicitud_contacto`, `accion_asistente`) y del resumen diario | No se envían avisos internos; el resumen responde `correo_destino: null` |
 | `URL_PUBLICA` | Dirección de acceso que lleva `credencial_usuario` (`url_acceso`) | `url_acceso` va vacía |
 | `AUTOMATIZACION_TOKEN` | Token con el que Make consulta el resumen diario y la auditoría | Ambos endpoints responden **404** |
@@ -941,6 +1151,19 @@ acceso restringido y sin historial del contenido:
 
 Sin `MAKE_WEBHOOK_CREDENCIALES_URL`, Gaby no ofrece crear ni restablecer cuentas por voz:
 responde, ya en el resumen, que se hace en pantalla.
+
+### Escenario de restablecimiento de contraseña
+
+`restablecimiento_contrasena` lleva el enlace de *Olvidé mi contraseña*, y quien lo tiene
+cambia la contraseña. Va por su propio webhook, aparte del de credenciales, para no
+alterar ese escenario:
+
+1. Cree un escenario **separado** con **Webhooks → Custom webhook** y copie su URL en
+   `MAKE_WEBHOOK_RESTABLECIMIENTO_URL`. Defina también `URL_PUBLICA`: sin ella no se envía.
+2. Active **"Data is confidential"**, como en el de credenciales.
+3. Un único módulo de correo para `{{correo_destino}}` con `{{nombre}}`, el enlace
+   `{{enlace}}` y su vigencia, `{{vence_en_minutos}}` minutos. Un texto como *"Si no lo
+   pidió, ignore este correo: su contraseña no cambia"*.
 
 ### Escenario 2: resumen diario programado
 
@@ -1207,7 +1430,7 @@ Y luego, desde la raíz del proyecto:
 .venv\Scripts\python.exe pruebas\prueba_05_entrega_inventario.py  # una suite sola
 ```
 
-**1925 verificaciones en 20 suites contra MySQL 8.0, todas pasando, en unos dos
+**2230 verificaciones en 25 suites contra MySQL 8.0, todas pasando, en unos dos
 minutos.** La salida resumida muestra por suite las verificaciones, el tiempo y solo las
 líneas `FALLA`; `--detalle` muestra todo.
 
@@ -1226,26 +1449,31 @@ vivo de la suite 3, que solo corre con `--externas` (suma 10 verificaciones).
 
 | Suite | Cubre | Pruebas |
 |---|---|---|
-| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción, inventario sembrado, lista blanca del correo en el login | 90 |
+| `prueba_01_acceso.py` | RF1 · autenticación, roles, tablero, zona horaria, config. de producción, inventario sembrado, lista blanca del correo en el login, contraseña visible solo mientras se presiona, botón Actualizar de las vistas de consulta | 107 |
 | `prueba_02_pedidos_csv.py` | RF2 · alta manual, importación CSV, inventario, anulación | 64 |
 | `prueba_03_ruteo.py` | RF3 · ordenamientos, respaldo offline (OSRM en vivo con `--externas`: 32) | 22 |
 | `prueba_04_rutas_web.py` | RF3 · planificación, mapa, recálculo | 40 |
 | `prueba_05_entrega_inventario.py` | RF4/RF5 · entrega, PoD, descuento de stock, concurrencia | 69 |
 | `prueba_06_analitica_rendimiento.py` | RF6/RNF2 · indicadores, tiempos y zona horaria | 67 |
 | `prueba_07_clientes_portal.py` | RF1/RF2 · normalización de clientes y portal | 73 |
-| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes, lista blanca del correo en ambos formularios | 106 |
+| `prueba_08_administracion.py` | RF1 · administración de cuentas y clientes, lista blanca del correo en ambos formularios, política de contraseñas en el alta | 107 |
 | `prueba_09_asistente.py` | RF4 · asistente de voz (firma, sesiones, aislamiento), avisos por Make, ruta finalizada del día y demo sembrada | 100 |
 | `prueba_10_automatizaciones.py` | RF4/RF6 · avisos `pedido_estado` y `stock_bajo` (umbrales, CANCELADO y FALLIDO con motivo, API key), resumen diario (token, KPIs contra el tablero, fallidos, escape) | 79 |
 | `prueba_11_asistente_roles.py` | RF1/RF4 · asistente por rol: agente y botón por rol, matriz de permisos, confirmación con estado, búsqueda para voz, funciones del gestor, del admin y del cliente, solicitudes de contacto, pedidos recientes y por fecha, migraciones | 215 |
-| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 94 |
+| `prueba_12_sincronizacion_retell.py` | RF4 · configuración de los agentes (herramientas, prompts, documento) y `sincronizar-asistentes` contra un Retell simulado con el versionado real (agente y LLM en la misma versión, el 400 si no coinciden, segunda sincronización, borrador pendiente, `--rol`), timeout de 60 s con reintento, Talk While Waiting | 95 |
 | `prueba_13_configuracion.py` | RF4/RF6 · configuración del negocio: catálogo de motivos de fallo con "Otro" y texto obligatorio, centro de distribución editable, uso en pantalla, voz y analítica, migración `migrar-configuracion` (en MySQL: clave ajena y coordenadas `FLOAT` → `DOUBLE`) | 59 |
 | `prueba_14_reglas_pantalla.py` | RF1/RF2/RF3 · reglas de pantalla en servicios: NIT fijo, sedes, SKU, vehículos, edición de pedidos y bitácora de rutas | 62 |
 | `prueba_15_auditoria.py` | RF1/RF4 · auditoría de solo agregar, pantalla *Bitácora*, quién originó cada evento de Make, `accion_asistente` (con `id_auditoria` y `fecha_hora`) y `credencial_usuario` por su webhook, auditoría de pantalla sin correo, endpoint incremental para Sheets | 91 |
-| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 295 |
-| `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración y bitácora (admin); resúmenes, rechazos y auditoría | 97 |
+| `prueba_16_cobertura_voz.py` | RF4 · cobertura por voz de cada ruta POST de la pantalla, exclusiones aprobadas, diálogo de formulario, cobertura cerrada | 318 |
+| `prueba_17_voz_fase3.py` | RF1/RF4 · voz: clientes, sedes, productos, vehículos, rutas y edición de pedidos (gestor y admin); usuarios con credenciales por su webhook, configuración (incluido el tiempo de inactividad) y bitácora (admin); resúmenes, rechazos y auditoría | 102 |
 | `prueba_18_voz_fase4.py` | RF1/RF4/RF5 · voz de la fase 4: el conductor inicia la ruta, entrega con nombre y documento y consulta su historial (auditoría sin correo); analítica y `atender-solicitud` del gestor; bitácora del admin; migración m007 y un pedido que falla, se reintenta y se entrega conservando cada prueba, con la observación dictada | 82 |
 | `prueba_19_contrasenas.py` | RF1/RNF5 · apartado de contraseñas: acceso solo del admin, sin hash ni contraseña en la página, asignar, generar temporal, exigir cambio (uno y en bloque), cambio obligatorio en el perfil, cierre de sesiones abiertas, hash fuera de política, reglas por rol (cliente y otros administradores fuera de su alcance, la propia con la actual), migración `m008` | 153 |
-| `prueba_20_bloqueo_acceso.py` | RNF5 · bloqueo tras 6 intentos fallidos en los cuatro roles: contador visible, un minuto de espera aun con la contraseña correcta, reinicio del contador, mismos mensajes para correos inexistentes, contraseña actual del perfil, columna en el apartado del admin, configuración, migración `m009` | 67 |
+| `prueba_20_bloqueo_acceso.py` | RNF5 · bloqueo tras 5 intentos fallidos en los cuatro roles: contador visible, un minuto de espera aun con la contraseña correcta, reinicio del contador, mismos mensajes para correos inexistentes, contraseña actual del perfil, columna en el apartado del admin, configuración, migración `m009` | 67 |
+| `prueba_21_sesiones_errores.py` | RNF5 · bloqueo al quinto intento, política de contraseñas (la secuencia del 1 al 15 se rechaza), sesión única en dos navegadores (también la cookie de mantener sesión), cerrar sesión en una pestaña y navegar en otra, tiempo de inactividad configurable (reducir y aumentar, también con mantener sesión), cambio de correo desde el perfil, registro de errores (página 500 con referencia, pantalla, archivo, modo desarrollo), migración `m010` | 81 |
+| `prueba_22_recuperacion.py` | RF1/RNF5 · *Olvidé mi contraseña*: la misma respuesta exista o no la cuenta, envío por su webhook con `URL_PUBLICA` (un `Host` falso no cambia el enlace), un enlace cada 5 minutos, política de contraseñas, cierre de sesiones y del bloqueo, enlace de un solo uso, alterado, caducado por otro cambio y vencido, cuentas inactivas, consola en desarrollo y pantalla sin canal | 44 |
+| `prueba_23_cifrado.py` | RNF5 · datos personales: en la base la contraseña como hash y el documento y el teléfono cifrados (IV aleatorio), lectura en claro, índice ciego (unicidad en el formulario y en la base, búsqueda exacta), columnas cifradas que rechazan comparaciones SQL, auditoría enmascarada en pantalla y por voz, otra clave, migración `m011` sobre datos en claro | 46 |
+| `prueba_24_archivos.py` | RNF5 · archivos subidos por su contenido: un ejecutable renombrado a `.pdf` y a `.csv` (Windows, Linux, macOS, script), PDF, comprimidos, imágenes, UTF-16 y binarios rechazados sin guardarse, cada rechazo en la bitácora, sin falsos positivos con CSV reales, límite de 2 MB y de 5 MB por petición (413) | 28 |
+| `prueba_25_roles_permisos.py` | RF1/RNF5 · roles y permisos: reparto por defecto igual a los roles fijos, un rol nuevo asignado a dos cuentas con dos permisos propios distintos cada una, dos roles en una cuenta con la totalidad de sus permisos invertida, menú y botones según permisos, editar un rol del sistema (también por voz), reglas contra la escalada de privilegios, eliminar un rol, auditoría, migración `m012` | 59 |
 
 La del asistente firma las peticiones con el propio SDK de Retell para probar la
 verificación real; la de automatizaciones registra cada aviso a Make simulado con sus
@@ -1290,11 +1518,13 @@ para "facilitar la toma de decisiones estratégicas":
 
 ### Nota sobre los colores de las gráficas
 
-La paleta se validó con un verificador de accesibilidad cromática contra la superficie
-real de las tarjetas. **El par verde/rojo fue rechazado**: su separación bajo
-deuteranopía es ΔE 4.1, muy por debajo del mínimo de 6 — un lector con daltonismo rojo-verde
-(cerca del 8 % de los hombres) no distinguiría las series. Se usa azul `#2a78d6` y
-naranja `#eb6834`, que miden ΔE 24.7 bajo simulación de protanopía. El estado además se
+Las gráficas usan la paleta "Negro y amarillo" del logo: la serie principal (entregadas,
+tasa de éxito, unidades que entran) va en `#2b2f38`, la segunda (cumplimiento de ventana,
+unidades que salen) en `#e0ae14` y las fallidas en `#e0573f`. El rojo se reserva para
+datos de fallo. **No se usa el par verde/rojo**: bajo daltonismo rojo-verde (cerca del 8 %
+de los hombres) no se distingue. Las series de cada gráfica se separan por luminosidad,
+que el daltonismo conserva: contraste 3.6:1 entre entregadas y fallidas y 6.5:1 entre las
+dos líneas. El amarillo sobre blanco es tenue (2:1), así que el estado además se
 identifica por leyenda y etiqueta, nunca por color solo, y cada gráfica ofrece una vista
 en tabla.
 
@@ -1353,6 +1583,7 @@ con datos ejecútelas en este orden:
 .venv/bin/flask --app run migrar-auditoria      # tabla de auditoría (bitácora)
 .venv/bin/flask --app run migrar-pruebas-entrega # pruebas de entrega de solo agregar (m007)
 .venv/bin/flask --app run migrar-contrasenas   # apartado de contraseñas y bloqueo (m008, m009)
+.venv/bin/flask --app run migrar-seguridad     # sesión única, inactividad y registro de errores (m010)
 ```
 
 `migrar-configuracion` además pasa a `DOUBLE` las coordenadas del centro de distribución
@@ -1364,6 +1595,16 @@ precisión completa, vuelva a guardar el centro en *Configuración*.
 `version_credencial`, y crea la tabla `intentos_acceso` del bloqueo por intentos fallidos.
 Es idempotente. Las sesiones abiertas antes de aplicarla piden iniciar
 sesión una vez más.
+
+`migrar-seguridad` agrega a `usuarios` las columnas `token_sesion` y `sesion_actividad_en`,
+a `configuracion_negocio` la columna `minutos_inactividad` (30 en las filas existentes) y
+crea la tabla `errores_sistema` (m010). Después **cifra el documento y el teléfono** que
+estén en claro (m011): amplía las columnas a `VARCHAR(300)`, agrega `documento_indice` con
+su índice único y quita el índice único viejo sobre `documento`. Corra la migración con la
+misma `CLAVE_CIFRADO` (o `SECRET_KEY`) que usará la aplicación. Por último crea las tablas
+de roles y permisos con los cuatro roles del sistema y su reparto de siempre (m012). Es
+idempotente. **Ejecútela antes de levantar esta
+versión sobre una base existente**: sin las columnas nuevas, ninguna página carga.
 
 ### Conectar MySQL Workbench
 

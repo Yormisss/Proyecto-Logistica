@@ -35,10 +35,12 @@
             <br><small>{{ solicitud.atendida_por.nombre if solicitud.atendida_por }}
               &middot; {{ solicitud.atendida_en.strftime('%d/%m %H:%M') if solicitud.atendida_en }}</small>
           {% else %}
+            {% if current_user.puede('solicitudes.atender') %}
             <form method="post" action="{{ url_for('solicitudes.atender', solicitud_id=solicitud.id) }}">
               {{ formulario.hidden_tag() }}
               <button type="submit" class="boton boton-primario">Marcar atendida</button>
             </form>
+            {% endif %}
           {% endif %}
         </td>
       </tr>

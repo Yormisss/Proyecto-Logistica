@@ -146,6 +146,8 @@ def _registrar_controladores(app):
     from app.controllers.configuracion import configuracion_bp
     from app.controllers.vehiculos import vehiculos_bp
     from app.controllers.bitacora import bitacora_bp
+    from app.controllers.errores import errores_bp
+    from app.controllers.roles import roles_bp
     from app.controllers.asistente_api import asistente_api_bp
     from app.controllers.automatizacion_api import automatizacion_api_bp
     from app.controllers.auth import auth_bp
@@ -175,6 +177,8 @@ def _registrar_controladores(app):
     app.register_blueprint(solicitudes_bp, url_prefix="/admin/solicitudes")
     app.register_blueprint(configuracion_bp, url_prefix="/admin/configuracion")
     app.register_blueprint(bitacora_bp, url_prefix="/admin/bitacora")
+    app.register_blueprint(errores_bp, url_prefix="/admin/errores")
+    app.register_blueprint(roles_bp, url_prefix="/admin/roles")
     app.register_blueprint(vehiculos_bp, url_prefix="/admin/vehiculos")
 
     # Las custom functions las invoca Retell desde sus servidores, sin cookie
@@ -191,6 +195,12 @@ def _registrar_controladores(app):
 def _registrar_errores(app):
     from flask_wtf.csrf import CSRFError
 
+    from app.services import errores
+
+    # Error logs: cada excepcion no controlada queda en la base y en
+    # instance/logs/errores.log (ver app/services/errores.py).
+    errores.configurar(app)
+
     @app.errorhandler(CSRFError)
     def token_invalido(error):
         """Un token vencido o ausente produce por defecto una pagina cruda en
@@ -206,6 +216,10 @@ def _registrar_errores(app):
     def no_encontrado(error):
         return render_template("errores/404.html"), 404
 
+    @app.errorhandler(413)
+    def demasiado_grande(error):
+        return render_template("errores/413.html"), 413
+
     @app.errorhandler(500)
     def error_interno(error):
         db.session.rollback()
@@ -217,6 +231,7 @@ def _registrar_contexto(app):
 
     from app.models import EstadoPedido, EstadoRuta
     from app.services.asistente import agente_para
+    from app.services.usuarios import POLITICA_CONTRASENA
 
     @app.context_processor
     def inyectar_globales():
@@ -224,6 +239,10 @@ def _registrar_contexto(app):
             "EstadoPedido": EstadoPedido,
             "EstadoRuta": EstadoRuta,
             "nombre_sistema": "Rutalytics - Sistema de Despachos",
+            "politica_contrasena": POLITICA_CONTRASENA,
+            # Lo fija `auth.vigilar_sesion` en cada peticion de una sesion
+            # abierta; sin el, base.html no carga el aviso de inactividad.
+            "segundos_inactividad": g.get("segundos_inactividad"),
             # El boton del asistente solo aparece si hay API key de Retell y
             # un agente configurado para el rol de la sesion. Con contrasena
             # temporal se oculta: sus llamadas las bloquearia

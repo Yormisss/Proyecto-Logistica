@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_actualizar.html" import boton_actualizar %}
 {% block titulo %}Pedidos | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
@@ -8,8 +9,11 @@
     <p class="subtitulo-pagina">{{ paginacion.total }} pedido(s) registrados</p>
   </div>
   <div class="acciones-encabezado">
+    {{ boton_actualizar() }}
+    {% if current_user.puede('pedidos.gestionar') %}
     <a class="boton boton-secundario" href="{{ url_for('pedidos.importar') }}">Importar CSV</a>
     <a class="boton boton-primario" href="{{ url_for('pedidos.nuevo') }}">Nuevo pedido</a>
+    {% endif %}
   </div>
 </div>
 

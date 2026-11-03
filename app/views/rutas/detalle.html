@@ -18,7 +18,7 @@
   </div>
   <div class="acciones-encabezado">
     <a class="boton boton-plano" href="{{ url_for('rutas.lista') }}">Volver</a>
-    {% if ruta.estado != EstadoRuta.FINALIZADA %}
+    {% if ruta.estado != EstadoRuta.FINALIZADA and current_user.puede('rutas.gestionar') %}
     <form method="post" action="{{ url_for('rutas.eliminar', ruta_id=ruta.id) }}"
           onsubmit="return confirm('¿Eliminar la ruta {{ ruta.codigo }}? Sus pedidos volverán a pendientes.');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -85,7 +85,7 @@
         </div>
         <div class="parada-acciones">
           <span class="etiqueta etiqueta-{{ pedido.estado|lower }}">{{ pedido.estado_etiqueta }}</span>
-          {% if pedido.estado not in EstadoPedido.FINALES %}
+          {% if pedido.estado not in EstadoPedido.FINALES and current_user.puede('rutas.gestionar') %}
           <form method="post" action="{{ url_for('rutas.quitar_parada', ruta_id=ruta.id, pedido_id=pedido.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="boton-quitar" title="Retirar de la ruta">&times;</button>
@@ -98,7 +98,7 @@
   </section>
 
   <div>
-    {% if ruta.estado != EstadoRuta.FINALIZADA %}
+    {% if ruta.estado != EstadoRuta.FINALIZADA and current_user.puede('rutas.gestionar') %}
     <section class="tarjeta">
       <h2 class="tarjeta-titulo">Recalcular secuencia</h2>
       <p class="nota-superior">
@@ -178,9 +178,9 @@
 
   // Trazado real devuelto por el proveedor; si no hay, se unen los puntos en linea recta
   if (datos.geometria && datos.geometria.length) {
-    L.polyline(datos.geometria, { color: "#7a2e42", weight: 4, opacity: 0.8 }).addTo(mapa);
+    L.polyline(datos.geometria, { color: "#2b2f38", weight: 4, opacity: 0.8 }).addTo(mapa);
   } else if (limites.length > 1) {
-    L.polyline(limites, { color: "#98a2b3", weight: 3, dashArray: "6 6" }).addTo(mapa);
+    L.polyline(limites, { color: "#6b6f78", weight: 3, dashArray: "6 6" }).addTo(mapa);
   }
 
   if (limites.length > 1) {

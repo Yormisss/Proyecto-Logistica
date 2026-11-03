@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Archivo demasiado grande | {{ nombre_sistema }}{% endblock %}
+{% block contenido %}
+<div class="tarjeta vacio-centrado">
+  <h1 class="codigo-error">413</h1>
+  <h2>Archivo demasiado grande</h2>
+  <p>El envío supera el máximo de 5 MB y no se leyó. El CSV de pedidos admite hasta 2 MB.</p>
+  <a class="boton boton-primario" href="{{ url_for('principal.inicio') }}">Volver al inicio</a>
+</div>
+{% endblock %}

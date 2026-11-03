@@ -12,9 +12,9 @@ from flask_wtf import FlaskForm
 from wtforms import HiddenField, StringField, TextAreaField
 from wtforms.validators import Length, Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
-from app.models import EstadoPedido, Pedido, Rol, Ruta
+from app.models import EstadoPedido, Pedido, Ruta
 from app.services.configuracion import ConfiguracionInvalida, resolver_motivo_pantalla
 from app.services.configuracion import catalogo as catalogo_motivos
 from app.services.despacho import (
@@ -92,7 +92,7 @@ def _pedido_del_conductor(pedido_id):
 
 @conductor_bp.route("/")
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def mi_ruta():
     fecha_hoy = hoy()
     ruta = ruta_del_dia(current_user.id, fecha_hoy)
@@ -111,7 +111,7 @@ def mi_ruta():
 
 @conductor_bp.route("/ruta/<int:ruta_id>/iniciar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def iniciar(ruta_id):
     ruta = db.session.get(Ruta, ruta_id)
     if ruta is None:
@@ -144,7 +144,7 @@ def iniciar(ruta_id):
 
 @conductor_bp.route("/parada/<int:pedido_id>")
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def parada(pedido_id):
     pedido = _pedido_del_conductor(pedido_id)
 
@@ -160,7 +160,7 @@ def parada(pedido_id):
 
 @conductor_bp.route("/parada/<int:pedido_id>/en-ruta", methods=["POST"])
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def marcar_en_ruta(pedido_id):
     pedido = _pedido_del_conductor(pedido_id)
     formulario = FormularioAccion()
@@ -189,7 +189,7 @@ def marcar_en_ruta(pedido_id):
 
 @conductor_bp.route("/parada/<int:pedido_id>/entregar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def entregar(pedido_id):
     """RF4 + RF5: confirma la entrega y dispara el descuento de inventario."""
     pedido = _pedido_del_conductor(pedido_id)
@@ -236,7 +236,7 @@ def entregar(pedido_id):
 
 @conductor_bp.route("/parada/<int:pedido_id>/fallar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def fallar(pedido_id):
     pedido = _pedido_del_conductor(pedido_id)
     formulario = FormularioFallo()
@@ -275,7 +275,7 @@ def fallar(pedido_id):
 
 @conductor_bp.route("/parada/<int:pedido_id>/reintentar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def reintentar(pedido_id):
     """Permite volver a intentar una entrega que habia fallado."""
     pedido = _pedido_del_conductor(pedido_id)
@@ -309,7 +309,7 @@ def reintentar(pedido_id):
 
 @conductor_bp.route("/historial")
 @login_required
-@requiere_rol(Rol.CONDUCTOR)
+@requiere_permiso("conductor.ruta")
 def historial():
     rutas = (
         db.session.query(Ruta)

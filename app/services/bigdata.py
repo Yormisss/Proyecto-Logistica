@@ -18,7 +18,9 @@ LAKE = RAIZ / "datalake"
 
 ARCHIVOS = ("gold.json", "calidad_datos.json", "ml_fallos.json", "streaming.json")
 MESES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
-FRANJAS = (("MANANA", "Manana"), ("MEDIODIA", "Mediodia"), ("TARDE", "Tarde"), ("NOCHE", "Noche"))
+FRANJAS = (("MANANA", "Mañana"), ("MEDIODIA", "Mediodía"), ("TARDE", "Tarde"), ("NOCHE", "Noche"))
+# Los datos generados van sin tildes: se corrigen solo al mostrarlos.
+TILDES = {"Direccion errada": "Dirección errada", "Bogota": "Bogotá", "Chia": "Chía", "Cajica": "Cajicá"}
 VARIABLES = {
     "zona_idx": "Zona",
     "distancia_km": "Distancia",
@@ -27,7 +29,7 @@ VARIABLES = {
     "hora_planeada": "Hora planeada",
     "ciudad_idx": "Ciudad",
     "conductor_id": "Conductor",
-    "dia_semana": "Dia de la semana",
+    "dia_semana": "Día de la semana",
     "n_items": "Numero de items",
     "sin_ventana": "Sin ventana horaria",
 }
@@ -135,6 +137,16 @@ def _lineas(etiquetas, rotulos, series, minimo, maximo, pasos, sufijo=""):
     }
 
 
+def _pasos(celdas, clave):
+    """Paso de 1 a 5 en la escala de color de un mapa de calor, del valor minimo al maximo."""
+    valores = [c[clave] for c in celdas]
+    minimo, maximo = min(valores), max(valores)
+    for c in celdas:
+        t = (c[clave] - minimo) / ((maximo - minimo) or 1)
+        c["paso"] = min(4, int(5 * t)) + 1
+        c["maximo"] = c[clave] == maximo
+
+
 def _techo(valor, paso):
     return int(-(-valor // paso) * paso)
 
@@ -146,11 +158,14 @@ def _construir():
 
     # --- Volumen y data lake
     capas = [{"nombre": c.capitalize(), "mb": _mb(LAKE / c)} for c in ("raw", "bronze", "silver", "gold")]
-    fuentes = [
-        {"nombre": "Eventos de estado", "registros": calidad["eventos_salida"]},
-        {"nombre": "Pedidos", "registros": calidad["filas_salida"]},
-        {"nombre": "Movimientos de inventario", "registros": calidad["movimientos_salida"]},
-    ]
+    fuentes = sorted(
+        (
+            {"nombre": "Eventos de estado", "registros": calidad["eventos_salida"]},
+            {"nombre": "Pedidos", "registros": calidad["filas_salida"]},
+            {"nombre": "Movimientos de inventario", "registros": calidad["movimientos_salida"]},
+        ),
+        key=lambda f: -f["registros"],
+    )
     reglas = sorted(
         ({"regla": texto, "filas": calidad.get(clave, 0)} for clave, texto in REGLAS),
         key=lambda r: -r["filas"],
@@ -167,7 +182,7 @@ def _construir():
     servicio = _lineas(
         etiquetas, rotulos,
         [
-            ("Tasa de exito", "var(--serie-1)", [k["tasa_exito"] for k in kpi]),
+            ("Tasa de éxito", "var(--serie-1)", [k["tasa_exito"] for k in kpi]),
             ("Cumplimiento de ventana", "var(--serie-2)", [k["cumplimiento_ventana"] for k in kpi]),
         ],
         piso, 100, (100 - piso) // 10, "%",
@@ -185,8 +200,7 @@ def _construir():
 
     # --- Mapa de calor zona x franja
     celdas = {(f["zona"], f["franja"]): f for f in _tabla(gold, "fallos_zona_franja")}
-    tasas = [c["tasa_fallo"] for c in celdas.values()]
-    t_min, t_max = min(tasas), max(tasas)
+    _pasos(list(celdas.values()), "tasa_fallo")
     por_zona = {}
     for (zona, _), c in celdas.items():
         z = por_zona.setdefault(zona, {"intentos": 0, "fallidos": 0})
@@ -194,20 +208,17 @@ def _construir():
         z["fallidos"] += c["fallidos"]
     calor = []
     for zona, z in sorted(por_zona.items(), key=lambda p: -p[1]["fallidos"] / p[1]["intentos"]):
-        fila = []
-        for clave, _ in FRANJAS:
-            c = celdas.get((zona, clave))
-            if c:
-                c = {**c, "intensidad": round(.1 + .9 * (c["tasa_fallo"] - t_min) / ((t_max - t_min) or 1), 3)}
-            fila.append(c)
         calor.append({
             "zona": zona.capitalize(),
             "tasa": round(100 * z["fallidos"] / z["intentos"], 1),
-            "celdas": fila,
+            "celdas": [celdas.get((zona, clave)) for clave, _ in FRANJAS],
         })
 
-    # --- Causas de fallo: las marginales se agrupan
-    motivos = _tabla(gold, "motivos_fallo")
+    # --- Causas de fallo, de mayor a menor: las marginales se agrupan al final
+    motivos = [
+        {**m, "motivo": TILDES.get(m["motivo"], m["motivo"])}
+        for m in sorted(_tabla(gold, "motivos_fallo"), key=lambda m: -m["porcentaje"])
+    ]
     principales = [m for m in motivos if m["porcentaje"] >= 1]
     resto = [m for m in motivos if m["porcentaje"] < 1]
     if resto:
@@ -227,7 +238,7 @@ def _construir():
             {
                 "x": round((c["tasa_exito"] - c_min) / (c_max - c_min) * 100, 2),
                 "carril": i % 5,
-                "tooltip": f"Conductor #{c['conductor_id']} — {c['tasa_exito']}% de exito · {_miles(c['intentos'])} intentos",
+                "tooltip": f"Conductor #{c['conductor_id']} — {c['tasa_exito']}% de éxito · {_miles(c['intentos'])} intentos",
             }
             for i, c in enumerate(conductores)
         ],
@@ -248,7 +259,6 @@ def _construir():
     ml = _leer("ml_fallos.json")
     if ml:
         m = ml["matriz_confusion"]
-        mayor = max(m.values()) or 1
         ml["matriz"] = [
             [
                 {"valor": m["verdaderos_positivos"], "texto": "Fallo detectado"},
@@ -259,19 +269,18 @@ def _construir():
                 {"valor": m["verdaderos_negativos"], "texto": "Entrega confirmada"},
             ],
         ]
-        for fila in ml["matriz"]:
-            for celda in fila:
-                celda["intensidad"] = round(.1 + .9 * celda["valor"] / mayor, 3)
+        _pasos([celda for fila in ml["matriz"] for celda in fila], "valor")
         ml["importancias"] = [
             {"variable": VARIABLES.get(v["variable"], v["variable"]), "pct": round(v["importancia"] * 100, 1)}
-            for v in ml["importancia_variables"] if v["importancia"] >= .01
+            for v in sorted(ml["importancia_variables"], key=lambda v: -v["importancia"])
+            if v["importancia"] >= .01
         ]
 
     streaming = _leer("streaming.json")
     if streaming:
         streaming["estados"] = [
             {"estado": estado.replace("_", " ").capitalize(), "eventos": n}
-            for estado, n in streaming["por_estado"]
+            for estado, n in sorted(streaming["por_estado"], key=lambda p: -p[1])
         ]
 
     return {
@@ -289,7 +298,7 @@ def _construir():
         "franjas": [texto for _, texto in FRANJAS],
         "calor": calor,
         "motivos": principales,
-        "ciudades": _tabla(gold, "fallos_ciudad"),
+        "ciudades": [{**c, "ciudad": TILDES.get(c["ciudad"], c["ciudad"])} for c in _tabla(gold, "fallos_ciudad")],
         "flota": flota,
         "sku": sku[:10],
         "abc": abc,

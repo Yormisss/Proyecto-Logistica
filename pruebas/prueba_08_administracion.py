@@ -107,7 +107,12 @@ check(b"Ya existe una cuenta con este correo" in r.data, "rechaza un correo repe
 r = admin.post("/admin/usuarios/nuevo",
                data=datos_usuario(correo="otra@sgds.com", contrasena="corta"),
                follow_redirects=True)
-check(b"Minimo 8 caracteres" in r.data, "exige la longitud minima de contrasena")
+check("mínimo 8 caracteres" in r.data.decode(), "exige la longitud minima de contrasena")
+r = admin.post("/admin/usuarios/nuevo",
+               data=datos_usuario(correo="otra@sgds.com", contrasena="123456789101112131415"),
+               follow_redirects=True)
+check("al menos una mayúscula, una minúscula y un símbolo" in r.data.decode(),
+      "exige mayuscula, minuscula, numero y simbolo: rechaza la secuencia del 1 al 15")
 
 r = admin.post("/admin/usuarios/nuevo",
                data=datos_usuario(correo="sincliente@sgds.com", rol=Rol.CLIENTE, cliente_id="0"),

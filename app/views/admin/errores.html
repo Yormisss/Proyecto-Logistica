@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block titulo %}Errores | {{ nombre_sistema }}{% endblock %}
+
+{% block contenido %}
+<div class="encabezado-pagina">
+  <h1 class="titulo-pagina">Registro de errores</h1>
+  <p class="subtitulo-pagina">{{ total }} error(es) &middot; cada excepción no controlada de una petición, del más reciente al más antiguo. También quedan en instance/logs/errores.log. Solo lectura.</p>
+</div>
+
+<section class="tarjeta">
+  <h2 class="tarjeta-titulo">Probar el registro</h2>
+  <p class="nota-pie">
+    Provoca un error a propósito. La petición termina en la página de error con un número de
+    referencia, y ese mismo número aparece aquí.
+  </p>
+  <form method="post" action="{{ url_for('errores.probar') }}">
+    {{ formulario.hidden_tag() }}
+    <button type="submit" class="boton boton-secundario">Provocar un error</button>
+  </form>
+</section>
+
+<section class="tarjeta">
+  {% if registros %}
+  <div class="tabla-scroll">
+    <table class="tabla">
+      <thead>
+        <tr><th>N.º</th><th>Fecha</th><th>Usuario</th><th>Petición</th><th>Error</th></tr>
+      </thead>
+      <tbody>
+      {% for registro in registros %}
+        <tr>
+          <td class="mono">#{{ registro.id }}</td>
+          <td class="mono">{{ registro.registrado_en.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td>
+            {{ registro.usuario_nombre or 'Anónimo' }}
+            {% if registro.ip %}<br><small class="mono">{{ registro.ip }}</small>{% endif %}
+          </td>
+          <td class="mono">{{ registro.metodo }} {{ registro.ruta }}</td>
+          <td>
+            <strong>{{ registro.tipo }}</strong><br>
+            {{ registro.mensaje }}
+            <details class="tabla-alterna">
+              <summary>Traza</summary>
+              <pre class="mono">{{ registro.traza }}</pre>
+            </details>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if paginas > 1 %}
+  <p class="paginacion">
+    {% if pagina > 1 %}
+      <a href="{{ url_for('errores.lista', pagina=pagina - 1) }}">&lsaquo; Más recientes</a>
+    {% endif %}
+    Página {{ pagina }} de {{ paginas }}
+    {% if pagina < paginas %}
+      <a href="{{ url_for('errores.lista', pagina=pagina + 1) }}">Más antiguos &rsaquo;</a>
+    {% endif %}
+  </p>
+  {% endif %}
+  {% else %}
+  <p class="vacio">No se han registrado errores.</p>
+  {% endif %}
+</section>
+{% endblock %}

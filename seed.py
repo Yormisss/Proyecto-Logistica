@@ -28,14 +28,16 @@ from app.models import (
 from app.services.clientes import Resolutor, vincular_destino
 from app.tiempo import hoy as fecha_actual
 
+# (nombre, correo, rol, contrasena, documento, telefono). Documento y telefono
+# quedan cifrados en la base (RNF5, ver app/cifrado.py).
 USUARIOS = [
-    ("Laura Gomez", "admin@sgds.com", Rol.ADMIN, "Admin123*"),
-    ("Carlos Rueda", "despachador@sgds.com", Rol.DESPACHADOR, "Despacho123*"),
-    ("Andres Molina", "conductor1@sgds.com", Rol.CONDUCTOR, "Conductor123*"),
-    ("Diego Pardo", "conductor2@sgds.com", Rol.CONDUCTOR, "Conductor123*"),
+    ("Laura Gomez", "admin@sgds.com", Rol.ADMIN, "Admin123*", "52345678", "3104567890"),
+    ("Carlos Rueda", "despachador@sgds.com", Rol.DESPACHADOR, "Despacho123*", "80123456", "3157891234"),
+    ("Andres Molina", "conductor1@sgds.com", Rol.CONDUCTOR, "Conductor123*", "1023456789", "3001234567"),
+    ("Diego Pardo", "conductor2@sgds.com", Rol.CONDUCTOR, "Conductor123*", "79876543", "3209876543"),
     # Cuenta del portal de seguimiento. Se vincula mas abajo al primer cliente
     # de DESTINOS, que es el que acumula mas historico.
-    ("Marcela Rios", "cliente@sgds.com", Rol.CLIENTE, "Cliente123*"),
+    ("Marcela Rios", "cliente@sgds.com", Rol.CLIENTE, "Cliente123*", "1098765432", "3112223344"),
 ]
 
 # (sku, nombre, stock al terminar la siembra, stock minimo). El stock inicial
@@ -80,8 +82,9 @@ def sembrar_datos():
 
     # --- Usuarios (RF1) ---
     usuarios = {}
-    for nombre, correo, rol, clave in USUARIOS:
-        usuario = Usuario(nombre=nombre, correo=correo, rol=rol, activo=True)
+    for nombre, correo, rol, clave, documento, telefono in USUARIOS:
+        usuario = Usuario(nombre=nombre, correo=correo, rol=rol, activo=True,
+                          documento=documento, telefono=telefono)
         usuario.establecer_contrasena(clave)
         db.session.add(usuario)
         usuarios[correo] = usuario
@@ -255,7 +258,7 @@ def sembrar_datos():
 
     print("Datos de demostracion cargados.")
     print("-" * 58)
-    for nombre, correo, rol, clave in USUARIOS:
+    for _, correo, rol, clave, _, _ in USUARIOS:
         print(f"  {Rol.ETIQUETAS[rol]:<18} {correo:<26} {clave}")
     print("-" * 58)
 

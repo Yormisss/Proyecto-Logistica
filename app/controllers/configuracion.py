@@ -1,6 +1,7 @@
 """Configuracion del negocio (solo el administrador).
 
-Centro de distribucion y catalogo de motivos de entrega fallida. Las reglas
+Centro de distribucion, catalogo de motivos de entrega fallida y tiempo de
+inactividad de las sesiones. Las reglas
 viven en `app.services.configuracion`, que tambien usa el asistente de voz.
 Cada cambio queda en la auditoria.
 """
@@ -12,9 +13,9 @@ from sqlalchemy import func
 from wtforms import StringField
 from wtforms.validators import Optional
 
-from app.controllers.seguridad import requiere_rol
+from app.controllers.seguridad import requiere_permiso
 from app.extensions import db
-from app.models import MotivoFallo, PruebaEntrega, Rol
+from app.models import MotivoFallo, PruebaEntrega
 from app.services import configuracion as servicio
 from app.services.auditoria import registrar_auditoria
 
@@ -29,6 +30,10 @@ class FormularioCentro(FlaskForm):
 
 class FormularioMotivo(FlaskForm):
     nombre = StringField("Motivo", validators=[Optional()])
+
+
+class FormularioSesion(FlaskForm):
+    minutos_inactividad = StringField("Minutos sin actividad", validators=[Optional()])
 
 
 class FormularioAccion(FlaskForm):
@@ -49,7 +54,7 @@ def _motivo(motivo_id):
 
 @configuracion_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def inicio():
     centro = servicio.centro_distribucion()
     formulario_centro = FormularioCentro(
@@ -66,15 +71,44 @@ def inicio():
         formulario_centro=formulario_centro,
         formulario_motivo=FormularioMotivo(),
         formulario_accion=FormularioAccion(),
+        formulario_sesion=FormularioSesion(minutos_inactividad=servicio.minutos_inactividad()),
+        minutos_maximo=servicio.MINUTOS_INACTIVIDAD_MAXIMO,
         motivos=servicio.catalogo(incluir_inactivos=True),
         usos=usos,
         largo_maximo=servicio.LARGO_MAXIMO_MOTIVO,
     )
 
 
+@configuracion_bp.route("/sesion", methods=["POST"])
+@login_required
+@requiere_permiso("configuracion.gestionar")
+def sesion():
+    formulario = FormularioSesion()
+    if not formulario.validate_on_submit():
+        flash("Solicitud invalida. Intente nuevamente.", "error")
+        return redirect(url_for("configuracion.inicio"))
+    try:
+        anterior, nuevo = servicio.editar_inactividad(
+            formulario.minutos_inactividad.data, current_user.id
+        )
+    except servicio.ConfiguracionInvalida as error:
+        _mostrar_errores(error)
+        return redirect(url_for("configuracion.inicio"))
+    registrar_auditoria(
+        "Editar tiempo de inactividad", "configuracion",
+        f"Cambió el cierre de sesión por inactividad de {servicio.texto_minutos(anterior)} "
+        f"a {servicio.texto_minutos(nuevo)}.",
+        {"minutos_inactividad": [anterior, nuevo]},
+    )
+    db.session.commit()
+    flash(f"Las sesiones se cerraran tras {servicio.texto_minutos(nuevo)} sin actividad. "
+          "Aplica desde la siguiente peticion de cada sesion abierta.", "exito")
+    return redirect(url_for("configuracion.inicio"))
+
+
 @configuracion_bp.route("/centro", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def centro():
     formulario = FormularioCentro()
     if not formulario.validate_on_submit():
@@ -101,7 +135,7 @@ def centro():
 
 @configuracion_bp.route("/motivos", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def agregar_motivo():
     formulario = FormularioMotivo()
     if not formulario.validate_on_submit():
@@ -123,7 +157,7 @@ def agregar_motivo():
 
 @configuracion_bp.route("/motivos/<int:motivo_id>/renombrar", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def renombrar_motivo(motivo_id):
     motivo = _motivo(motivo_id)
     formulario = FormularioMotivo()
@@ -146,7 +180,7 @@ def renombrar_motivo(motivo_id):
 
 @configuracion_bp.route("/motivos/<int:motivo_id>/estado", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN)
+@requiere_permiso("configuracion.gestionar")
 def alternar_motivo(motivo_id):
     motivo = _motivo(motivo_id)
     if not FormularioAccion().validate_on_submit():

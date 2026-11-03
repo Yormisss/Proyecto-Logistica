@@ -18,9 +18,9 @@ from sqlalchemy import func, or_
 from wtforms import BooleanField, StringField
 from wtforms.validators import Optional
 
-from app.controllers.seguridad import campo_correo, requiere_rol
+from app.controllers.seguridad import campo_correo, requiere_permiso
 from app.extensions import db
-from app.models import Cliente, DireccionCliente, EstadoPedido, Pedido, Rol
+from app.models import Cliente, DireccionCliente, EstadoPedido, Pedido
 from app.services.auditoria import auditar_pantalla, cambios_legibles, campos_cambiados
 from app.services.clientes import (
     cambiar_estado_sede, crear_cliente, crear_sede, editar_cliente, editar_sede,
@@ -89,7 +89,7 @@ def _sede(cliente, sede_id):
 
 @clientes_admin_bp.route("/")
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("clientes.ver")
 def lista():
     # Conteos agregados en una sola consulta por metrica, en vez de una consulta
     # por cliente dentro de la plantilla.
@@ -142,7 +142,7 @@ def lista():
 
 @clientes_admin_bp.route("/nuevo", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("clientes.gestionar")
 def nuevo():
     """Alta manual de un cliente que aun no ha hecho pedidos.
 
@@ -170,7 +170,7 @@ def nuevo():
 
 @clientes_admin_bp.route("/<int:cliente_id>", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("clientes.ver", post="clientes.gestionar")
 def detalle(cliente_id):
     cliente = _cliente(cliente_id)
 
@@ -212,7 +212,7 @@ def detalle(cliente_id):
 
 @clientes_admin_bp.route("/<int:cliente_id>/editar", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("clientes.gestionar")
 def editar(cliente_id):
     cliente = _cliente(cliente_id)
     formulario = FormularioCliente(obj=cliente)
@@ -239,7 +239,7 @@ def editar(cliente_id):
 
 @clientes_admin_bp.route("/<int:cliente_id>/sedes/<int:sede_id>/editar", methods=["GET", "POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("clientes.gestionar")
 def editar_sede_vista(cliente_id, sede_id):
     cliente = _cliente(cliente_id)
     sede = _sede(cliente, sede_id)
@@ -268,7 +268,7 @@ def editar_sede_vista(cliente_id, sede_id):
 
 @clientes_admin_bp.route("/<int:cliente_id>/sedes/<int:sede_id>/estado", methods=["POST"])
 @login_required
-@requiere_rol(Rol.ADMIN, Rol.DESPACHADOR)
+@requiere_permiso("clientes.gestionar")
 def alternar_sede(cliente_id, sede_id):
     cliente = _cliente(cliente_id)
     sede = _sede(cliente, sede_id)

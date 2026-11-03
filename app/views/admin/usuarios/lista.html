@@ -9,6 +9,7 @@
   </div>
   <div class="acciones-encabezado">
     <a class="boton boton-plano" href="{{ url_for('usuarios.contrasenas') }}">Contrasenas</a>
+    <a class="boton boton-plano" href="{{ url_for('roles.lista') }}">Roles</a>
     <a class="boton boton-primario" href="{{ url_for('usuarios.nuevo') }}">Nueva cuenta</a>
   </div>
 </div>
@@ -22,7 +23,7 @@
 
 <section class="tarjeta">
   <form method="get" class="barra-filtros">
-    <input type="search" name="q" value="{{ filtros.q }}" placeholder="Nombre, correo o documento">
+    <input type="search" name="q" value="{{ filtros.q }}" placeholder="Nombre, correo o documento completo">
     <select name="rol">
       <option value="">Todos los roles</option>
       {% for valor, etiqueta in roles %}
@@ -56,7 +57,11 @@
             {% if usuario.id == current_user.id %}<span class="chip">usted</span>{% endif %}
           </td>
           <td class="mono">{{ usuario.correo }}</td>
-          <td>{{ usuario.rol_etiqueta }}</td>
+          <td>
+            {{ usuario.rol_etiqueta }}
+            {% for rol in usuario.roles_adicionales %}<br><span class="chip">+ {{ rol.nombre }}</span>{% endfor %}
+            {% if usuario.ajustes_permisos %}<br><small>{{ usuario.ajustes_permisos|length }} ajuste(s) propio(s)</small>{% endif %}
+          </td>
           <td>
             {% if usuario.cliente %}
               <a href="{{ url_for('clientes_admin.detalle', cliente_id=usuario.cliente.id) }}">
@@ -72,6 +77,7 @@
           </td>
           <td class="derecha acciones-fila">
             <a href="{{ url_for('usuarios.editar', usuario_id=usuario.id) }}">Editar</a>
+            <a href="{{ url_for('usuarios.permisos', usuario_id=usuario.id) }}">Permisos</a>
             {% if usuario.contrasena_administrable %}
             <form method="post" action="{{ url_for('usuarios.restablecer', usuario_id=usuario.id) }}"
                   onsubmit="return confirm('¿Generar una contraseña temporal para {{ usuario.nombre }}? La actual dejará de servir.');">

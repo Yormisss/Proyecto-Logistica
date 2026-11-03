@@ -2,12 +2,13 @@
 
 {% macro miles(n) %}{{ '{:,}'.format(n).replace(',', '.') }}{% endmacro %}
 
-{% macro barras(filas, etiqueta, valor, sufijo='', nota=None, sufijo_nota='') %}
+{# `resto`: etiqueta de la fila que agrupa lo marginal ("Otros"), que lleva su propio color. #}
+{% macro barras(filas, etiqueta, valor, sufijo='', nota=None, sufijo_nota='', resto=None) %}
   {% set tope = (filas | map(attribute=valor) | max) or 1 %}
   <div class="grafica-barras barras-anchas">
     {% for f in filas %}
     {% set numero = miles(f[valor]) if f[valor] is integer else f[valor] %}
-    <div class="fila-barra"
+    <div class="fila-barra{{ ' fila-principal' if f[valor] == tope }}{{ ' fila-resto' if resto and f[etiqueta] == resto }}"
          data-tooltip="{{ f[etiqueta] }} — {{ numero }}{{ sufijo }}{% if nota %} · {{ miles(f[nota]) }}{{ sufijo_nota }}{% endif %}">
       <span class="etiqueta-barra">{{ f[etiqueta] }}</span>
       <div class="pista-barra"><div class="barra" style="width: {{ f[valor] / tope * 100 }}%"></div></div>
@@ -60,7 +61,7 @@
     <span class="kpi-valor compacto">{{ miles(bd.totales.pedidos) }}</span>
     <span class="kpi-detalle">{{ miles(bd.totales.clientes) }} clientes &middot; {{ bd.totales.conductores }} conductores</span>
   </article>
-  <article class="kpi">
+  <article class="kpi kpi-exito">
     <span class="kpi-etiqueta">Tasa de éxito global</span>
     <span class="kpi-valor compacto">{{ bd.totales.tasa_exito }}<small class="kpi-unidad">%</small></span>
     <span class="kpi-detalle">{{ miles(bd.meses | sum(attribute='entregados')) }} entregas exitosas</span>
@@ -73,12 +74,12 @@
 </section>
 
 {# --- Entregas por mes: dos series, columna apilada --- #}
-<section class="tarjeta">
+<section class="tarjeta tarjeta-grafica">
   <div class="grafica-encabezado">
     <h2 class="tarjeta-titulo sin-borde">Entregas por mes</h2>
     <ul class="leyenda">
       <li><span class="muestra" style="background: var(--serie-1)"></span>Entregadas</li>
-      <li><span class="muestra" style="background: var(--serie-2)"></span>Fallidas</li>
+      <li><span class="muestra" style="background: var(--serie-fallidas)"></span>Fallidas</li>
     </ul>
   </div>
   <div class="grafica-columnas mensual" role="img" aria-label="Entregas y fallos por mes">
@@ -118,7 +119,7 @@
 </section>
 
 <div class="rejilla-par">
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <div class="grafica-encabezado">
       <h2 class="tarjeta-titulo sin-borde">Calidad del servicio</h2>
       {{ leyenda(bd.servicio.series) }}
@@ -126,7 +127,7 @@
     {{ lineas(bd.servicio, 'Tasa de éxito y cumplimiento de ventana horaria por mes') }}
   </section>
 
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <div class="grafica-encabezado">
       <h2 class="tarjeta-titulo sin-borde">Flujo de inventario</h2>
       {{ leyenda(bd.inventario.series) }}
@@ -136,8 +137,8 @@
 </div>
 
 <div class="rejilla-par">
-  {# --- Mapa de calor: magnitud en un solo tono, de claro a oscuro --- #}
-  <section class="tarjeta">
+  {# --- Mapa de calor: de amarillo a rojo en cinco pasos, de la tasa minima a la maxima --- #}
+  <section class="tarjeta tarjeta-grafica tarjeta-fallo">
     <div class="grafica-encabezado">
       <h2 class="tarjeta-titulo sin-borde">Tasa de fallo por zona y franja</h2>
       <span class="escala-calor" aria-hidden="true">Menor<span class="escala-rampa"></span>Mayor</span>
@@ -152,27 +153,28 @@
           <th scope="row">{{ fila.zona }}</th>
           {% for c in fila.celdas %}
             {% if c %}
-            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.72 }}" style="--i: {{ c.intensidad }}"
+            <td class="celda-calor calor-{{ c.paso }}{{ ' celda-maxima' if c.maximo }}"
                 data-tooltip="{{ fila.zona }} · {{ bd.franjas[loop.index0] }} — {{ c.tasa_fallo }}% de fallo · {{ miles(c.fallidos) }} de {{ miles(c.intentos) }} intentos">{{ c.tasa_fallo | round(1) }}%</td>
             {% else %}
             <td class="celda-vacia">—</td>
             {% endif %}
           {% endfor %}
-          <td class="celda-total">{{ fila.tasa }}%</td>
+          <td class="celda-total{{ ' zona-alta' if fila.tasa > 20 }}">{{ fila.tasa }}%</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
   </section>
 
-  <section class="tarjeta">
-    <h2 class="tarjeta-titulo">Causas de entrega fallida</h2>
-    {{ barras(bd.motivos, 'motivo', 'porcentaje', '%', 'casos', ' casos') }}
+  <section class="tarjeta tarjeta-grafica tarjeta-fallo">
+    <h2 class="tarjeta-titulo con-subtitulo">Causas de entrega fallida</h2>
+    <p class="subtitulo-tarjeta">Las cinco causas principales tienen un peso similar.</p>
+    {{ barras(bd.motivos, 'motivo', 'porcentaje', '%', 'casos', ' casos', resto='Otros') }}
   </section>
 </div>
 
 {# --- Un punto por conductor: la forma de la distribucion, no un ranking --- #}
-<section class="tarjeta">
+<section class="tarjeta tarjeta-grafica">
   <div class="grafica-encabezado">
     <h2 class="tarjeta-titulo sin-borde">Tasa de éxito por conductor</h2>
     <span class="nota-grafica">{{ bd.flota.total }} conductores &middot; mediana {{ bd.flota.mediana }}%</span>
@@ -189,7 +191,7 @@
 </section>
 
 <div class="rejilla-par">
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <h2 class="tarjeta-titulo">Productos de mayor salida</h2>
     {{ barras(bd.sku, 'sku', 'unidades', '', 'salidas', ' salidas') }}
     <div class="segmentos-abc" role="img" aria-label="Clasificación ABC de {{ bd.total_sku }} productos">
@@ -205,14 +207,14 @@
     </ul>
   </section>
 
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <h2 class="tarjeta-titulo">Pedidos por ciudad</h2>
     {{ barras(bd.ciudades, 'ciudad', 'pedidos', '', 'fallidos', ' fallidos') }}
   </section>
 </div>
 
 {% if bd.ml %}
-<section class="tarjeta">
+<section class="tarjeta tarjeta-grafica">
   <div class="grafica-encabezado">
     <h2 class="tarjeta-titulo sin-borde">Predicción de entregas fallidas</h2>
     <span class="nota-grafica">{{ miles(bd.ml.filas_entrenamiento) }} entregas de entrenamiento &middot; {{ miles(bd.ml.filas_prueba) }} de prueba</span>
@@ -237,7 +239,7 @@
           <tr>
             <th scope="row">{{ 'Fallo real' if loop.first else 'Entrega real' }}</th>
             {% for c in fila %}
-            <td class="celda-calor{{ ' oscura' if c.intensidad >= 0.72 }}" style="--i: {{ c.intensidad }}"
+            <td class="celda-calor conteo-{{ c.paso }}{{ ' celda-maxima' if c.maximo }}"
                 data-tooltip="{{ c.texto }} — {{ miles(c.valor) }} entregas">
               <strong>{{ miles(c.valor) }}</strong><small>{{ c.texto }}</small>
             </td>
@@ -252,23 +254,23 @@
 {% endif %}
 
 <div class="rejilla-par">
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <h2 class="tarjeta-titulo">Registros por fuente</h2>
     {{ barras(bd.fuentes, 'nombre', 'registros') }}
   </section>
 
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <h2 class="tarjeta-titulo">Data lake por capa</h2>
     {{ barras(bd.capas, 'nombre', 'mb', ' MB') }}
   </section>
 
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <h2 class="tarjeta-titulo">Filas corregidas en el ETL</h2>
     {{ barras(bd.reglas, 'regla', 'filas') }}
   </section>
 
   {% if bd.streaming %}
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <div class="grafica-encabezado">
       <h2 class="tarjeta-titulo sin-borde">Eventos en streaming</h2>
       <span class="nota-grafica">{{ bd.streaming.eventos_persistidos }} eventos &middot; {{ bd.streaming.lotes }} micro-lotes</span>

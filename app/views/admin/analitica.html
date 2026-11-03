@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_actualizar.html" import boton_actualizar %}
 {% block titulo %}Analítica | {{ nombre_sistema }}{% endblock %}
 
 {% block contenido %}
@@ -7,12 +8,15 @@
     <h1 class="titulo-pagina">Analítica de la operación</h1>
     <p class="subtitulo-pagina">Indicadores de apoyo a la toma de decisiones estratégicas</p>
   </div>
-  <nav class="selector-rango">
-    {% for opcion in [7, 14, 30] %}
-      <a href="{{ url_for('admin.analitica_operacion', dias=opcion) }}"
-         class="{{ 'activo' if dias == opcion }}">{{ opcion }} días</a>
-    {% endfor %}
-  </nav>
+  <div class="acciones-encabezado">
+    {{ boton_actualizar() }}
+    <nav class="selector-rango">
+      {% for opcion in [7, 14, 30] %}
+        <a href="{{ url_for('admin.analitica_operacion', dias=opcion) }}"
+           class="{{ 'activo' if dias == opcion }}">{{ opcion }} días</a>
+      {% endfor %}
+    </nav>
+  </div>
 </div>
 
 {# --- Cifras cabecera: un solo numero cada una, no ameritan grafica --- #}
@@ -52,12 +56,12 @@
 </section>
 
 {# --- Entregas por dia: dos series, columna apilada --- #}
-<section class="tarjeta">
+<section class="tarjeta tarjeta-grafica">
   <div class="grafica-encabezado">
     <h2 class="tarjeta-titulo sin-borde">Entregas cerradas por día</h2>
     <ul class="leyenda">
       <li><span class="muestra" style="background: var(--serie-1)"></span>Entregadas</li>
-      <li><span class="muestra" style="background: var(--serie-2)"></span>Fallidas</li>
+      <li><span class="muestra" style="background: var(--serie-fallidas)"></span>Fallidas</li>
     </ul>
   </div>
 
@@ -106,12 +110,12 @@
 
 <div class="rejilla-dos">
   {# --- Motivos de fallo: una sola serie, barra horizontal ordenada --- #}
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica tarjeta-fallo">
     <h2 class="tarjeta-titulo">Causas de entrega fallida</h2>
     {% if motivos %}
       <div class="grafica-barras" role="img" aria-label="Causas de entrega fallida ordenadas por frecuencia">
       {% for fila in motivos %}
-        <div class="fila-barra" data-tooltip="{{ fila.motivo }} — {{ fila.cantidad }} caso{{ 's' if fila.cantidad != 1 }}">
+        <div class="fila-barra{{ ' fila-principal' if fila.cantidad == maximo_motivo }}{{ ' fila-resto' if fila.es_otro }}" data-tooltip="{{ fila.motivo }} — {{ fila.cantidad }} caso{{ 's' if fila.cantidad != 1 }}">
           <span class="etiqueta-barra">{{ fila.motivo }}</span>
           <div class="pista-barra">
             <div class="barra" style="width: {{ (fila.cantidad / maximo_motivo * 100) }}%"></div>
@@ -138,13 +142,13 @@
   </section>
 
   {# --- Productividad por conductor --- #}
-  <section class="tarjeta">
+  <section class="tarjeta tarjeta-grafica">
     <h2 class="tarjeta-titulo">Entregas cerradas por conductor</h2>
     {% if conductores %}
       <div class="grafica-barras" role="img" aria-label="Entregas cerradas por conductor">
-      {% for fila in conductores %}
-        <div class="fila-barra"
-             data-tooltip="{{ fila.conductor }} — {{ fila.entregadas }} entregadas, {{ fila.fallidas }} fallidas ({{ fila.exito }}% de exito)">
+      {% for fila in conductores | sort(attribute='cerradas', reverse=True) %}
+        <div class="fila-barra{{ ' fila-principal' if fila.cerradas == maximo_conductor }}"
+             data-tooltip="{{ fila.conductor }} — {{ fila.entregadas }} entregadas, {{ fila.fallidas }} fallidas ({{ fila.exito }}% de éxito)">
           <span class="etiqueta-barra">{{ fila.conductor }}</span>
           <div class="pista-barra">
             <div class="barra" style="width: {{ (fila.cerradas / maximo_conductor * 100) if maximo_conductor else 0 }}%"></div>

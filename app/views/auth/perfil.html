@@ -22,7 +22,7 @@
 
 <div class="tarjeta">
   <h2 class="tarjeta-titulo">Cambiar contraseña</h2>
-  <form method="post" class="formulario" novalidate>
+  <form method="post" action="{{ url_for('auth.perfil') }}" class="formulario" novalidate>
     {{ formulario.hidden_tag() }}
     <div class="campo">
       {{ formulario.contrasena_actual.label }}
@@ -32,8 +32,30 @@
       {{ formulario.contrasena_nueva.label }}
       {{ formulario.contrasena_nueva(autocomplete="new-password") }}
       {% for error in formulario.contrasena_nueva.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
+      <small class="ayuda-campo">{{ politica_contrasena }}</small>
     </div>
     <button type="submit" class="boton boton-primario">Actualizar contraseña</button>
   </form>
 </div>
+
+{% if not current_user.debe_cambiar_contrasena %}
+<div class="tarjeta">
+  <h2 class="tarjeta-titulo">Cambiar correo electrónico</h2>
+  <p class="nota-pie">Es el correo con el que inicia sesión. Se pide su contraseña actual para confirmar el cambio.</p>
+  <form method="post" action="{{ url_for('auth.cambiar_correo') }}" class="formulario" novalidate>
+    {{ formulario_correo.hidden_tag() }}
+    <div class="campo">
+      {{ formulario_correo.correo_nuevo.label }}
+      {{ formulario_correo.correo_nuevo(placeholder="usuario@empresa.com", autocomplete="email") }}
+      {% for error in formulario_correo.correo_nuevo.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
+    </div>
+    <div class="campo">
+      {{ formulario_correo.contrasena_correo.label }}
+      {{ formulario_correo.contrasena_correo(autocomplete="current-password") }}
+      {% for error in formulario_correo.contrasena_correo.errors %}<small class="campo-error">{{ error }}</small>{% endfor %}
+    </div>
+    <button type="submit" class="boton boton-primario">Actualizar correo</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}
