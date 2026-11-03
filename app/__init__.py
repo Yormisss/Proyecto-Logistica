@@ -247,7 +247,7 @@ def _registrar_contexto(app):
         return {
             "EstadoPedido": EstadoPedido,
             "EstadoRuta": EstadoRuta,
-            "nombre_sistema": "Rutalytics - Sistema de Despachos",
+            "nombre_sistema": "Fliyt - Sistema de Despachos",
             "politica_contrasena": POLITICA_CONTRASENA,
             # Lo fija `auth.vigilar_sesion` en cada peticion de una sesion
             # abierta; sin el, base.html no carga el aviso de inactividad.

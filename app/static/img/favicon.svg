@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -29.5 119 119">
-<!-- Rutalytics - favicon; con el navegador en modo oscuro usa los colores del logo negativo. -->
+<!-- Fliyt - favicon; con el navegador en modo oscuro usa los colores del logo negativo. -->
 <style>
 .carroceria { fill: #16181d; } .oro { fill: #f5c024; } .oro-trazo { stroke: #f5c024; }
 @media (prefers-color-scheme: dark) {

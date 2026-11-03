@@ -1,4 +1,4 @@
-/* Rutalytics - Hoja de estilos base
+/* Fliyt - Hoja de estilos base
    RNF1: enfoque mobile-first; los ajustes para escritorio se aplican en media queries. */
 
 :root {
@@ -59,7 +59,7 @@ a:not([class]):hover { color: var(--enlace-hover); }
 /* Logo (static/img): camion y texto en trazos, asi no depende de ninguna fuente.
    Sobre la barra oscura va la version negativa, logo-negativo.svg. */
 .marca { display: flex; align-items: center; text-decoration: none; }
-.marca img { display: block; height: 18px; width: auto; }
+.marca img { display: block; height: 22px; width: auto; }
 
 .navegacion { display: flex; gap: .3rem; margin-left: auto; }
 .navegacion a {
@@ -248,7 +248,7 @@ input::-ms-reveal, input::-ms-clear { display: none; }
   font-weight: 800; letter-spacing: -.5px;
   font-size: 2rem; line-height: 1.1; color: var(--gris-900); margin: 0;
 }
-.acceso-logo img { display: block; width: 280px; max-width: 100%; height: auto; margin: 0 auto; }
+.acceso-logo img { display: block; width: 230px; max-width: 100%; height: auto; margin: 0 auto; }
 .acceso-icono { display: block; width: 56px; height: 56px; margin: 0 auto .9rem; }
 .acceso-encabezado .acceso-sistema {
   font-family: var(--fuente-datos); font-size: .8rem; font-weight: 700; text-transform: uppercase;
@@ -261,12 +261,12 @@ input::-ms-reveal, input::-ms-clear { display: none; }
 .acceso-enlace a:hover { text-decoration: underline; }
 
 /* Inicio de sesion: subtitulo alineado con el logo y espacios propios. */
-.pagina-login .acceso-encabezado { width: 280px; max-width: 100%; margin: 0 auto 40px; text-align: left; }
+.pagina-login .acceso-encabezado { width: 230px; max-width: 100%; margin: 0 auto 40px; text-align: left; }
 .pagina-login .acceso-logo img { width: 100%; }
-/* El subtitulo arranca donde arranca RUTALYTICS en el logo: x = 146 de 625.11. */
+/* El subtitulo arranca donde arranca FLIYT en el logo: x = 146 de 369.81. */
 .pagina-login .acceso-encabezado .acceso-sistema {
   font-family: var(--fuente-texto); font-size: .72rem; font-weight: 500; letter-spacing: .2em;
-  margin: .5rem 0 0; padding-left: 23.36%;
+  margin: .5rem 0 0; padding-left: 39.48%; white-space: nowrap;
 }
 .pagina-login .acceso-pie { margin-top: 48px; }
 
