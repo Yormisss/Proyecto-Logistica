@@ -315,7 +315,9 @@ with app.test_client() as c:
         check(html.count("data-actualizar") == 1 and 'aria-label="Actualizar"' in html
               and "js/actualizar.js" in html, f"{ruta} muestra un boton Actualizar")
     html = c.get("/admin/").data.decode()
-    check(re.search(r'id="operacion-hoy">[^<]+</h2>\s*<button[^>]*data-actualizar', html) is not None,
+    # En la fila del titulo, con las acciones de la seccion (Enviar resumen del dia).
+    check(re.search(r'id="operacion-hoy">[^<]+</h2>\s*<div class="acciones-seccion">'
+                    r'(?:(?!</div>\s*</div>).)*data-actualizar', html, re.S) is not None,
           "en el tablero va junto a Operacion de hoy, la seccion que cambia por voz")
     html = c.get("/pedidos/nuevo").data.decode()
     check("data-actualizar" not in html, "los formularios no lo llevan (perderian lo escrito)")
