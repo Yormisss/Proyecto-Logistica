@@ -37,9 +37,9 @@ Define la base de datos según el entorno:
 ### 1.2 `.env` — Variables de entorno
 
 - **ENTORNO:** `desarrollo` o `produccion`
-- **DATABASE_URL:** `mysql+pymysql://sgds:<clave>@127.0.0.1:3306/logistica`
+- **DATABASE_URL:** `mysql+pymysql://sgds:<clave>@127.0.0.1:3307/logistica`
 
-Si `DATABASE_URL` está definida, tiene prioridad sobre el SQLite por defecto. Actualmente el proyecto está conectado a **MySQL en Docker** (`127.0.0.1:3306/logistica`).
+Si `DATABASE_URL` está definida, tiene prioridad sobre el SQLite por defecto. Actualmente el proyecto está conectado a **MySQL en Docker** (`127.0.0.1:3307/logistica`).
 
 ### 1.3 `app/extensions.py` — Instancia de la base de datos
 

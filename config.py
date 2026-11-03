@@ -109,10 +109,12 @@ class ConfiguracionProduccion(ConfiguracionBase):
     # Variables sin las que produccion no puede arrancar de forma segura:
     # sin SECRET_KEY las sesiones quedarian firmadas con la clave de
     # desarrollo (visible en este repositorio publico), y sin DATABASE_URL
-    # SQLALCHEMY_DATABASE_URI queda vacia. Se comprueba la variable de
-    # entorno directamente -no el atributo de la clase- porque SECRET_KEY ya
-    # aplico su valor de reserva antes de llegar aqui.
-    VARIABLES_OBLIGATORIAS = ("SECRET_KEY", "DATABASE_URL")
+    # SQLALCHEMY_DATABASE_URI queda vacia. Sin CLAVE_CIFRADO el cifrado del
+    # documento y el telefono dependeria de SECRET_KEY, y rotar esta dejaria
+    # ilegibles esos datos. Se comprueba la variable de entorno directamente
+    # -no el atributo de la clase- porque SECRET_KEY ya aplico su valor de
+    # reserva antes de llegar aqui.
+    VARIABLES_OBLIGATORIAS = ("SECRET_KEY", "CLAVE_CIFRADO", "DATABASE_URL")
 
     @classmethod
     def validar(cls):

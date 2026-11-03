@@ -121,7 +121,8 @@ check(
     f"agrega pool_pre_ping y pool_recycle=280 al motor ({ConfiguracionProduccion.SQLALCHEMY_ENGINE_OPTIONS})",
 )
 
-base_sin_vars = {k: v for k, v in os.environ.items() if k not in ("SECRET_KEY", "DATABASE_URL")}
+base_sin_vars = {k: v for k, v in os.environ.items()
+                 if k not in ("SECRET_KEY", "CLAVE_CIFRADO", "DATABASE_URL")}
 
 with patch.dict(os.environ, base_sin_vars, clear=True):
     mensaje = None
@@ -129,9 +130,9 @@ with patch.dict(os.environ, base_sin_vars, clear=True):
         ConfiguracionProduccion.validar()
     except RuntimeError as error:
         mensaje = str(error)
-check(mensaje is not None, "produccion no arranca sin SECRET_KEY ni DATABASE_URL")
+check(mensaje is not None, "produccion no arranca sin SECRET_KEY, CLAVE_CIFRADO ni DATABASE_URL")
 check(
-    mensaje is not None and "SECRET_KEY" in mensaje and "DATABASE_URL" in mensaje,
+    mensaje is not None and all(v in mensaje for v in ("SECRET_KEY", "CLAVE_CIFRADO", "DATABASE_URL")),
     f"el mensaje nombra las variables que faltan ({mensaje})",
 )
 
@@ -143,7 +144,8 @@ with patch.dict(os.environ, base_sin_vars, clear=True):
         fallo_crear_app = True
 check(fallo_crear_app, "crear_app('produccion') tambien falla sin las variables obligatorias")
 
-solo_secret = dict(base_sin_vars, SECRET_KEY="clave-de-prueba-suficientemente-larga")
+solo_secret = dict(base_sin_vars, SECRET_KEY="clave-de-prueba-suficientemente-larga",
+                   CLAVE_CIFRADO="clave-de-cifrado-de-prueba")
 with patch.dict(os.environ, solo_secret, clear=True):
     mensaje2 = None
     try:
@@ -164,7 +166,7 @@ with patch.dict(os.environ, con_vars, clear=True):
         error_inesperado = str(error)
 check(
     error_inesperado is None,
-    f"arranca sin error cuando SECRET_KEY y DATABASE_URL estan definidas ({error_inesperado})",
+    f"arranca sin error con SECRET_KEY, CLAVE_CIFRADO y DATABASE_URL definidas ({error_inesperado})",
 )
 
 print("\n== 9. seed.py: trazabilidad de los pedidos entregados de hoy ==")

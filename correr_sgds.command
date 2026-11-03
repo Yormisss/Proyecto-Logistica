@@ -2,7 +2,7 @@
 # Levanta el SGDS en http://localhost:5001
 cd "$(dirname "$0")" || exit 1
 export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
-mysql_ok() { nc -z 127.0.0.1 3306 >/dev/null 2>&1; }
+mysql_ok() { nc -z 127.0.0.1 3307 >/dev/null 2>&1; }
 if ! mysql_ok && command -v docker >/dev/null 2>&1; then
   echo ">> MySQL no responde; intentando levantarlo con Docker..."
   (docker info >/dev/null 2>&1 || open -a Docker) 
